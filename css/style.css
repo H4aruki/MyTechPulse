@@ -1,0 +1,443 @@
+/* mytechpulse-frontend/css/style.css */
+
+/* ---------------------- */
+/* 共通リセット・基本設定 */
+/* ---------------------- */
+:root {
+    --primary-color: #007bff; /* メインの青色 */
+    --secondary-color: #6c757d; /* グレー */
+    --dark-bg: #1a1a1a;
+    --text-light: #f8f9fa;
+    --text-dark: #212529;
+    --border-radius: 8px;
+    --container-width: 1200px;
+}
+
+body {
+    margin: 0;
+    font-family: 'Noto Sans JP', sans-serif;
+    background-color: #f8f9fa; /* 背景を少しだけグレーに */
+    color: var(--text-dark);
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+main {
+    flex: 1; /* フッターを最下部に固定 */
+}
+
+h1, h2, h3 {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 700;
+}
+
+/* ---------------------- */
+/* ヘッダー */
+/* ---------------------- */
+header {
+    background-color: #fff;
+    border-bottom: 1px solid #e9ecef;
+    padding: 1rem 5%;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: var(--container-width);
+    margin: 0 auto;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-dark);
+    text-decoration: none;
+}
+
+.logo img {
+    margin-right: 0.5rem;
+    height: 40px;
+}
+
+.center-nav {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.center-nav img {
+    height: 25px;
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+}
+
+.center-nav a:hover img {
+    opacity: 1;
+}
+
+.auth-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* ---------------------- */
+/* ボタン共通スタイル */
+/* ---------------------- */
+.btn {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius);
+    text-decoration: none;
+    font-weight: 700;
+    text-align: center;
+    transition: all 0.3s ease;
+    border: 2px solid var(--primary-color);
+    cursor: pointer;
+    font-size: 1rem; /* formのbuttonとサイズを合わせる */
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background-color: #0056b3;
+    border-color: #0056b3;
+}
+
+.btn-secondary {
+    background-color: transparent;
+    color: var(--primary-color);
+}
+
+.btn-secondary:hover {
+    background-color: var(--primary-color);
+    color: #fff;
+}
+
+.btn.large {
+    padding: 0.8rem 2.5rem;
+    font-size: 1.1rem;
+}
+
+/* ---------------------- */
+/* フッター */
+/* ---------------------- */
+footer {
+    background-color: var(--dark-bg);
+    color: var(--text-light);
+    padding: 3rem 5%;
+}
+
+.footer-container {
+    display: flex;
+    justify-content: space-between;
+    max-width: var(--container-width);
+    margin: 0 auto;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
+.footer-column {
+    flex: 1;
+    min-width: 200px;
+}
+
+.footer-column h3 {
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+}
+
+.footer-column ul {
+    list-style: none;
+    padding: 0;
+}
+
+.footer-column ul li {
+    margin-bottom: 0.5rem;
+}
+
+.footer-column a {
+    color: var(--text-light);
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+.footer-column a:hover {
+    color: var(--primary-color);
+}
+
+
+/* ---------------------- */
+/* index.html (ヒーローセクションなど) */
+/* ---------------------- */
+.hero {
+    position: relative;
+    height: 500px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--text-light);
+}
+
+.hero-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+   background-image: url('img/main-background.png');
+    background-size: cover;
+    background-position: center;
+}
+
+.hero-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.hero-content {
+    position: relative;
+    z-index: 2;
+}
+.hero h1 { font-size: 3.5rem; margin: 0; }
+.hero p { font-size: 1.2rem; opacity: 0.9; }
+
+.feature-section {
+    padding: 4rem 5%;
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4rem;
+}
+.feature-item { display: flex; align-items: center; gap: 3rem; }
+.feature-item.reverse { flex-direction: row-reverse; }
+.feature-text { flex: 1; }
+.feature-text h2 { font-size: 2.2rem; margin-bottom: 1rem; }
+.feature-image { flex: 1; }
+.feature-image img { width: 100%; border-radius: var(--border-radius); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+
+.banner { position: relative; height: 250px; width: 100%; }
+.banner-image { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: url('https://via.placeholder.com/1920x250/343A40/FFFFFF?text=Service+Banner'); background-size: cover; background-position: center; background-attachment: fixed; }
+.banner-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.4); }
+
+.cta-section { padding: 4rem 5%; text-align: center; }
+.cta-section h2 { font-size: 2.5rem; margin-bottom: 2rem; }
+.final-cta-buttons { display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;}
+
+/* ---------------------- */
+/* ログイン・新規登録・タグ選択 (フォームページ共通) */
+/* ---------------------- */
+.form-page-container {
+    max-width: 800px;
+    margin: 3rem auto;
+    padding: 2rem;
+    background-color: #fff;
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.form-page-container h1 {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+/* ログイン・新規登録フォーム */
+form#loginForm, form#signupForm {
+    max-width: 400px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+}
+
+form#loginForm label, form#signupForm label {
+    font-weight: bold;
+}
+
+form#loginForm input, form#signupForm input {
+    width: 100%;
+    padding: 0.8rem;
+    font-size: 1rem;
+    border-radius: var(--border-radius);
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+}
+
+form#loginForm button, form#signupForm button {
+    padding: 0.8rem 1.5rem;
+    margin-top: 1rem;
+    border-radius: var(--border-radius);
+}
+
+#errorMsg, #signupError {
+    color: red;
+    font-size: 0.9rem;
+    text-align: center;
+    min-height: 1.2em;
+}
+
+/* ---------------------- */
+/* タグ選択ページ (tag-selection.html) */
+/* ---------------------- */
+#tagForm {
+    margin: 0 auto;
+}
+.category {
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 1.5rem;
+}
+.category:last-of-type {
+    border-bottom: none;
+}
+
+.category > label {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    font-weight: 700;
+}
+.category > label input {
+    width: 18px;
+    height: 18px;
+    margin-right: 0.7rem;
+}
+
+.tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    padding-left: 0.5rem;
+}
+
+.tags label {
+    background-color: #e9ecef;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: normal;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.tags input[type="checkbox"] {
+    display: none; /* 元のチェックボックスを隠す */
+}
+
+.tags label:has(input:checked) {
+    background-color: var(--primary-color);
+    color: #fff;
+    box-shadow: 0 2px 5px rgba(0, 123, 255, 0.3);
+}
+
+#submitBtn {
+    display: block;
+    width: 100%;
+    max-width: 400px;
+    margin: 2rem auto 0;
+    padding: 0.8rem 2.5rem;
+    font-size: 1.1rem;
+    border-radius: var(--border-radius);
+}
+#submitBtn:disabled {
+    background-color: #aaa;
+    cursor: not-allowed;
+    border-color: #aaa;
+}
+
+/* ---------------------- */
+/* 記事一覧ページ (articles.html) */
+/* ---------------------- */
+.article-page-main {
+    display: flex;
+    gap: 2rem;
+    max-width: var(--container-width);
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+#articlesWrapper {
+    flex: 1;
+}
+
+#qiitaArticlesContainer h2, #zennArticlesContainer h2 {
+    margin-bottom: 1rem;
+    border-bottom: 2px solid var(--primary-color);
+    padding-bottom: 0.5rem;
+}
+
+.article-card {
+    background-color: #fff;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    border-radius: var(--border-radius);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+}
+
+.article-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+.article-card h3 {
+    margin: 0 0 0.5rem 0;
+    color: var(--primary-color);
+}
+.article-card p {
+    font-size: 0.9rem;
+    color: #666;
+    margin: 0.3rem 0;
+}
+
+/* サイドバー */
+aside#sidebarTags {
+    width: 240px;
+    background: #fff;
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    align-self: flex-start; /* スクロールしても追従しない */
+}
+aside#sidebarTags h3 { margin-top: 0; }
+aside#sidebarTags ul { list-style: none; padding-left: 0; }
+
+/* ---------------------- */
+/* レスポンシブ */
+/* ---------------------- */
+@media (max-width: 768px) {
+    .feature-item, .feature-item.reverse {
+        flex-direction: column;
+    }
+    .article-page-main {
+        flex-direction: column;
+    }
+    aside#sidebarTags {
+        width: 100%;
+    }
+    .header-container {
+        flex-direction: column;
+        gap: 1rem;
+    }
+}

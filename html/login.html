@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン - MyTechPulse</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Roboto:wght@700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <header>
+        <div class="header-container">
+            <a href="index.html" class="logo">
+                <img src="img/mytechpulse-logo2.png" alt="MyTechPulse Logo">
+                MyTechPulse
+            </a>
+            <nav class="center-nav">
+                <a href="https://qiita.com/" target="_blank" title="Qiita"><img src="img/Qiita_logo.png" alt="Qiita Logo"></a>
+                <a href="https://zenn.dev/" target="_blank" title="Zenn"><img src="img/Zenn_logo.png" alt="Zenn Logo"></a>
+            </nav>
+            <div class="auth-buttons">
+                <a href="signup.html" class="btn btn-secondary">新規登録</a>
+                <a href="login.html" class="btn btn-primary">ログイン</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="form-page-container">
+            <h1>ログイン</h1>
+            <form id="loginForm">
+                <label for="username">ユーザー名</label>
+                <input type="text" id="username" required>
+                
+                <label for="password">パスワード</label>
+                <input type="password" id="password" required>
+                
+                <button type="submit" class="btn btn-primary">ログイン</button>
+                <p id="errorMsg"></p>
+            </form>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-container">
+            <div class="footer-column">
+                <h3>Created by</h3>
+                <p>Harry</p>
+                <p>K.Haruki</p>
+            </div>
+            <div class="footer-column">
+                <h3>Event</h3>
+                <p>Open Hack U 2025 Kanazawa</p>
+            </div>
+            <div class="footer-column">
+                <h3>Powered by</h3>
+                <ul>
+                    <li><a href="https://qiita.com/" target="_blank">Qiita</a></li>
+                    <li><a href="https://zenn.dev/" target="_blank">Zenn</a></li>
+                    <li><a href="#" target="_blank">Other Tech Sites</a></li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+</body>
+</html>
