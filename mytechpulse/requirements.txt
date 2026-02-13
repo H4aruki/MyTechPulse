@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy
+PyMySQL
+pydantic
+pydantic-settings
+passlib[bcrypt]
+requests
+python-dotenv
+httpx

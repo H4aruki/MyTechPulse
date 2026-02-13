@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual Environment
+/venv/
+
+# Editor Settings (VSCode & Cursor)
+/.vscode/
+/.cursor/
+
+# Secrets
+.env
+
+# OS specific
+.DS_Store
