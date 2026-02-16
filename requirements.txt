@@ -8,3 +8,4 @@ passlib[bcrypt]
 requests
 python-dotenv
 httpx
+mysql-connector-python

@@ -24,7 +24,7 @@ def init_database():
         # 2. テーブルの作成 (SQLAlchemyのモデルから自動生成)
         # 既存のmodelsで定義されている構造を流し込む
         from app.database import engine
-        from app.models import Base  # モデルのベースクラスをインポート
+        from app.models import Base, User, Tag, Recommend  # モデルのベースクラスをインポート
         
         Base.metadata.create_all(bind=engine)
         print("Tables created successfully.")
