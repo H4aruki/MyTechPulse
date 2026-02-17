@@ -41,6 +41,25 @@ MyTechPulseは、「色んなサイトがあって全部追いかけられない
    ```
 ブラウザで```index.html```を開くか、VSCodeのLive Serverで起動してください。
 
+## Features/Roadmap
+- [ ] Xの記事の追加
+- [ ] Zennのパーソナライズ化
+- [ ] キーワード検索
+- [ ] ダークモード対応
+- [ ] ブックマーク
+- [ ] 既読管理
+- [ ] AI要約機能
+- [ ] 自動カテゴリ分類
+- [ ] Dockerの導入
+
+## Gallery
+### メインページ
+![メインページ](./img/main-page.png)
+
+### タグ選択
+![タグ選択](./img/tag-serect.png)
+
+
 ## Contributors ✨
 <table>
     <tr>
