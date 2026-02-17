@@ -7,7 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 
 origins = [
-    "http://localhost:3000", # フロントエンドの開発サーバーのURL
+    "http://localhost:3000",
+    "http://localhost:5500",    
+    "http://127.0.0.1:5500",
+    "http://127.0.0.1:8000", # フロントエンドの開発サーバーのURL
     # 将来的には本番環境のフロントエンドのURLも追加する
     # "https://www.your-production-site.com",
 ]
