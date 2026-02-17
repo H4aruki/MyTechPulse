@@ -45,12 +45,23 @@ MyTechPulseは、「色んなサイトがあって全部追いかけられない
 <table>
     <tr>
         <td align="center">
-            <a href=""https://github.com/H4aruki">
+            <a href="https://github.com/H4aruki">
                 <img src="https://github.com/H4aruki.png" width="100px;" alt=""/><br />
                 <sub><b>H4aruki</b></sub>
             </a><br />
             <a href="https://github.com/H4aruki/MyTechPulse/commits?author=H4aruki" title="Code">💻</a>
             <a href="https://github.com/H4aruki/MyTechPulse/commits?author=H4aruki" title="Construction">🚧</a>
+            <a href="https://github.com/H4aruki/MyTechPulse/commits?author=H4aruki" title="Design">🎨</a>
+        </td>
+        <td align="center">
+            <a href="https://github.com/KaichoHarry">
+                <img src="https://github.com/KaichoHarry.png" width="100px;" alt=""/><br />
+                <sub><b>はりぃ会長</b></sub>
+            </a><br />
+            <a href="https://github.com/H4aruki/MyTechPulse/commits?author=KaichoHarry" title="Code">💻</a>
+            <a href="https://github.com/H4aruki/MyTechPulse/commits?author=KaichoHarry" title="Construction">🚧</a>
+            <a href="https://github.com/H4aruki/MyTechPulse/commits?author=KaichoHarry" title="Ideas">🤔</a>
+            <a href="https://github.com/H4aruki/MyTechPulse/commits?author=KaichoHarry" title="Design">🎨</a>
         </td>
     </tr>
 </table>
