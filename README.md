@@ -16,7 +16,7 @@ MyTechPulseは、「色んなサイトがあって全部追いかけられない
 - **効率的なキャッチアップ**: 隙間時間で、今知るべきトレンドを効率よく把握。
 
 ## 技術スタック
-![](https://skillicons.dev/icons?i=html,css,js,,python,mysql,fastapi,notion)
+![](https://skillicons.dev/icons?i=html,css,js,python,mysql,fastapi,notion)
 
 ## SETUP
 ### 1. 事前準備
