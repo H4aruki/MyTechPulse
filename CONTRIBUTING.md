@@ -103,6 +103,12 @@ git config commit.template .gitmessage.txt
 - 動作確認の手順と結果を PR に書く
 - **最低1人の承認**を目安にマージする
 
+### AI（Claude 等）が作成した PR の扱い
+
+- **AI が作成した PR は、必ず人間がレビュー・承認を行う**。AI が作成した変更を人間の確認なしにマージしない。
+- **AI による PR の承認（approve）・マージは禁止**。承認とマージは必ず人間が行う。
+- AI は PR の作成・説明・修正提案までを担い、最終的な可否判断は人間が持つ。
+
 > **補足**: GitHub 側の `main` ブランチ保護設定（直 push 禁止・PR 必須・レビュー必須）は、リポジトリオーナーが別途設定します。設定は GitHub の *Settings → Branches → Branch protection rules* から行えます。
 
 ---
