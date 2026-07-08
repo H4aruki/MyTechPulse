@@ -1,0 +1,38 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ===== 仮想環境 =====
+venv/
+backend/venv/
+.venv/
+env/
+
+# ===== シークレット / 環境変数 =====
+# .env は絶対にコミットしない（.env.example は共有するため除外しない）
+.env
+backend/.env
+*.env
+!.env.example
+!*.env.example
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== エディタ / IDE =====
+.idea/
+*.swp
+*~
+
+# ===== Claude Code（個人メモ・共有しない） =====
+CLAUDE.md
