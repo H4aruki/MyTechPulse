@@ -1,0 +1,2 @@
+# 空のIssue作成を無効化し、必ずテンプレートを使わせる
+blank_issues_enabled: false
