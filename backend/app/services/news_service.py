@@ -1,6 +1,6 @@
 import httpx
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from .. import crud, schemas
 from ..config import settings
@@ -62,7 +62,7 @@ async def get_personalized_articles(db: Session, username: str) -> dict:
 
     # 3. 取得した全記事を共通の形式に整形・統合
     all_articles = {}
-    five_days_ago = datetime.now() - timedelta(days=5)
+    five_days_ago = datetime.now(timezone.utc) - timedelta(days=5)
 
     # Zennの記事を処理 (生データはここで保持)
     zenn_articles = results[0]
@@ -70,8 +70,8 @@ async def get_personalized_articles(db: Session, username: str) -> dict:
         article_tags_lower = [topic['name'].lower() for topic in article.get("topics", [])]
         
         if any(tag in user_weights for tag in article_tags_lower):
-            created_at = datetime.fromisoformat(article["published_at"].replace("Z", ""))
-            if created_at.replace(tzinfo=None) > five_days_ago:
+            created_at = datetime.fromisoformat(article["published_at"].replace("Z", "+00:00"))
+            if created_at > five_days_ago:
                 article_url = f"https://zenn.dev{article['path']}"
                 all_articles[article_url] = schemas.article.Article(
                     title=article.get("title", ""),
@@ -90,7 +90,7 @@ async def get_personalized_articles(db: Session, username: str) -> dict:
 
             if any(tag in user_weights for tag in article_tags_lower):
                 created_at = datetime.fromisoformat(article["created_at"])
-                if created_at.replace(tzinfo=None) > five_days_ago:
+                if created_at > five_days_ago:
                     if article["url"] not in all_articles:
                         all_articles[article["url"]] = schemas.article.Article(
                             title=article.get("title", ""),
@@ -125,8 +125,8 @@ async def get_personalized_articles(db: Session, username: str) -> dict:
         fallback_zenn = []
         # 元のZenn記事リストから、日付フィルターのみを適用して上位10件を取得
         for article in zenn_articles:
-            created_at = datetime.fromisoformat(article["published_at"].replace("Z", ""))
-            if created_at.replace(tzinfo=None) > five_days_ago:
+            created_at = datetime.fromisoformat(article["published_at"].replace("Z", "+00:00"))
+            if created_at > five_days_ago:
                 article_url = f"https://zenn.dev{article['path']}"
                 fallback_zenn.append(schemas.article.Article(
                     title=article.get("title", ""),
