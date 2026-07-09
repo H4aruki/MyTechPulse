@@ -115,6 +115,15 @@ if (tagForm) {
 }
 
 
+// ---------- ログアウト処理 ----------
+const logoutBtn = document.getElementById('logoutBtn');
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+        localStorage.removeItem('username');
+    });
+}
+
+
 // ---------- 記事一覧表示処理 ----------
 const articlesPageLogic = () => {
     const username = localStorage.getItem('username');
