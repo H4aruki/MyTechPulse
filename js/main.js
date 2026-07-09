@@ -105,8 +105,13 @@ if (tagForm) {
             localStorage.removeItem('temp_password');
             localStorage.setItem('username', newusername);
             window.location.href = 'articles.html';
-        } else {
+        } else if (data.status === 2) {
             alert('このユーザー名は既に使用されています。別のユーザー名で再度お試しください。');
+            localStorage.removeItem('temp_username');
+            localStorage.removeItem('temp_password');
+            window.location.href = 'signup.html';
+        } else {
+            alert('登録中にエラーが発生しました。しばらくしてから再度お試しください。');
             localStorage.removeItem('temp_username');
             localStorage.removeItem('temp_password');
             window.location.href = 'signup.html';
