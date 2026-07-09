@@ -136,18 +136,25 @@ const articlesPageLogic = () => {
     const zennContainer = document.getElementById('zennArticlesContainer');
     const tagsListContainer = document.getElementById('tagsList'); // サイドバーのUL要素を取得
 
+    // Qiita/Zenn由来の外部データをinnerHTMLへ埋め込む前にエスケープする（XSS対策）
+    const escapeHtml = (str) => {
+        const div = document.createElement('div');
+        div.textContent = String(str);
+        return div.innerHTML;
+    };
+
     // 記事カードを作成してDOMに追加するヘルパー関数
     const createArticleCard = (article, container) => {
         const card = document.createElement('div');
         card.className = 'article-card';
         card.innerHTML = `
-            <h3>${article.title}</h3>
+            <h3>${escapeHtml(article.title)}</h3>
             <p class="article-meta">
-                <b>Source:</b> ${article.source} | 
+                <b>Source:</b> ${escapeHtml(article.source)} |
                 <b>Likes:</b> ${article.likes}
             </p>
             <p class="article-tags">
-                <b>Tags:</b> ${article.tags.join(', ')}
+                <b>Tags:</b> ${article.tags.map(escapeHtml).join(', ')}
             </p>
         `;
         card.addEventListener('click', () => {
