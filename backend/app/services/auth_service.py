@@ -25,7 +25,7 @@ def create_user_service(db: Session, request: schemas.auth.UserCreateRequest) ->
     # 既に同じユーザー名が存在するかチェック
     existing_user = crud.user.get_user_by_username(db, username=request.newusername)
     if existing_user:
-        return 0 # 登録失敗 (ユーザー名が重複)
+        return 2 # 登録失敗 (ユーザー名が重複)
 
     # 複数のテーブルを書き換えるため、トランザクション処理を行う
     try:
