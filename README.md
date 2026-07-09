@@ -19,26 +19,46 @@ MyTechPulseは、「色んなサイトがあって全部追いかけられない
 ![](https://skillicons.dev/icons?i=html,css,js,python,mysql,fastapi,notion)
 
 ## SETUP
-### 1. 事前準備
+### 方法A: Docker（推奨）
+1. [最新のZIPファイルをダウンロード](https://github.com/H4aruki/MyTechPulse/archive/refs/heads/main.zip) し、任意のフォルダに展開（解凍）してください。
+2. `.env` の準備
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+   `backend/.env` を開き、`QIITA_ACCESS_TOKEN`（[Qiitaの設定画面](https://qiita.com/settings/applications)で発行）を設定してください。`DATABASE_URL` はDocker起動時に自動でDBコンテナ向けに上書きされるため変更不要です。
+3. 起動
+   ```bash
+   docker compose up --build
+   ```
+   `http://127.0.0.1:8000` でAPIが起動します。
+4. ブラウザで```index.html```を開くか、VSCodeのLive Serverで起動してください。
+
+### 方法B: ローカル環境（XAMPP）
+#### 1. 事前準備
 以下のツールがインストールされ、起動していることを確認して下さい。
 
 ・Python3.10以上
 
 ・XAMPP（コントロールパネルからMYSQLを「Start」しておいてください。）
 
-### 2. 環境構築
+#### 2. 環境構築
 1. [最新のZIPファイルをダウンロード](https://github.com/H4aruki/MyTechPulse/archive/refs/heads/main.zip) し、任意のフォルダに展開（解凍）してください。
 
 2. 必要ライブラリのインストール
    ```bash
-   pip instal -r requirements.txt
+   pip install -r requirements.txt
    ```
-3. データベースの構築
+3. `.env` の準備
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+   `backend/.env` を開き、`QIITA_ACCESS_TOKEN`（[Qiitaの設定画面](https://qiita.com/settings/applications)で発行）を設定してください。
+4. データベースの構築
    ```bash
    cd backend
    python init_db.py
    ```
-### 3. システムの起動
+#### 3. システムの起動
    ```bash
    uvicorn app.main:app --reload
    ```
@@ -53,7 +73,7 @@ MyTechPulseは、「色んなサイトがあって全部追いかけられない
 - [ ] 既読管理
 - [ ] AI要約機能
 - [ ] 自動カテゴリ分類
-- [ ] Dockerの導入
+- [x] Dockerの導入
 
 ## Gallery
 ### メインページ
