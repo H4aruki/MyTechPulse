@@ -24,7 +24,7 @@ def get_recommendation_by_user_and_tag(db: Session, user_id: int, tag_id: int) -
     """特定のユーザーとタグの組み合わせのレコードを取得する"""
     return db.query(models.Recommend).filter(
         models.Recommend.user_ID == user_id,
-        models.Recommend.user_ID == tag_id
+        models.Recommend.tag_ID == tag_id
     ).first()
 
 #計算した小数に10000を掛けて整数として保存し、読み出す際に10000で割るという運用を想定
