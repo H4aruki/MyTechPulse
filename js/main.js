@@ -17,7 +17,7 @@ if (loginForm) {
         });
         const data = await res.json();
         if (data.status === 1) {
-            localStorage.setItem('username', username);
+            localStorage.setItem('access_token', data.access_token);
             window.location.href = 'articles.html';
         } else if (data.status === 2) {
             document.getElementById('errorMsg').innerText = 'ユーザー名かパスワードが間違っています。';
@@ -103,7 +103,7 @@ if (tagForm) {
         if (data.status === 1) {
             localStorage.removeItem('temp_username');
             localStorage.removeItem('temp_password');
-            localStorage.setItem('username', newusername);
+            localStorage.setItem('access_token', data.access_token);
             window.location.href = 'articles.html';
         } else if (data.status === 2) {
             alert('このユーザー名は既に使用されています。別のユーザー名で再度お試しください。');
@@ -124,18 +124,32 @@ if (tagForm) {
 const logoutBtn = document.getElementById('logoutBtn');
 if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
-        localStorage.removeItem('username');
+        localStorage.removeItem('access_token');
     });
 }
 
 
 // ---------- 記事一覧表示処理 ----------
 const articlesPageLogic = () => {
-    const username = localStorage.getItem('username');
-    if (!username) {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
         window.location.href = 'index.html';
         return;
     }
+    const authHeaders = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+    };
+
+    // トークン切れ等で401が返った場合、トークンを破棄してログインページへ戻す
+    const handleUnauthorized = (res) => {
+        if (res.status === 401) {
+            localStorage.removeItem('access_token');
+            window.location.href = 'index.html';
+            return true;
+        }
+        return false;
+    };
 
     const qiitaContainer = document.getElementById('qiitaArticlesContainer');
     const zennContainer = document.getElementById('zennArticlesContainer');
@@ -161,13 +175,14 @@ const articlesPageLogic = () => {
                 <b>Tags:</b> ${article.tags.map(escapeHtml).join(', ')}
             </p>
         `;
-        card.addEventListener('click', () => {
+        card.addEventListener('click', async () => {
             window.open(article.url, '_blank');
-            fetch(`${API_BASE_URL}/article/click`, {
+            const res = await fetch(`${API_BASE_URL}/article/click`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, tags: article.tags })
+                headers: authHeaders,
+                body: JSON.stringify({ tags: article.tags })
             });
+            handleUnauthorized(res);
         });
         container.appendChild(card);
     };
@@ -177,9 +192,9 @@ const articlesPageLogic = () => {
         try {
             const res = await fetch(`${API_BASE_URL}/news/personal_news`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username })
+                headers: authHeaders
             });
+            if (handleUnauthorized(res)) return;
             const data = await res.json();
 
             if (!qiitaContainer || !zennContainer) return;

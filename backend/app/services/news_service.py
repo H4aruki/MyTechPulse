@@ -2,7 +2,7 @@ import httpx
 import asyncio
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
-from .. import crud, schemas
+from .. import crud, models, schemas
 from ..config import settings
 
 # Zennの特定タグの記事を取得する非同期関数
@@ -58,12 +58,8 @@ def _build_zenn_articles_by_url(top_tags, zenn_results, since=None):
     return articles_by_url
 
 # メインのサービス関数
-async def get_personalized_articles(db: Session, username: str) -> dict:
+async def get_personalized_articles(db: Session, user: models.User) -> dict:
     # 1. ユーザーのタグの重みを取得
-    user = crud.user.get_user_by_username(db, username=username)
-    if not user: 
-        return {"qiita": [], "zenn": []}
-    
     recommends = crud.recommend.get_recommendations_by_user_id(db, user_id=user.user_ID)
     user_weights = {rec.tag.tag_name.lower(): (rec.match_int / 10000.0) for rec in recommends}
     if not user_weights: 
