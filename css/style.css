@@ -293,9 +293,9 @@ form#loginForm button, form#signupForm button {
 }
 
 /* ---------------------- */
-/* タグ選択ページ (tag-selection.html) */
+/* タグ選択ステップ (signup.html #signupStep2) */
 /* ---------------------- */
-#tagForm {
+#signupStep2 {
     margin: 0 auto;
 }
 .category {

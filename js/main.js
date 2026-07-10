@@ -28,23 +28,15 @@ if (loginForm) {
 }
 
 
-// ---------- 新規登録処理 ----------
+// ---------- 新規登録処理（ユーザー情報入力→タグ選択を1画面内の2ステップで行い、1リクエストで登録を完結させる） ----------
 const signupForm = document.getElementById('signupForm');
 if (signupForm) {
-    signupForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const newusername = document.getElementById('newusername').value;
-        const newpassword = document.getElementById('newpassword').value;
-        localStorage.setItem('temp_username', newusername);
-        localStorage.setItem('temp_password', newpassword);
-        window.location.href = 'tag-selection.html';
-    });
-}
-
-
-// ---------- タグ選択処理 ----------
-const tagForm = document.getElementById('tagForm');
-if (tagForm) {
+    const signupStep1 = document.getElementById('signupStep1');
+    const signupStep2 = document.getElementById('signupStep2');
+    const signupNextBtn = document.getElementById('signupNextBtn');
+    const newusernameInput = document.getElementById('newusername');
+    const newpasswordInput = document.getElementById('newpassword');
+    const signupErrorEl = document.getElementById('signupError');
     const tagCheckboxes = document.querySelectorAll('input[name="tags"]');
     const submitBtn = document.getElementById('submitBtn');
     const selectAllCheckboxes = document.querySelectorAll('.select-all');
@@ -72,49 +64,54 @@ if (tagForm) {
         box.addEventListener('change', checkSubmitButton);
     });
 
-    // フォーム送信（バックエンドへのデータ送信）
-    tagForm.addEventListener('submit', async (e) => {
+    // ステップ1 → ステップ2（Enterキーでの意図しない送信を防ぐため、通常のsubmitではなくボタンクリックで遷移）
+    const goToStep2 = () => {
+        if (!newusernameInput.value || !newpasswordInput.value) {
+            signupErrorEl.innerText = 'ユーザー名とパスワードを入力してください。';
+            return;
+        }
+        signupErrorEl.innerText = '';
+        signupStep1.hidden = true;
+        signupStep2.hidden = false;
+    };
+    signupNextBtn.addEventListener('click', goToStep2);
+    newpasswordInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            goToStep2();
+        }
+    });
+
+    // フォーム送信（ユーザー名・パスワード・タグをまとめて1リクエストで送信。パスワードをブラウザストレージへ一時保存しない）
+    signupForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const selectedTags = Array.from(tagCheckboxes)
             .filter(c => c.checked)
             .map(c => c.value);
-        
-        const newusername = localStorage.getItem('temp_username');
-        const newpassword = localStorage.getItem('temp_password');
 
-        if (!newusername || !newpassword) {
-            alert('ユーザー情報が見つかりません。お手数ですが、もう一度最初から登録をやり直してください。');
-            window.location.href = 'signup.html';
-            return;
-        }
-        
         const res = await fetch(`${API_BASE_URL}/auth/create_user`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                newusername: newusername, 
-                newpassword: newpassword, 
-                favoritetags: selectedTags 
+            body: JSON.stringify({
+                newusername: newusernameInput.value,
+                newpassword: newpasswordInput.value,
+                favoritetags: selectedTags
             })
         });
-        
+
         const data = await res.json();
-        
+
         if (data.status === 1) {
-            localStorage.removeItem('temp_username');
-            localStorage.removeItem('temp_password');
             localStorage.setItem('access_token', data.access_token);
             window.location.href = 'articles.html';
         } else if (data.status === 2) {
             alert('このユーザー名は既に使用されています。別のユーザー名で再度お試しください。');
-            localStorage.removeItem('temp_username');
-            localStorage.removeItem('temp_password');
-            window.location.href = 'signup.html';
+            signupStep2.hidden = true;
+            signupStep1.hidden = false;
         } else {
             alert('登録中にエラーが発生しました。しばらくしてから再度お試しください。');
-            localStorage.removeItem('temp_username');
-            localStorage.removeItem('temp_password');
-            window.location.href = 'signup.html';
+            signupStep2.hidden = true;
+            signupStep1.hidden = false;
         }
     });
 }
