@@ -19,10 +19,8 @@ if (loginForm) {
         if (data.status === 1) {
             localStorage.setItem('access_token', data.access_token);
             window.location.href = 'articles.html';
-        } else if (data.status === 2) {
-            document.getElementById('errorMsg').innerText = 'ユーザー名かパスワードが間違っています。';
         } else {
-            document.getElementById('errorMsg').innerText = 'ユーザーが存在しません。新規登録してください。';
+            document.getElementById('errorMsg').innerText = 'ユーザー名またはパスワードが間違っています。';
         }
     });
 }
