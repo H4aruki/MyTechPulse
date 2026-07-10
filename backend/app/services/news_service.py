@@ -109,16 +109,20 @@ async def get_personalized_articles(db: Session, username: str) -> dict:
         scored_articles.append({"score": score, "data": article})
 
     # 5. QiitaとZennに分離し、それぞれスコア順にソートする
-    qiita_sorted = sorted(
-        [item["data"] for item in scored_articles if item["data"].source == "Qiita"], 
-        key=lambda x: next((s["score"] for s in scored_articles if s["data"] == x), 0), 
-        reverse=True
-    )
-    zenn_sorted = sorted(
-        [item["data"] for item in scored_articles if item["data"].source == "Zenn"],
-        key=lambda x: next((s["score"] for s in scored_articles if s["data"] == x), 0),
-        reverse=True
-    )
+    qiita_sorted = [
+        item["data"] for item in sorted(
+            (item for item in scored_articles if item["data"].source == "Qiita"),
+            key=lambda item: item["score"],
+            reverse=True
+        )
+    ]
+    zenn_sorted = [
+        item["data"] for item in sorted(
+            (item for item in scored_articles if item["data"].source == "Zenn"),
+            key=lambda item: item["score"],
+            reverse=True
+        )
+    ]
     
     # フォールバック処理: もしフィルタリング後のZenn記事が0件だった場合
     if not zenn_sorted:

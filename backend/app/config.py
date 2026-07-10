@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     # .envファイルからDATABASE_URLを読み込む
     DATABASE_URL: str
     QIITA_ACCESS_TOKEN: str
+    # SQLAlchemyのSQLログ出力。デフォルトOFF、開発時のみ.envで true にする
+    DB_ECHO: bool = False
 
     # .envファイルのパスを指定
     model_config = SettingsConfigDict(env_file=str(ENV_PATH))

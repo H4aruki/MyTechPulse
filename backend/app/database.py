@@ -10,7 +10,7 @@ from .config import settings # 設定情報をインポート
 # configから読み込んだDATABASE_URLを使ってengineを作成
 engine = create_engine(
     settings.DATABASE_URL,   #configから読み込んだDATABASE_URLを使ってengineを作成
-    echo=True   # 開発中はTrueにしておくとSQLログが見れて便利
+    echo=settings.DB_ECHO   # SQLログが見たい開発時は.envでDB_ECHO=trueにする（デフォルトOFF）
 )
 
 
