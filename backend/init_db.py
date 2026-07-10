@@ -1,9 +1,12 @@
+import re
 import time
 
 import pymysql
 from sqlalchemy.engine import make_url
 
 from app.config import settings
+
+_VALID_DB_NAME = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 def _connect_server(url, max_retries: int = 10, wait_seconds: float = 2.0):
@@ -32,6 +35,11 @@ def init_database():
         # 1. DATABASE_URL から接続情報を導出し、データベース自体を作成
         url = make_url(settings.DATABASE_URL)
         db_name = url.database or "mytechpulse"
+        if not _VALID_DB_NAME.match(db_name):
+            raise ValueError(
+                f"Invalid database name in DATABASE_URL: {db_name!r} "
+                "(allowed: letters, digits, underscore)"
+            )
 
         conn = _connect_server(url)
         try:
