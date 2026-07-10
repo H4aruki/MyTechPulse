@@ -139,7 +139,6 @@ const articlesPageLogic = () => {
 
     const qiitaContainer = document.getElementById('qiitaArticlesContainer');
     const zennContainer = document.getElementById('zennArticlesContainer');
-    const tagsListContainer = document.getElementById('tagsList'); // サイドバーのUL要素を取得
 
     // Qiita/Zenn由来の外部データをinnerHTMLへ埋め込む前にエスケープする（XSS対策）
     const escapeHtml = (str) => {
@@ -173,18 +172,6 @@ const articlesPageLogic = () => {
         container.appendChild(card);
     };
 
-    // サイドバーにタグリストを表示する関数を追加
-    const displayUserTags = (tags) => {
-        if (!tagsListContainer || !tags || tags.length === 0) return;
-
-        tagsListContainer.innerHTML = ''; // 一旦中身を空にする
-        tags.forEach(tag => {
-            const listItem = document.createElement('li');
-            listItem.textContent = tag;
-            tagsListContainer.appendChild(listItem);
-        });
-    };
-
     // メインの処理: APIを呼び出して記事とタグを表示する
     const loadArticlesAndTags = async () => {
         try {
@@ -194,12 +181,6 @@ const articlesPageLogic = () => {
                 body: JSON.stringify({ username })
             });
             const data = await res.json();
-
-            // バックエンドからのレスポンスに user_tags が含まれていると仮定
-            // 例: { qiita_articles: [...], zenn_articles: [...], user_tags: ["Python", "React", "AWS"] }
-            if (data.user_tags) {
-                displayUserTags(data.user_tags);
-            }
 
             if (!qiitaContainer || !zennContainer) return;
 
