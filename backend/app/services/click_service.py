@@ -1,13 +1,9 @@
 # app/services/click_service.py
 from sqlalchemy.orm import Session
-from .. import crud
+from .. import crud, models
 from ..utils import scoring # scoring.pyをインポート
 
-def update_user_weights(db: Session, username: str, clicked_tags: list) -> bool:
-    user = crud.user.get_user_by_username(db, username=username)
-    if not user:
-        return False
-
+def update_user_weights(db: Session, user: models.User, clicked_tags: list) -> bool:
     try:
         # 1. 現在の重みをDBから取得
         recommends = crud.recommend.get_recommendations_by_user_id(db, user_id=user.user_ID)

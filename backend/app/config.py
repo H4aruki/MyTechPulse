@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     QIITA_ACCESS_TOKEN: str
     # SQLAlchemyのSQLログ出力。デフォルトOFF、開発時のみ.envで true にする
     DB_ECHO: bool = False
+    # JWT署名鍵。.envで必須指定（未設定時は起動失敗させて設定漏れに気付けるようにする）
+    SECRET_KEY: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
     # .envファイルのパスを指定
     model_config = SettingsConfigDict(env_file=str(ENV_PATH))

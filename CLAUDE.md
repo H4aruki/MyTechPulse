@@ -23,7 +23,7 @@ uvicorn app.main:app --reload      # APIサーバー起動（http://127.0.0.1:80
 
 - 依存: `pip install -r requirements.txt`（venvは `backend/venv/` にある）
 - テスト: pytestスイートは無い。`backend/tests/test_SQL.py` は手動実行のDB接続確認スクリプトのみ
-- 設定: `backend/.env` に `DATABASE_URL` と `QIITA_ACCESS_TOKEN` が必要（pydantic-settingsの `app/config.py` が読む）
+- 設定: `backend/.env` に `DATABASE_URL`、`QIITA_ACCESS_TOKEN`、`SECRET_KEY`（JWT署名鍵。未設定だと起動失敗する）が必要（pydantic-settingsの `app/config.py` が読む）
 
 ## アーキテクチャ
 
@@ -46,4 +46,4 @@ uvicorn app.main:app --reload      # APIサーバー起動（http://127.0.0.1:80
 
 エンドポイントはHTTPエラーではなくレスポンスボディの `status`（int）で結果を返すのが基本（例: login_check は 1=成功、2=パスワード不一致、それ以外=ユーザー不在）。フロントの `js/main.js` はこの status 値で分岐しているので、値の意味を変える場合は両側を揃えること。
 
-認証はセッション/トークンなし。ログイン成功後は `localStorage` の `username` を全APIリクエストにそのまま渡す方式。
+認証はJWT（HS256）。ログイン/サインアップ成功時に `access_token` を発行し、フロントは `localStorage` の `access_token` を `Authorization: Bearer <token>` ヘッダーとして保護対象エンドポイント（`/news/personal_news`, `/article/click`）に渡す。ユーザー特定は `app/dependencies.py` の `get_current_user`（`Depends`）が行い、トークン欠如・不正・期限切れは既存のstatus規約の例外として `HTTPException(401)` を返す。サーバー側のトークン失効機構は無く、ログアウトはクライアント側の `access_token` 破棄のみ。

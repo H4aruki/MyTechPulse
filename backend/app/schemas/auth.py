@@ -25,10 +25,12 @@ class UserCreateRequest(BaseModel):
 # login_check() のレスポンスボディ
 class LoginResponse(BaseModel):
     status: int
+    access_token: str | None = None
 
 # create_user() のレスポンスボディ
 class CreateUserResponse(BaseModel):
     status: int
+    access_token: str | None = None
 
 
 
