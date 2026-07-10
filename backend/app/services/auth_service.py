@@ -11,11 +11,9 @@ def login_check_service(db: Session, request: schemas.auth.LoginRequest) -> tupl
     """login_checkのロジックを処理し、(ステータスコード, アクセストークン)を返す"""
     user = crud.user.get_user_by_username(db, username=request.username)
 
-    if not user:
-        return 0, None # ユーザー名がない
-
-    if not Hasher.verify_password(request.password, user.password):
-        return 2, None # パスワードが不一致
+    # ユーザー不存在とパスワード不一致を区別しない（ユーザー名列挙攻撃対策）
+    if not user or not Hasher.verify_password(request.password, user.password):
+        return 2, None # 認証失敗
 
     token = create_access_token(user_id=user.user_ID, username=user.user_name)
     return 1, token # ログイン成功

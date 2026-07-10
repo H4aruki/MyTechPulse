@@ -44,6 +44,6 @@ uvicorn app.main:app --reload      # APIサーバー起動（http://127.0.0.1:80
 
 ### API規約
 
-エンドポイントはHTTPエラーではなくレスポンスボディの `status`（int）で結果を返すのが基本（例: login_check は 1=成功、2=パスワード不一致、それ以外=ユーザー不在）。フロントの `js/main.js` はこの status 値で分岐しているので、値の意味を変える場合は両側を揃えること。
+エンドポイントはHTTPエラーではなくレスポンスボディの `status`（int）で結果を返すのが基本（例: login_check は 1=成功、2=認証失敗）。ユーザー名列挙攻撃を防ぐため、login_check はユーザー不存在とパスワード不一致を区別せず同じ `status`（2）・同じエラーメッセージを返す。フロントの `js/main.js` はこの status 値で分岐しているので、値の意味を変える場合は両側を揃えること。
 
 認証はJWT（HS256）。ログイン/サインアップ成功時に `access_token` を発行し、フロントは `localStorage` の `access_token` を `Authorization: Bearer <token>` ヘッダーとして保護対象エンドポイント（`/news/personal_news`, `/article/click`）に渡す。ユーザー特定は `app/dependencies.py` の `get_current_user`（`Depends`）が行い、トークン欠如・不正・期限切れは既存のstatus規約の例外として `HTTPException(401)` を返す。サーバー側のトークン失効機構は無く、ログアウトはクライアント側の `access_token` 破棄のみ。
