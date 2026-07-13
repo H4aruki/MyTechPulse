@@ -14,7 +14,7 @@ async def fetch_zenn_articles_for_tag(client: httpx.AsyncClient, tag: str) -> li
         response = await client.get(url, params=params)
         response.raise_for_status()
         return response.json().get("articles", [])
-    except httpx.RequestError as e:
+    except httpx.HTTPError as e:
         print(f"Error fetching Zenn API for tag {tag}: {e}")
         return []
 
@@ -27,7 +27,7 @@ async def fetch_qiita_articles_for_tag(client: httpx.AsyncClient, tag: str):
         response = await client.get(url, headers=headers, params=params)
         response.raise_for_status()
         return response.json()
-    except httpx.RequestError as e:
+    except httpx.HTTPError as e:
         print(f"Error fetching Qiita API for tag {tag}: {e}")
         return []
 
