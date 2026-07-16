@@ -1,5 +1,6 @@
 import httpx
 import asyncio
+from urllib.parse import quote
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from .. import crud, models, schemas
@@ -20,7 +21,10 @@ async def fetch_zenn_articles_for_tag(client: httpx.AsyncClient, tag: str) -> li
 
 # Qiitaの特定タグの記事を取得する非同期関数
 async def fetch_qiita_articles_for_tag(client: httpx.AsyncClient, tag: str):
-    url = f"https://qiita.com/api/v2/tags/{tag}/items"
+    # タグ値はDB由来だがURLパスへの埋め込みなので必ずエンコードする。
+    # safe=""で「/」もエンコードし、Sass/SCSSのようなタグや「../」を含む値が
+    # パス区切りとして解釈されて別エンドポイントに到達するのを防ぐ（S6）
+    url = f"https://qiita.com/api/v2/tags/{quote(tag, safe='')}/items"
     headers = {"Authorization": f"Bearer {settings.QIITA_ACCESS_TOKEN}"}
     params = {"page": 1, "per_page": 20}
     try:
