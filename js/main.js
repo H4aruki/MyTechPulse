@@ -1,7 +1,12 @@
 // mytechpulse-frontend/js/main.js
 
 // グローバルな定数
-const API_BASE_URL = 'http://127.0.0.1:8000';
+// ローカル開発（Live Server等）ではAPIサーバーへ直接、本番はリバースプロキシが
+// /auth・/news・/article を同一オリジンでAPIに振り分けるため相対パスでよい
+const API_BASE_URL =
+    (location.hostname === '127.0.0.1' || location.hostname === 'localhost')
+        ? 'http://127.0.0.1:8000'
+        : '';
 
 // ---------- ログイン処理 ----------
 const loginForm = document.getElementById('loginForm');
