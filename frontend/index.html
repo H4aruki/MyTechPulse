@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/img/mytechpulse-logo2.png" />
+
+    <title>MyTechPulse — 私専用のTechニュース</title>
+    <meta
+      name="description"
+      content="Qiita・Zennから、あなたが登録した技術タグに合う記事だけを自動で集約。情報収集の時間を減らし、価値ある記事を見逃さないパーソナライズ技術ニュースアプリです。"
+    />
+
+    <!-- OGP: 本番ドメインが決まったら og:url / og:image を絶対URLに差し替えること -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="MyTechPulse — 私専用のTechニュース" />
+    <meta
+      property="og:description"
+      content="Qiita・Zennから、あなたの興味タグに合う記事だけを自動で集約するパーソナライズ技術ニュースアプリ。"
+    />
+    <meta property="og:image" content="/img/main-background.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Roboto:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/index.css" />
+  </head>
+
+  <body>
+    <!--
+      このページは検索インデックスとOGPを効かせるため、Reactを使わない静的HTMLとして
+      配信する（実質SSG）。ログイン後の画面は /app/ 配下のSPAが担当する。
+    -->
+    <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
+      <div class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
+        <a href="/" class="flex items-center gap-2 font-display text-lg font-bold text-ink">
+          <img src="/img/mytechpulse-logo2.png" alt="" class="h-8 w-8 object-contain" />
+          MyTechPulse
+        </a>
+
+        <nav class="flex items-center gap-4" aria-label="提供元サイト">
+          <a href="https://qiita.com/" target="_blank" rel="noreferrer noopener" title="Qiita">
+            <img src="/img/Qiita_logo.png" alt="Qiita" class="h-7 w-7 object-contain" />
+          </a>
+          <a href="https://zenn.dev/" target="_blank" rel="noreferrer noopener" title="Zenn">
+            <img src="/img/Zenn_logo.png" alt="Zenn" class="h-7 w-7 object-contain" />
+          </a>
+        </nav>
+
+        <div class="flex items-center gap-2">
+          <a
+            href="/app/signup"
+            class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-ink-muted transition hover:bg-slate-100"
+          >
+            新規登録
+          </a>
+          <a
+            href="/app/login"
+            class="rounded-lg bg-brand-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-700"
+          >
+            ログイン
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- ヒーロー -->
+      <section class="relative flex min-h-[70vh] items-center justify-center overflow-hidden">
+        <img
+          src="/img/main-background.jpg"
+          alt=""
+          class="absolute inset-0 h-full w-full object-cover"
+        />
+        <div class="absolute inset-0 bg-night/60"></div>
+        <div class="relative mx-auto max-w-3xl px-4 py-24 text-center text-white">
+          <h1 class="mb-4 text-4xl leading-tight font-bold sm:text-5xl">
+            ITの脈動を感じませんか？
+          </h1>
+          <p class="text-lg text-slate-200">『MyTechPulse』 私専用のTechニュース</p>
+          <a
+            href="/app/signup"
+            class="mt-8 inline-block rounded-lg bg-brand-500 px-8 py-3 font-bold text-white transition hover:bg-brand-700"
+          >
+            今すぐ始める
+          </a>
+        </div>
+      </section>
+
+      <!-- 特徴 -->
+      <section class="mx-auto max-w-6xl space-y-20 px-4 py-24">
+        <div class="grid items-center gap-10 md:grid-cols-2">
+          <div>
+            <h2 class="mb-4 text-2xl font-bold text-ink sm:text-3xl">
+              情報過多の時代に、最短のインプットを。
+            </h2>
+            <p class="leading-relaxed text-ink-muted">
+              Qiita、Zenn、技術ブログ...。進化し続けるITの世界で、有益な情報は無数に散らばっています。「色んなサイトがあって全部追いかけられない！」「サイトを巡回するのが面倒…」そんな悩みをMyTechPulseが解決します。
+            </p>
+          </div>
+          <img
+            src="/img/many-information.jpg"
+            alt="散らばった情報を表現する画像"
+            class="rounded-2xl shadow-md"
+          />
+        </div>
+
+        <div class="grid items-center gap-10 md:grid-cols-2">
+          <img
+            src="/img/composed-data.jpg"
+            alt="情報が集約される様子を表現する画像"
+            class="rounded-2xl shadow-md md:order-2"
+          />
+          <div class="md:order-1">
+            <h2 class="mb-4 text-2xl font-bold text-ink sm:text-3xl">
+              あなただけの興味を、一つの場所に。
+            </h2>
+            <p class="leading-relaxed text-ink-muted">
+              興味のある技術タグを登録するだけで、各サイトからあなたにパーソナライズされた最新記事を自動で集約。もう、価値ある情報を見逃すことはありません。厄介で時間のかかる情報収集を、スマートに解決しましょう。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- CTA -->
+      <section class="bg-night py-20">
+        <div class="mx-auto max-w-3xl px-4 text-center">
+          <h2 class="mb-8 text-2xl font-bold text-white sm:text-3xl">
+            あなただけの情報で、未来を加速させよう。
+          </h2>
+          <div class="flex flex-wrap justify-center gap-4">
+            <a
+              href="/app/signup"
+              class="rounded-lg bg-brand-500 px-8 py-3 font-bold text-white transition hover:bg-brand-700"
+            >
+              今すぐ始める
+            </a>
+            <a
+              href="/app/login"
+              class="rounded-lg border border-slate-500 px-8 py-3 font-bold text-slate-200 transition hover:bg-white/10"
+            >
+              ログイン
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="bg-night text-slate-300">
+      <div class="mx-auto grid max-w-6xl gap-8 border-t border-white/10 px-4 py-10 sm:grid-cols-3">
+        <div>
+          <h3 class="mb-3 font-display text-sm font-bold tracking-wide text-white">Created by</h3>
+          <p class="text-sm">Harry</p>
+          <p class="text-sm">K.Haruki</p>
+        </div>
+        <div>
+          <h3 class="mb-3 font-display text-sm font-bold tracking-wide text-white">Event</h3>
+          <p class="text-sm">Open Hack U 2025 Kanazawa</p>
+        </div>
+        <div>
+          <h3 class="mb-3 font-display text-sm font-bold tracking-wide text-white">Powered by</h3>
+          <ul class="space-y-1 text-sm">
+            <li>
+              <a
+                href="https://qiita.com/"
+                target="_blank"
+                rel="noreferrer noopener"
+                class="transition hover:text-white"
+                >Qiita</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://zenn.dev/"
+                target="_blank"
+                rel="noreferrer noopener"
+                class="transition hover:text-white"
+                >Zenn</a
+              >
+            </li>
+          </ul>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
