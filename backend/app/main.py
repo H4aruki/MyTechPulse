@@ -8,9 +8,12 @@ app = FastAPI()
 
 origins = [
     "http://localhost:3000",
-    "http://localhost:5500",    
+    "http://localhost:5500",
     "http://127.0.0.1:5500",
     "http://127.0.0.1:8000", # フロントエンドの開発サーバーのURL
+    # Vite（frontend/）の開発サーバー。旧 html/ を Live Server で開く場合の 5500 と併存させる
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
     # 将来的には本番環境のフロントエンドのURLも追加する
     # "https://www.your-production-site.com",
 ]
