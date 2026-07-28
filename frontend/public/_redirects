@@ -1,0 +1,5 @@
+# SPAの深いリンク（/app/login 等）を直接開いた場合にエントリへ差し戻す。
+# Netlify / Cloudflare Pages がこの形式を解釈する。
+# Vercel など他のホスティングを使う場合は、同等の rewrite を各設定ファイルで定義すること。
+# LP（/）は静的HTMLのままなので対象に含めない。
+/app/*  /app/index.html  200

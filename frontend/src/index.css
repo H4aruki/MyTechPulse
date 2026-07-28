@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+
+/* 既存 css/style.css の配色・フォントを Tailwind のデザイントークンとして引き継ぐ */
+@theme {
+  --color-brand-50: #e7f1ff;
+  --color-brand-100: #cfe4ff;
+  --color-brand-500: #007bff;
+  --color-brand-600: #0069d9;
+  --color-brand-700: #0056b3;
+
+  --color-ink: #212529;
+  --color-ink-muted: #6c757d;
+  --color-surface: #f8f9fa;
+  --color-night: #1a1a1a;
+
+  --font-sans: 'Noto Sans JP', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Roboto', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}

@@ -29,17 +29,18 @@ services:
         condition: service_healthy
 
   # ---- 任意（案B）: 静的フロント配信。`docker compose --profile frontend up` で有効化 ----
-  # 使う場合は js/main.js の API_BASE_URL と backend/app/main.py の CORS 調整が必要
+  # 事前に `cd frontend && npm install && npm run build` で dist/ を生成しておくこと。
+  # 使う場合は frontend/.env の VITE_API_BASE_URL（ビルド時に埋め込まれる）と
+  # backend/app/main.py の CORS 調整が必要。
+  # SPAの深いリンク（/app/login 等）を直接開くには nginx 側にも rewrite が必要
+  # （frontend/public/_redirects はNetlify/Cloudflare Pages用でnginxは解釈しない）。
   # frontend:
   #   image: nginx:alpine
   #   profiles: ["frontend"]
   #   ports:
   #     - "8080:80"
   #   volumes:
-  #     - ./html:/usr/share/nginx/html/html:ro
-  #     - ./css:/usr/share/nginx/html/css:ro
-  #     - ./js:/usr/share/nginx/html/js:ro
-  #     - ./img:/usr/share/nginx/html/img:ro
+  #     - ./frontend/dist:/usr/share/nginx/html:ro
   #   depends_on:
   #     - api
 

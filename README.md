@@ -16,7 +16,7 @@ MyTechPulseは、「色んなサイトがあって全部追いかけられない
 - **効率的なキャッチアップ**: 隙間時間で、今知るべきトレンドを効率よく把握。
 
 ## 技術スタック
-![](https://skillicons.dev/icons?i=html,css,js,python,mysql,fastapi,notion)
+![](https://skillicons.dev/icons?i=react,ts,vite,tailwind,python,mysql,fastapi,notion)
 
 ## SETUP
 ### 方法A: Docker（推奨）
@@ -31,7 +31,13 @@ MyTechPulseは、「色んなサイトがあって全部追いかけられない
    docker compose up --build
    ```
    `http://127.0.0.1:8000` でAPIが起動します。
-4. ブラウザで```index.html```を開くか、VSCodeのLive Serverで起動してください。
+4. フロントエンドを起動
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+   `http://localhost:5173` でフロントエンドが起動します。
 
 ### 方法B: ローカル環境（XAMPP）
 #### 1. 事前準備
@@ -59,10 +65,17 @@ MyTechPulseは、「色んなサイトがあって全部追いかけられない
    python init_db.py
    ```
 #### 3. システムの起動
+APIを起動します。
    ```bash
    uvicorn app.main:app --reload
    ```
-ブラウザで```index.html```を開くか、VSCodeのLive Serverで起動してください。
+別のターミナルでフロントエンドを起動します。
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+`http://localhost:5173` をブラウザで開いてください。
 
 ## Features/Roadmap
 - [ ] Xの記事の追加

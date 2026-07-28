@@ -12,6 +12,9 @@ origins = [
     "http://localhost:5500",
     "http://127.0.0.1:5500",
     "http://127.0.0.1:8000", # フロントエンドの開発サーバーのURL
+    # Vite（frontend/）の開発サーバー
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 # 本番等の追加オリジンは .env の CORS_ALLOWED_ORIGINS（カンマ区切り）で指定する
 origins += [o.strip() for o in settings.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
