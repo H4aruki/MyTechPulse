@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     # JWT署名鍵。.envで必須指定（未設定時は起動失敗させて設定漏れに気付けるようにする）
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
+    # CORS追加許可オリジン（カンマ区切り）。本番ドメインはコードを変えずここで足す
+    CORS_ALLOWED_ORIGINS: str = ""
 
     # .envファイルのパスを指定
     model_config = SettingsConfigDict(env_file=str(ENV_PATH))
