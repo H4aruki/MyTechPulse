@@ -1,7 +1,10 @@
 @import 'tailwindcss';
 
-/* 既存 css/style.css の配色・フォントを Tailwind のデザイントークンとして引き継ぐ */
 @theme {
+  /* ------------------------------------------------------------------
+     アプリ画面（ログイン / サインアップ / 記事一覧）のライトテーマ。
+     旧 css/style.css 由来。LPのダーク化とは独立なので消さないこと。
+     ------------------------------------------------------------------ */
   --color-brand-50: #e7f1ff;
   --color-brand-100: #cfe4ff;
   --color-brand-500: #007bff;
@@ -13,8 +16,38 @@
   --color-surface: #f8f9fa;
   --color-night: #1a1a1a;
 
-  --font-sans: 'Noto Sans JP', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Roboto', ui-sans-serif, system-ui, sans-serif;
+  /* ------------------------------------------------------------------
+     LP（ダークテック）専用トークン。使用箇所は frontend/index.html のみ。
+     ------------------------------------------------------------------ */
+  /* 面 */
+  --color-bg-base: #08090d;
+  --color-bg-raised: #101319;
+  --color-bg-card: #14181f;
+
+  /* 罫線 */
+  --color-line-subtle: #1f242e;
+  --color-line-strong: #2c333f;
+
+  /* 文字 */
+  --color-fg-primary: #f4f6fa;
+  --color-fg-secondary: #a6aebd;
+  --color-fg-muted: #6c7484;
+  --color-fg-on-accent: #04141a;
+
+  /* アクセント。accent → accent-alt のグラデーションがブランドの軸 */
+  --color-accent: #22d3ee;
+  --color-accent-strong: #06b6d4;
+  --color-accent-alt: #8b5cf6;
+
+  /* 提供元サービスのブランド色（バッジに使用） */
+  --color-qiita: #55c500;
+  --color-zenn: #3ea8ff;
+
+  /* ------------------------------------------------------------------
+     タイポグラフィ。LPとアプリ画面で共通に切り替える。
+     ------------------------------------------------------------------ */
+  --font-sans: 'Zen Kaku Gothic New', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {

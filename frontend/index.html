@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="ja">
+<html lang="ja" class="scroll-smooth">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="/img/mytechpulse-logo2.png" />
+    <meta name="theme-color" content="#08090d" />
 
     <title>MyTechPulse — 私専用のTechニュース</title>
     <meta
@@ -18,51 +19,73 @@
       property="og:description"
       content="Qiita・Zennから、あなたの興味タグに合う記事だけを自動で集約するパーソナライズ技術ニュースアプリ。"
     />
-    <meta property="og:image" content="/img/main-background.jpg" />
+    <meta property="og:image" content="/img/og.png" />
     <meta name="twitter:card" content="summary_large_image" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Roboto:wght@700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/src/index.css" />
   </head>
 
-  <body>
+  <body class="bg-bg-base text-fg-primary [color-scheme:dark]">
     <!--
       このページは検索インデックスとOGPを効かせるため、Reactを使わない静的HTMLとして
       配信する（実質SSG）。ログイン後の画面は /app/ 配下のSPAが担当する。
+      配色は index.css の LP専用トークン（bg-* / fg-* / line-* / accent*）を使う。
+      アプリ画面のライトテーマ用トークン（brand-* / ink / surface）とは別系統。
     -->
-    <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
-        <a href="/" class="flex items-center gap-2 font-display text-lg font-bold text-ink">
-          <img src="/img/mytechpulse-logo2.png" alt="" class="h-8 w-8 object-contain" />
-          MyTechPulse
+    <header
+      class="sticky top-0 z-50 border-b border-line-subtle bg-bg-base/70 backdrop-blur-xl"
+    >
+      <div class="mx-auto flex h-18 max-w-6xl items-center justify-between px-4 sm:px-6">
+        <a href="/" class="flex items-center gap-2.5">
+          <!--
+            ロゴマークはインラインSVG。/img/mytechpulse-logo2.png は白背景のラスターで
+            ワードマークまで焼き込まれているため、ダーク背景とワードマーク併記に使えない。
+            （favicon としては引き続きあのPNGを使う）
+          -->
+          <svg class="h-8 w-8" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <defs>
+              <linearGradient
+                id="markHeader"
+                x1="0"
+                y1="0"
+                x2="32"
+                y2="32"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop stop-color="#22d3ee" />
+                <stop offset="1" stop-color="#8b5cf6" />
+              </linearGradient>
+            </defs>
+            <rect width="32" height="32" rx="9" fill="url(#markHeader)" />
+            <path
+              d="M5.5 16.5H10L12.2 11L15.4 21.5L17.8 15L19.6 16.5H26.5"
+              stroke="#08090d"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <span class="font-display text-lg font-bold tracking-tight">MyTechPulse</span>
         </a>
 
-        <nav class="flex items-center gap-4" aria-label="提供元サイト">
-          <a href="https://qiita.com/" target="_blank" rel="noreferrer noopener" title="Qiita">
-            <img src="/img/Qiita_logo.png" alt="Qiita" class="h-7 w-7 object-contain" />
-          </a>
-          <a href="https://zenn.dev/" target="_blank" rel="noreferrer noopener" title="Zenn">
-            <img src="/img/Zenn_logo.png" alt="Zenn" class="h-7 w-7 object-contain" />
-          </a>
-        </nav>
-
-        <div class="flex items-center gap-2">
-          <a
-            href="/app/signup"
-            class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-ink-muted transition hover:bg-slate-100"
-          >
-            新規登録
-          </a>
+        <div class="flex items-center gap-2 sm:gap-3">
           <a
             href="/app/login"
-            class="rounded-lg bg-brand-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-700"
+            class="hidden rounded-full border border-line-strong px-5 py-2.5 text-sm font-bold transition hover:border-fg-muted hover:bg-white/5 sm:inline-block"
           >
             ログイン
+          </a>
+          <a
+            href="/app/signup"
+            class="rounded-full bg-accent px-5 py-2.5 text-sm font-bold text-fg-on-accent transition hover:bg-accent-strong"
+          >
+            今すぐ始める
           </a>
         </div>
       </div>
@@ -70,119 +93,455 @@
 
     <main>
       <!-- ヒーロー -->
-      <section class="relative flex min-h-[70vh] items-center justify-center overflow-hidden">
-        <img
-          src="/img/main-background.jpg"
-          alt=""
-          class="absolute inset-0 h-full w-full object-cover"
-        />
-        <div class="absolute inset-0 bg-night/60"></div>
-        <div class="relative mx-auto max-w-3xl px-4 py-24 text-center text-white">
-          <h1 class="mb-4 text-4xl leading-tight font-bold sm:text-5xl">
-            ITの脈動を感じませんか？
-          </h1>
-          <p class="text-lg text-slate-200">『MyTechPulse』 私専用のTechニュース</p>
-          <a
-            href="/app/signup"
-            class="mt-8 inline-block rounded-lg bg-brand-500 px-8 py-3 font-bold text-white transition hover:bg-brand-700"
+      <section class="relative overflow-hidden border-b border-line-subtle">
+        <!-- 背景: 微細グリッド（中央から外へフェード） -->
+        <div
+          aria-hidden="true"
+          class="pointer-events-none absolute inset-0 opacity-40 [background-image:linear-gradient(to_right,var(--color-line-subtle)_1px,transparent_1px),linear-gradient(to_bottom,var(--color-line-subtle)_1px,transparent_1px)] [background-size:72px_72px] [mask-image:radial-gradient(ellipse_65%_55%_at_50%_38%,#000_35%,transparent_100%)]"
+        ></div>
+        <!-- 背景: 放射グロー -->
+        <div
+          aria-hidden="true"
+          class="pointer-events-none absolute -top-40 -left-32 h-[36rem] w-[36rem] rounded-full bg-accent/20 blur-[120px]"
+        ></div>
+        <div
+          aria-hidden="true"
+          class="pointer-events-none absolute -right-24 -bottom-52 h-[34rem] w-[34rem] rounded-full bg-accent-alt/20 blur-[130px]"
+        ></div>
+        <div class="relative mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32">
+          <div class="mx-auto max-w-3xl text-center">
+            <span
+              class="inline-flex items-center gap-2 rounded-full border border-line-strong bg-bg-raised/80 px-3.5 py-1.5 font-display text-xs font-medium tracking-[0.04em] text-fg-secondary"
+            >
+              <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
+              Qiita・Zenn 対応
+            </span>
+
+            <h1 class="mt-7 text-4xl leading-[1.15] font-bold tracking-tight sm:text-6xl">
+              探す時間を、<br /><span
+                class="bg-gradient-to-r from-accent to-accent-alt bg-clip-text text-transparent"
+                >読む時間</span
+              >に。
+            </h1>
+
+            <p
+              class="mx-auto mt-6 max-w-2xl leading-relaxed text-fg-secondary sm:text-lg"
+            >
+              技術記事サービスの Qiita・Zenn
+              から、登録した技術タグに合う記事だけを自動で集約します。クリックした記事の傾向を学習し、読むほど並び順があなたに寄っていきます。
+            </p>
+
+            <div class="mt-10 flex flex-wrap items-center justify-center gap-3">
+              <a
+                href="/app/signup"
+                class="rounded-full bg-accent px-7 py-3.5 font-bold text-fg-on-accent transition hover:bg-accent-strong"
+              >
+                今すぐ始める
+              </a>
+              <a
+                href="#how"
+                class="group inline-flex items-center gap-1.5 rounded-full border border-line-strong px-7 py-3.5 font-bold transition hover:border-fg-muted hover:bg-white/5"
+              >
+                仕組みを見る
+                <span aria-hidden="true" class="transition group-hover:translate-x-0.5">→</span>
+              </a>
+            </div>
+          </div>
+
+          <!--
+            発光する心拍ライン（サービス名 Pulse のモチーフ）。
+            CTAと表示イメージの区切りとして、画面幅いっぱいに引く。
+          -->
+          <div
+            aria-hidden="true"
+            class="pointer-events-none relative left-1/2 mt-14 w-screen -translate-x-1/2"
           >
-            今すぐ始める
-          </a>
+            <svg
+              class="h-24 w-full opacity-80"
+              viewBox="0 0 1440 160"
+              fill="none"
+              preserveAspectRatio="none"
+            >
+              <defs>
+                <linearGradient
+                  id="pulseStroke"
+                  x1="0"
+                  y1="0"
+                  x2="1440"
+                  y2="0"
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop stop-color="#22d3ee" stop-opacity="0" />
+                  <stop offset="0.28" stop-color="#22d3ee" />
+                  <stop offset="0.62" stop-color="#8b5cf6" />
+                  <stop offset="1" stop-color="#8b5cf6" stop-opacity="0" />
+                </linearGradient>
+                <filter id="pulseGlow" x="-10%" y="-200%" width="120%" height="500%">
+                  <feGaussianBlur stdDeviation="7" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+              <path
+                d="M0 80 H320 L332 42 L346 120 L358 64 L370 80 H690 L704 24 L718 134 L730 56 L742 80 H1060 L1072 48 L1084 108 L1096 66 L1108 80 H1440"
+                stroke="url(#pulseStroke)"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                filter="url(#pulseGlow)"
+              />
+            </svg>
+          </div>
+
+          <!-- 表示イメージ（実データではなく、届き方を示すための例） -->
+          <div class="mx-auto mt-6 max-w-4xl">
+            <p
+              class="mb-4 text-center font-display text-xs font-medium tracking-[0.18em] text-fg-muted uppercase"
+            >
+              表示イメージ
+            </p>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <article
+                class="rounded-2xl border border-line-subtle bg-bg-card/70 p-5 backdrop-blur-sm"
+              >
+                <div class="flex items-center justify-between">
+                  <span
+                    class="inline-flex items-center gap-1.5 font-display text-xs font-bold tracking-wide text-qiita"
+                  >
+                    <span class="h-1.5 w-1.5 rounded-full bg-qiita"></span>
+                    QIITA
+                  </span>
+                  <span class="font-display text-xs text-fg-muted">♥ 342</span>
+                </div>
+                <h3 class="mt-3 leading-snug font-bold">
+                  React 19 の use() を実務投入して分かったこと
+                </h3>
+                <div class="mt-4 flex flex-wrap gap-1.5">
+                  <span
+                    class="rounded-md bg-bg-raised px-2 py-1 font-display text-[0.6875rem] text-fg-secondary"
+                    >React</span
+                  >
+                  <span
+                    class="rounded-md bg-bg-raised px-2 py-1 font-display text-[0.6875rem] text-fg-secondary"
+                    >TypeScript</span
+                  >
+                </div>
+              </article>
+
+              <article
+                class="rounded-2xl border border-line-subtle bg-bg-card/70 p-5 backdrop-blur-sm"
+              >
+                <div class="flex items-center justify-between">
+                  <span
+                    class="inline-flex items-center gap-1.5 font-display text-xs font-bold tracking-wide text-zenn"
+                  >
+                    <span class="h-1.5 w-1.5 rounded-full bg-zenn"></span>
+                    ZENN
+                  </span>
+                  <span class="font-display text-xs text-fg-muted">♥ 187</span>
+                </div>
+                <h3 class="mt-3 leading-snug font-bold">
+                  FastAPI + SQLAlchemy で N+1 を潰しきる
+                </h3>
+                <div class="mt-4 flex flex-wrap gap-1.5">
+                  <span
+                    class="rounded-md bg-bg-raised px-2 py-1 font-display text-[0.6875rem] text-fg-secondary"
+                    >Python</span
+                  >
+                  <span
+                    class="rounded-md bg-bg-raised px-2 py-1 font-display text-[0.6875rem] text-fg-secondary"
+                    >FastAPI</span
+                  >
+                </div>
+              </article>
+            </div>
+          </div>
         </div>
       </section>
 
-      <!-- 特徴 -->
-      <section class="mx-auto max-w-6xl space-y-20 px-4 py-24">
-        <div class="grid items-center gap-10 md:grid-cols-2">
+      <!-- 対応サービス -->
+      <section class="border-b border-line-subtle bg-bg-raised/40">
+        <div
+          class="mx-auto flex max-w-6xl flex-col items-center gap-6 px-4 py-12 sm:flex-row sm:justify-center sm:gap-12 sm:px-6"
+        >
+          <p class="font-display text-xs font-medium tracking-[0.18em] text-fg-muted uppercase">
+            対応サービス
+          </p>
+          <!--
+            Qiita/Zennのロゴ画像はどちらも背景不透明（Qiita=緑地、Zenn=白地）。
+            透過できないので角丸でクリップし、ブランドプレートとして見せる。
+          -->
+          <div class="flex items-center gap-6">
+            <a
+              href="https://qiita.com/"
+              target="_blank"
+              rel="noreferrer noopener"
+              title="Qiita"
+              class="overflow-hidden rounded-lg opacity-80 transition hover:opacity-100"
+            >
+              <img src="/img/Qiita_logo.png" alt="Qiita" class="block h-8 w-auto" />
+            </a>
+            <a
+              href="https://zenn.dev/"
+              target="_blank"
+              rel="noreferrer noopener"
+              title="Zenn"
+              class="overflow-hidden rounded-lg opacity-80 transition hover:opacity-100"
+            >
+              <img src="/img/Zenn_logo.png" alt="Zenn" class="block h-8 w-auto" />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- 仕組み -->
+      <section id="how" class="scroll-mt-20 border-b border-line-subtle">
+        <div class="mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-28">
+          <div class="max-w-2xl">
+            <p class="font-display text-xs font-medium tracking-[0.18em] text-accent uppercase">
+              How it works
+            </p>
+            <h2 class="mt-4 text-3xl leading-tight font-bold sm:text-4xl">
+              3ステップで、自分専用のフィードに。
+            </h2>
+          </div>
+
+          <ol class="mt-14 grid gap-5 md:grid-cols-3">
+            <li class="rounded-2xl border border-line-subtle bg-bg-card p-7">
+              <span
+                class="bg-gradient-to-br from-accent to-accent-alt bg-clip-text font-display text-4xl font-bold text-transparent"
+                >01</span
+              >
+              <h3 class="mt-5 text-xl font-bold">タグを登録</h3>
+              <p class="mt-3 leading-relaxed text-fg-secondary">
+                9カテゴリ・約110個の技術タグから、興味のあるものを選びます。
+              </p>
+            </li>
+            <li class="rounded-2xl border border-line-subtle bg-bg-card p-7">
+              <span
+                class="bg-gradient-to-br from-accent to-accent-alt bg-clip-text font-display text-4xl font-bold text-transparent"
+                >02</span
+              >
+              <h3 class="mt-5 text-xl font-bold">2サイトから集約</h3>
+              <p class="mt-3 leading-relaxed text-fg-secondary">
+                重みの高い上位5タグで記事を取得し、直近5日以内のものに絞り込みます。
+              </p>
+            </li>
+            <li class="rounded-2xl border border-line-subtle bg-bg-card p-7">
+              <span
+                class="bg-gradient-to-br from-accent to-accent-alt bg-clip-text font-display text-4xl font-bold text-transparent"
+                >03</span
+              >
+              <h3 class="mt-5 text-xl font-bold">読むほど並び替わる</h3>
+              <p class="mt-3 leading-relaxed text-fg-secondary">
+                クリックした記事のタグの重みが上がり、次回以降の並び順に反映されます。
+              </p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- パーソナライズ -->
+      <section class="border-b border-line-subtle">
+        <div
+          class="mx-auto grid max-w-6xl items-center gap-14 px-4 py-24 sm:px-6 sm:py-28 md:grid-cols-2 md:gap-20"
+        >
           <div>
-            <h2 class="mb-4 text-2xl font-bold text-ink sm:text-3xl">
-              情報過多の時代に、最短のインプットを。
-            </h2>
-            <p class="leading-relaxed text-ink-muted">
-              Qiita、Zenn、技術ブログ...。進化し続けるITの世界で、有益な情報は無数に散らばっています。「色んなサイトがあって全部追いかけられない！」「サイトを巡回するのが面倒…」そんな悩みをMyTechPulseが解決します。
+            <p class="font-display text-xs font-medium tracking-[0.18em] text-accent uppercase">
+              Personalize
+            </p>
+            <h2 class="mt-4 text-3xl leading-tight font-bold sm:text-4xl">あなただけの並び順</h2>
+            <p class="mt-6 leading-relaxed text-fg-secondary">
+              タグごとの興味の重みと記事のいいね数からスコアを計算し、Qiita・Zenn
+              それぞれの上位10件を表示します。巡回する手間も、見逃しもなくなります。
             </p>
           </div>
-          <img
-            src="/img/many-information.jpg"
-            alt="散らばった情報を表現する画像"
-            class="rounded-2xl shadow-md"
-          />
-        </div>
 
-        <div class="grid items-center gap-10 md:grid-cols-2">
-          <img
-            src="/img/composed-data.jpg"
-            alt="情報が集約される様子を表現する画像"
-            class="rounded-2xl shadow-md md:order-2"
-          />
-          <div class="md:order-1">
-            <h2 class="mb-4 text-2xl font-bold text-ink sm:text-3xl">
-              あなただけの興味を、一つの場所に。
-            </h2>
-            <p class="leading-relaxed text-ink-muted">
-              興味のある技術タグを登録するだけで、各サイトからあなたにパーソナライズされた最新記事を自動で集約。もう、価値ある情報を見逃すことはありません。厄介で時間のかかる情報収集を、スマートに解決しましょう。
+          <div class="rounded-2xl border border-line-subtle bg-bg-card p-7">
+            <p class="font-display text-xs tracking-[0.14em] text-fg-muted uppercase">
+              興味の重み
+            </p>
+            <ul class="mt-6 space-y-4">
+              <li>
+                <div class="flex items-baseline justify-between">
+                  <span class="font-display text-sm font-medium">TypeScript</span>
+                  <span class="font-display text-xs text-fg-muted">0.38</span>
+                </div>
+                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-bg-raised">
+                  <div
+                    class="h-full rounded-full bg-gradient-to-r from-accent to-accent-alt"
+                    style="width: 100%"
+                  ></div>
+                </div>
+              </li>
+              <li>
+                <div class="flex items-baseline justify-between">
+                  <span class="font-display text-sm font-medium">React</span>
+                  <span class="font-display text-xs text-fg-muted">0.24</span>
+                </div>
+                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-bg-raised">
+                  <div
+                    class="h-full rounded-full bg-gradient-to-r from-accent to-accent-alt"
+                    style="width: 63%"
+                  ></div>
+                </div>
+              </li>
+              <li>
+                <div class="flex items-baseline justify-between">
+                  <span class="font-display text-sm font-medium">Python</span>
+                  <span class="font-display text-xs text-fg-muted">0.15</span>
+                </div>
+                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-bg-raised">
+                  <div
+                    class="h-full rounded-full bg-gradient-to-r from-accent to-accent-alt"
+                    style="width: 39%"
+                  ></div>
+                </div>
+              </li>
+              <li>
+                <div class="flex items-baseline justify-between">
+                  <span class="font-display text-sm font-medium">Docker</span>
+                  <span class="font-display text-xs text-fg-muted">0.09</span>
+                </div>
+                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-bg-raised">
+                  <div
+                    class="h-full rounded-full bg-gradient-to-r from-accent to-accent-alt"
+                    style="width: 24%"
+                  ></div>
+                </div>
+              </li>
+              <li>
+                <div class="flex items-baseline justify-between">
+                  <span class="font-display text-sm font-medium">AWS</span>
+                  <span class="font-display text-xs text-fg-muted">0.04</span>
+                </div>
+                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-bg-raised">
+                  <div
+                    class="h-full rounded-full bg-gradient-to-r from-accent to-accent-alt"
+                    style="width: 11%"
+                  ></div>
+                </div>
+              </li>
+            </ul>
+            <p class="mt-6 text-xs leading-relaxed text-fg-muted">
+              記事をクリックすると、その記事に付いたタグの重みが上がります。
             </p>
           </div>
         </div>
       </section>
 
-      <!-- CTA -->
-      <section class="bg-night py-20">
-        <div class="mx-auto max-w-3xl px-4 text-center">
-          <h2 class="mb-8 text-2xl font-bold text-white sm:text-3xl">
-            あなただけの情報で、未来を加速させよう。
-          </h2>
-          <div class="flex flex-wrap justify-center gap-4">
-            <a
-              href="/app/signup"
-              class="rounded-lg bg-brand-500 px-8 py-3 font-bold text-white transition hover:bg-brand-700"
-            >
-              今すぐ始める
-            </a>
-            <a
-              href="/app/login"
-              class="rounded-lg border border-slate-500 px-8 py-3 font-bold text-slate-200 transition hover:bg-white/10"
-            >
-              ログイン
-            </a>
+      <!-- 最終CTA -->
+      <section class="px-4 py-24 sm:px-6 sm:py-28">
+        <div
+          class="relative mx-auto max-w-6xl overflow-hidden rounded-[2rem] border border-line-subtle bg-bg-card px-6 py-20 text-center"
+        >
+          <div
+            aria-hidden="true"
+            class="pointer-events-none absolute -top-32 left-1/2 h-96 w-[42rem] -translate-x-1/2 rounded-full bg-accent/15 blur-[110px]"
+          ></div>
+          <div
+            aria-hidden="true"
+            class="pointer-events-none absolute -bottom-40 -right-10 h-80 w-80 rounded-full bg-accent-alt/15 blur-[110px]"
+          ></div>
+
+          <div class="relative">
+            <h2 class="text-3xl leading-tight font-bold sm:text-4xl">
+              今日の記事から、始めましょう。
+            </h2>
+            <p class="mx-auto mt-5 max-w-xl leading-relaxed text-fg-secondary">
+              アカウントを作成してタグを選ぶだけで使えます。
+            </p>
+            <div class="mt-9 flex flex-wrap justify-center gap-3">
+              <a
+                href="/app/signup"
+                class="rounded-full bg-accent px-8 py-4 font-bold text-fg-on-accent transition hover:bg-accent-strong"
+              >
+                今すぐ始める
+              </a>
+              <a
+                href="/app/login"
+                class="rounded-full border border-line-strong px-8 py-4 font-bold transition hover:border-fg-muted hover:bg-white/5"
+              >
+                ログイン
+              </a>
+            </div>
           </div>
         </div>
       </section>
     </main>
 
-    <footer class="bg-night text-slate-300">
-      <div class="mx-auto grid max-w-6xl gap-8 border-t border-white/10 px-4 py-10 sm:grid-cols-3">
-        <div>
-          <h3 class="mb-3 font-display text-sm font-bold tracking-wide text-white">Created by</h3>
-          <p class="text-sm">Harry</p>
-          <p class="text-sm">K.Haruki</p>
-        </div>
-        <div>
-          <h3 class="mb-3 font-display text-sm font-bold tracking-wide text-white">Event</h3>
-          <p class="text-sm">Open Hack U 2025 Kanazawa</p>
-        </div>
-        <div>
-          <h3 class="mb-3 font-display text-sm font-bold tracking-wide text-white">Powered by</h3>
-          <ul class="space-y-1 text-sm">
-            <li>
-              <a
-                href="https://qiita.com/"
-                target="_blank"
-                rel="noreferrer noopener"
-                class="transition hover:text-white"
-                >Qiita</a
-              >
-            </li>
-            <li>
-              <a
-                href="https://zenn.dev/"
-                target="_blank"
-                rel="noreferrer noopener"
-                class="transition hover:text-white"
-                >Zenn</a
-              >
-            </li>
-          </ul>
+    <footer class="border-t border-line-subtle">
+      <div class="mx-auto max-w-6xl px-4 py-14 sm:px-6">
+        <div class="grid gap-10 sm:grid-cols-2 md:grid-cols-4">
+          <div>
+            <div class="flex items-center gap-2.5">
+              <svg class="h-7 w-7" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+                <defs>
+                  <linearGradient
+                    id="markFooter"
+                    x1="0"
+                    y1="0"
+                    x2="32"
+                    y2="32"
+                    gradientUnits="userSpaceOnUse"
+                  >
+                    <stop stop-color="#22d3ee" />
+                    <stop offset="1" stop-color="#8b5cf6" />
+                  </linearGradient>
+                </defs>
+                <rect width="32" height="32" rx="9" fill="url(#markFooter)" />
+                <path
+                  d="M5.5 16.5H10L12.2 11L15.4 21.5L17.8 15L19.6 16.5H26.5"
+                  stroke="#08090d"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <span class="font-display font-bold">MyTechPulse</span>
+            </div>
+            <p class="mt-3 text-sm leading-relaxed text-fg-muted">
+              Qiita・Zenn から、あなたのタグに合う技術記事を集約するパーソナライズニュースアプリ。
+            </p>
+          </div>
+
+          <div>
+            <h3 class="font-display text-xs font-bold tracking-[0.14em] uppercase">Created by</h3>
+            <p class="mt-4 text-sm text-fg-secondary">Harry</p>
+            <p class="text-sm text-fg-secondary">K.Haruki</p>
+          </div>
+
+          <div>
+            <h3 class="font-display text-xs font-bold tracking-[0.14em] uppercase">Event</h3>
+            <p class="mt-4 text-sm text-fg-secondary">Open Hack U 2025 Kanazawa</p>
+          </div>
+
+          <div>
+            <h3 class="font-display text-xs font-bold tracking-[0.14em] uppercase">Powered by</h3>
+            <ul class="mt-4 space-y-1.5 text-sm">
+              <li>
+                <a
+                  href="https://qiita.com/"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  class="text-fg-secondary transition hover:text-fg-primary"
+                  >Qiita</a
+                >
+              </li>
+              <li>
+                <a
+                  href="https://zenn.dev/"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  class="text-fg-secondary transition hover:text-fg-primary"
+                  >Zenn</a
+                >
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
     </footer>
