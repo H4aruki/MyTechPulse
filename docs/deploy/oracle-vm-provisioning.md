@@ -25,29 +25,67 @@ Always Free の Ampere A1 枠は 2026-06-15 に 4 OCPU / 24 GB から **半分�
 作業の流れ:
 
 ```
-アカウント作成（リージョン確定） → インスタンス作成（容量エラーと戦う）
-  → Security List で 22/80/443 開放 → SSH → ops/oracle-vm-setup.sh 実行 → 疎通確認
+アカウント作成（リージョン・アカウント名は変更不可） → コンパートメント作成
+  → インスタンス作成（容量エラーと戦う） → Security List で 22/80/443 開放
+  → SSH → ops/oracle-vm-setup.sh 実行 → 疎通確認
 ```
 
 ---
 
-## 1. アカウント作成とリージョン選定
+## 1. アカウント作成（後から変更できない2つの決定）
 
-**先に決めること: ホームリージョン。**
-Always Free のコンピュート・インスタンスは**ホームリージョンにしか作成できず**、ホームリージョンはアカウント作成時に決まって後から変更できない。
-つまりここでの選択をやり直すにはアカウントを作り直すことになるので、先に決める。
+サインアップ画面で決める項目のうち、**ホームリージョン**と**クラウド・アカウント名**は後から変更できない。
+しかも Always Free アカウントは**1人1つまで**（複数作成は規約違反でアカウント停止対象）なので、
+「作り直す」という逃げ道が実質的に無い。この2つは先に決めてから申し込む。
+
+サインアップ先: <https://signup.oraclecloud.com>
+
+### 1-1. ホームリージョン
+
+Always Free のコンピュート・インスタンスは**ホームリージョンにしか作成できない**。
 
 | リージョン | 利点 | 欠点 |
 |---|---|---|
 | `ap-tokyo-1` / `ap-osaka-1` | 日本のユーザーからのレイテンシが小さい | Ampere A1 の空き容量が枯渇しがちで「Out of Host Capacity」に遭いやすい |
 | 米国・欧州リージョン | A1 の空きを見つけやすい | 日本からの往復レイテンシが乗る（API 応答が体感で遅くなる） |
 
-**MyTechPulse の方針: まず `ap-tokyo-1` を狙う。** 記事一覧の取得が体感速度に直結するアプリなので、レイテンシを優先する。
-どうしても容量が確保できない場合に限り、次節のリトライ手段を尽くしてから他リージョンでのアカウント作り直しを検討する。
+**MyTechPulse の方針: まず `ap-tokyo-1`（Japan East (Tokyo)）を狙う。** 記事一覧の取得が体感速度に直結するアプリなので、レイテンシを優先する。
+どうしても容量が確保できない場合に限り、手順 3 のリトライ手段を尽くした上で他リージョンを検討する。
+その場合は無料アカウントを2つ持つことになる（規約違反）のを避けるため、
+[既存の Free Tier テナンシーを削除する公式手順](https://docs.oracle.com/iaas/Content/General/Tasks/deleting_tenancy_freetier.htm)を踏んでから作り直す。
 
-アカウント作成時に注意する点:
+### 1-2. クラウド・アカウント名（= テナンシー名）
 
-- クレジットカード登録を求められるが、Always Free の範囲では課金されない。**「アップグレード」を促す表示に応じない**（従量課金アカウントに変わる）
+**プロダクト名を付けてはいけない。** `mytechpulse` のような名前にすると、将来まったく別のプロダクトで
+Oracle を使うときもその配下に入ってしまう。
+
+- クラウド・アカウント名はそのまま**テナンシー名**になり、コンソールのサインイン識別子として使われる
+- **Always Free のテナンシーはリネームできない**（リネームには有料サブスクリプションが必要）
+- 前述のとおり無料アカウントは1人1つなので、プロダクトごとにアカウントを分けることもできない
+
+したがって `haruki-cloud` のような**個人名義の中立な名前**にする。
+サインイン識別子なのでグローバルで一意である必要があり、短い一般的な名前は既に使われていて弾かれることがある。
+
+### 1-3. プロダクトの分離はコンパートメントで行う
+
+テナンシー1つに複数プロダクトが同居する前提なので、分離はコンパートメントで行う。
+コンパートメントは後から作成・リネーム・リソースの移動ができ、Always Free 枠はテナンシー単位で計上されるため、
+どのコンパートメントに置いても無料のままである。
+
+```
+テナンシー: haruki-cloud            ← アカウント名（変更不可）
+├── コンパートメント: mytechpulse    ← 本プロジェクトのVM / VCN をここに作る
+├── コンパートメント: <別プロダクト>  ← 将来必要になったら足す
+└── コンパートメント: sandbox        ← 検証用
+```
+
+アカウント作成後、インスタンスを作る前に **Identity → Compartments** で `mytechpulse` コンパートメントを作成しておく。
+
+### 1-4. その他の注意点
+
+- クレジットカード登録を求められる。**検証用に少額の一時オーソリが立つことがある**（自動で解放される）
+- Always Free の範囲では課金されないが、**「アップグレード」を促す表示に応じない**（従量課金アカウントに変わる）
+- 最初の30日は US$300 のフリートライアルが付く。インスタンスを「Always Free eligible」な構成で作れば、トライアル終了後もそのまま残る
 - MFA を有効にする（このアカウントが本番の唯一の管理経路になる）
 
 ## 2. SSH 鍵の準備
@@ -65,11 +103,12 @@ GitHub Actions の自動デプロイ（Issue #54）では別途デプロイ用�
 
 コンソール → Compute → Instances → **Create instance**
 
+0. **Compartment**: 手順 1-3 で作った `mytechpulse` を選ぶ（既定の root コンパートメントのままにしない）
 1. **Image and shape** を変更する
    - Image: Canonical Ubuntu 24.04（**aarch64** と付いているものを選ぶ。付いていないものは amd64）
    - Shape: Ampere → `VM.Standard.A1.Flex` → OCPU `2` / メモリ `12` GB
    - 「Always Free eligible」の表示が出ることを確認する
-2. **Networking**: 新規 VCN を作成（パブリックサブネット、パブリック IP を割り当てる）
+2. **Networking**: 新規 VCN を作成（`mytechpulse` コンパートメント内に、パブリックサブネット・パブリック IP 割り当てで）
 3. **Add SSH keys**: 手順 2 で作った**公開鍵**（`.pub`）を貼り付ける
 4. **Boot volume**: 既定（Always Free のブートボリューム合計 200 GB 以内に収める）
 5. Create
@@ -172,6 +211,7 @@ ARM64 でのイメージビルド確認と全 API の疎通確認は Issue #52 �
 
 ## 7. 完了チェックリスト（Issue #50 のクローズ条件）
 
+- [ ] インスタンスと VCN が `mytechpulse` コンパートメント配下にある（root コンパートメントに作っていない）
 - [ ] SSH でログインでき、パスワード認証が拒否される（`ssh -o PreferredAuthentications=password ubuntu@<IP>` が失敗する）
 - [ ] 再ログイン後、`docker run --rm hello-world` が **sudo なしで**成功する
 - [ ] `docker compose version` が Compose v2 を返す
@@ -193,6 +233,8 @@ ARM64 でのイメージビルド確認と全 API の疎通確認は Issue #52 �
 ## 参考
 
 - [Always Free Resources — Oracle Docs](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)
+- [Renaming a Tenancy and Cloud Account — Oracle Docs](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/renamecloudaccount.htm)（*"Free Tier tenancies can't be renamed"*）
+- [FAQ on Oracle's Cloud Free Tier](https://www.oracle.com/cloud/free/faq/)（無料アカウントは1人1つまで）
 - [Enabling Network Traffic to Ubuntu Images in OCI — Oracle Blogs](https://blogs.oracle.com/developers/enabling-network-traffic-to-ubuntu-images-in-oracle-cloud-infrastructure)（iptables の REJECT ルール問題）
 - [Oracle Quietly Halves Free Tier Ampere A1 Compute Limits — InfoQ](https://www.infoq.com/news/2026/07/oracle-cloud-free-tier-limits/)（2026-06-15 の枠縮小）
 - [Install Docker Engine on Ubuntu — Docker Docs](https://docs.docker.com/engine/install/ubuntu/)

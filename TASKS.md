@@ -15,7 +15,7 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 ### #50 Oracle VMのプロビジョニングと初期セットアップ ← **いま最優先**
 - [x] VM初期セットアップスクリプト `ops/oracle-vm-setup.sh` 作成（Docker導入 / iptablesのREJECT問題対処 / SSH硬化 / fail2ban / TZ）
 - [x] プロビジョニング手順書 `docs/deploy/oracle-vm-provisioning.md` 作成（リージョン選定・容量エラー時のリトライ手順）
-- [ ] **オーナー作業**: Oracleアカウント作成（ホームリージョン=`ap-tokyo-1`狙い。後から変更不可）
+- [ ] **オーナー作業**: Oracleアカウント作成。ホームリージョン=`ap-tokyo-1`狙い、アカウント名は`haruki-cloud`等の中立な名前（**どちらも後から変更不可**。プロダクトの分離はコンパートメントで行う）
 - [ ] **オーナー作業**: A1インスタンス作成（「Out of Host Capacity」対策は手順書4節を参照）
 - [ ] **オーナー作業**: Security List / NSG で ingress 22 / 80 / 443 開放
 - [ ] **オーナー作業**: `sudo ./ops/oracle-vm-setup.sh` 実行 → 手順書7節の完了チェックリストを満たす
