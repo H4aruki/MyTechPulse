@@ -1,0 +1,198 @@
+# Oracle Cloud Always Free VM プロビジョニング手順
+
+MyTechPulse のバックエンド（FastAPI + MySQL）を動かす Oracle Cloud Always Free VM を用意する手順。
+Issue #50 に対応する。フロントエンドは Cloudflare Pages に分離する構成なので、この VM は API と DB のみを持つ。
+
+> このファイルは Oracle VM のプロビジョニングに限定した部品。
+> デプロイ全体の手順書（`DEPLOYMENT.md`）は Issue #55 で作成し、そこからこのファイルを参照する。
+
+**Oracle 側の仕様確認日: 2026-07-30**（Oracle は無料枠を無告知で変更した実績があるため、作業時に必ず現在値を確認する）
+
+---
+
+## 0. 前提と全体像
+
+| 項目 | 値 |
+|---|---|
+| シェイプ | `VM.Standard.A1.Flex`（Ampere A1 / ARM） |
+| Always Free 枠 | **2 OCPU / 12 GB RAM**（月 1,500 OCPU時間 + 9,000 GB時間） |
+| OS イメージ | Canonical Ubuntu 24.04（**aarch64** 版） |
+| 開放ポート | 22（SSH）/ 80（HTTP）/ 443（HTTPS） |
+
+Always Free の Ampere A1 枠は 2026-06-15 に 4 OCPU / 24 GB から **半分に縮小**された（Oracle からの告知は無く、ドキュメントが差し替わっただけ）。
+枠の縮小・廃止リスクは許容した上で採用しており、限界に達した場合は さくら VPS 等へ移行する（判断基準と移行手順は Issue #55 の `DEPLOYMENT.md` に記載する）。
+
+作業の流れ:
+
+```
+アカウント作成（リージョン確定） → インスタンス作成（容量エラーと戦う）
+  → Security List で 22/80/443 開放 → SSH → ops/oracle-vm-setup.sh 実行 → 疎通確認
+```
+
+---
+
+## 1. アカウント作成とリージョン選定
+
+**先に決めること: ホームリージョン。**
+Always Free のコンピュート・インスタンスは**ホームリージョンにしか作成できず**、ホームリージョンはアカウント作成時に決まって後から変更できない。
+つまりここでの選択をやり直すにはアカウントを作り直すことになるので、先に決める。
+
+| リージョン | 利点 | 欠点 |
+|---|---|---|
+| `ap-tokyo-1` / `ap-osaka-1` | 日本のユーザーからのレイテンシが小さい | Ampere A1 の空き容量が枯渇しがちで「Out of Host Capacity」に遭いやすい |
+| 米国・欧州リージョン | A1 の空きを見つけやすい | 日本からの往復レイテンシが乗る（API 応答が体感で遅くなる） |
+
+**MyTechPulse の方針: まず `ap-tokyo-1` を狙う。** 記事一覧の取得が体感速度に直結するアプリなので、レイテンシを優先する。
+どうしても容量が確保できない場合に限り、次節のリトライ手段を尽くしてから他リージョンでのアカウント作り直しを検討する。
+
+アカウント作成時に注意する点:
+
+- クレジットカード登録を求められるが、Always Free の範囲では課金されない。**「アップグレード」を促す表示に応じない**（従量課金アカウントに変わる）
+- MFA を有効にする（このアカウントが本番の唯一の管理経路になる）
+
+## 2. SSH 鍵の準備
+
+インスタンス作成時に公開鍵を登録する。ローカル PC 側で作っておく。
+
+```bash
+ssh-keygen -t ed25519 -C "mytechpulse-oracle" -f ~/.ssh/mytechpulse_oracle
+```
+
+秘密鍵（`~/.ssh/mytechpulse_oracle`）は**リポジトリに絶対に入れない**。
+GitHub Actions の自動デプロイ（Issue #54）では別途デプロイ用の鍵を作り、Secrets に登録する。
+
+## 3. インスタンス作成
+
+コンソール → Compute → Instances → **Create instance**
+
+1. **Image and shape** を変更する
+   - Image: Canonical Ubuntu 24.04（**aarch64** と付いているものを選ぶ。付いていないものは amd64）
+   - Shape: Ampere → `VM.Standard.A1.Flex` → OCPU `2` / メモリ `12` GB
+   - 「Always Free eligible」の表示が出ることを確認する
+2. **Networking**: 新規 VCN を作成（パブリックサブネット、パブリック IP を割り当てる）
+3. **Add SSH keys**: 手順 2 で作った**公開鍵**（`.pub`）を貼り付ける
+4. **Boot volume**: 既定（Always Free のブートボリューム合計 200 GB 以内に収める）
+5. Create
+
+### 「Out of Host Capacity」への対処
+
+A1 は人気シェイプなので、作成が何度も失敗するのが普通。エラーは
+`Out of host capacity` または `Out of capacity for shape VM.Standard.A1.Flex`。
+これは自分の枠の問題ではなく、そのリージョン/可用性ドメインに物理的な空きが無いという意味。
+
+効く順に試す:
+
+1. **可用性ドメイン（AD）を変える** — 複数 AD があるリージョンなら AD-1 → AD-2 → AD-3 と順に試す
+2. **要求サイズを小さくする** — 1 OCPU / 6 GB なら通ることがある。**後からスケールアップできる**（インスタンス作成後に Edit → Shape で 2 OCPU / 12 GB に変更）ので、まず小さく確保するのが定石
+3. **時間を変えて再試行する** — 空きは解放待ち。数時間〜数日単位で状況が変わる
+4. **リトライを自動化する** — 手で押し続けるのは非効率なので OCI CLI で回す
+
+```bash
+# ローカル or 別マシンで。事前に oci setup config で認証設定を済ませておく
+# --from-json に一度作成に失敗したリクエストのJSONを渡す形が楽（コンソールの
+# Create instance 画面の「Save as stack / Show JSON」相当から取得できる）
+while ! oci compute instance launch --from-json file://launch-instance.json; do
+    echo "$(date +%H:%M:%S) capacity不足。5分後に再試行"
+    sleep 300
+done
+```
+
+粘る前提の作業なので、**この工程は他の作業と並行して回しておく**のがよい。
+
+## 4. Security List / NSG で ingress を開放
+
+VCN → Subnet → Security List（または Network Security Group）の **Ingress Rules** に追加する。
+
+| Source CIDR | プロトコル | 宛先ポート | 用途 |
+|---|---|---|---|
+| `0.0.0.0/0` | TCP | 22 | SSH（既定で開いていることが多い） |
+| `0.0.0.0/0` | TCP | 80 | HTTP（Let's Encrypt の HTTP-01 チャレンジに必須） |
+| `0.0.0.0/0` | TCP | 443 | HTTPS（API 本番） |
+
+> **重要**: ここを開けるだけでは 80/443 は通らない。
+> Oracle 提供の Ubuntu イメージは OS 側の `iptables` に「以降を全て REJECT する」ルールを持っており、
+> Security List を通過したパケットがホストで落とされる。OS 側の対処は次の手順のスクリプトが行う。
+
+## 5. VM の初期セットアップ
+
+SSH でログインする（Ubuntu イメージの既定ユーザーは `ubuntu`）。
+
+```bash
+ssh -i ~/.ssh/mytechpulse_oracle ubuntu@<VMのパブリックIP>
+```
+
+リポジトリを取得してセットアップスクリプトを実行する。
+
+```bash
+git clone https://github.com/H4aruki/MyTechPulse.git
+cd MyTechPulse
+sudo ./ops/oracle-vm-setup.sh
+```
+
+スクリプトがやること（冪等。失敗したら直して再実行してよい）:
+
+1. Docker Engine + Compose plugin の導入（arm64 対応のリポジトリ設定込み）と `ubuntu` ユーザーの docker グループ追加
+2. **`iptables` の REJECT ルールより手前に 80/443 の ACCEPT を挿入**し `netfilter-persistent save` で永続化
+3. SSH 硬化（パスワード認証・root ログインを無効化）
+4. fail2ban の sshd jail 有効化（Ubuntu 24.04 は journald 前提なので `backend = systemd` を明示）
+5. タイムゾーンを `Asia/Tokyo` に設定（`ops/backup_db.sh` の日次 cron を意図した時刻で回すため）
+
+実行後、docker グループの反映のために**一度 SSH を切って再ログインする**。
+
+## 6. アプリの起動（#52 の入口）
+
+```bash
+cp backend/.env.example backend/.env
+# SECRET_KEY は本番用に新規生成する（開発用の値を使い回さない）
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+`backend/.env` に設定する値:
+
+- `SECRET_KEY` — 上で生成した値
+- `QIITA_ACCESS_TOKEN` — Qiita のアクセストークン
+- `DATABASE_URL` — そのままでよい（`docker-compose.yml` が `host=db` に上書きする）
+- `CORS_ALLOWED_ORIGINS` — Cloudflare Pages の URL が決まってから設定する（#53）
+
+リポジトリルートの `.env` に MySQL の root パスワードを設定する（既定の `rootpass` を本番で使わない）:
+
+```bash
+printf 'MYSQL_ROOT_PASSWORD=%s\n' "$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" > .env
+chmod 600 .env
+```
+
+起動する（テーブル作成は `backend/entrypoint.sh` の `init_db.py` が自動実行する）:
+
+```bash
+docker compose up -d --build
+docker compose logs -f api   # 起動ログを確認
+```
+
+ARM64 でのイメージビルド確認と全 API の疎通確認は Issue #52 で行う。
+
+## 7. 完了チェックリスト（Issue #50 のクローズ条件）
+
+- [ ] SSH でログインでき、パスワード認証が拒否される（`ssh -o PreferredAuthentications=password ubuntu@<IP>` が失敗する）
+- [ ] 再ログイン後、`docker run --rm hello-world` が **sudo なしで**成功する
+- [ ] `docker compose version` が Compose v2 を返す
+- [ ] ローカル PC から `nc -vz <IP> 22` / `80` / `443` が到達する
+      （80/443 はまだ待受プロセスが無いので `Connection refused`。これは**到達している**証拠。
+      Security List か iptables が閉じている場合はタイムアウトになる — この違いで切り分ける）
+- [ ] `sudo reboot` 後も iptables ルールが残り（`sudo iptables -L INPUT -n`）、Docker が自動起動する
+- [ ] `sudo fail2ban-client status sshd` が jail の稼働を返す
+- [ ] `timedatectl` が JST を返す
+
+## 次のステップ
+
+- **#51**: ドメイン取得（**課金を伴うためオーナー判断**）と Caddy による HTTPS 化
+- **#52**: `docker-compose.yml` の本番起動と ARM64 動作確認
+- **#53**: Cloudflare Pages へのフロントエンドデプロイ
+- **#54**: GitHub Actions による自動デプロイ
+- **#55**: `DEPLOYMENT.md` への統合と VPS 移行ランブック
+
+## 参考
+
+- [Always Free Resources — Oracle Docs](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)
+- [Enabling Network Traffic to Ubuntu Images in OCI — Oracle Blogs](https://blogs.oracle.com/developers/enabling-network-traffic-to-ubuntu-images-in-oracle-cloud-infrastructure)（iptables の REJECT ルール問題）
+- [Oracle Quietly Halves Free Tier Ampere A1 Compute Limits — InfoQ](https://www.infoq.com/news/2026/07/oracle-cloud-free-tier-limits/)（2026-06-15 の枠縮小）
+- [Install Docker Engine on Ubuntu — Docker Docs](https://docs.docker.com/engine/install/ubuntu/)
