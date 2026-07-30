@@ -16,6 +16,8 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - [x] VM初期セットアップスクリプト `ops/oracle-vm-setup.sh` 作成（Docker導入 / iptablesのREJECT問題対処 / SSH硬化 / fail2ban / TZ）
 - [x] プロビジョニング手順書 `docs/deploy/oracle-vm-provisioning.md` 作成（リージョン選定・容量エラー時のリトライ手順）
 - [ ] **オーナー作業**: Oracleアカウント作成。ホームリージョン=`ap-tokyo-1`狙い、アカウント名は`haruki-cloud`等の中立な名前（**どちらも後から変更不可**。プロダクトの分離はコンパートメントで行う）
+  - ⚠️ **2026-07-30時点ブロック中**: サインアップが原因非開示の汎用エラーで完了できない。切り分けと問い合わせ導線は手順書1-5節を参照。Free TierはSR不可のためCloud Support Chatが唯一の窓口
+  - 長期化する場合は**フェーズAを飛ばして国内VPS（#55のフェーズB）へ切り替える**判断がある（課金判断。x86なら#52のARM64確認が不要になる）
 - [ ] **オーナー作業**: A1インスタンス作成（「Out of Host Capacity」対策は手順書4節を参照）
 - [ ] **オーナー作業**: Security List / NSG で ingress 22 / 80 / 443 開放
 - [ ] **オーナー作業**: `sudo ./ops/oracle-vm-setup.sh` 実行 → 手順書7節の完了チェックリストを満たす
