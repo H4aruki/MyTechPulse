@@ -21,7 +21,8 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 ### #50相当 Lightsailのプロビジョニングと初期セットアップ ← **いま最優先**
 - [x] VM初期セットアップスクリプト `ops/oracle-vm-setup.sh` 作成（Docker導入 / SSH硬化 / fail2ban / TZ）。**Lightsailでもそのまま動作する**（arm64チェックは警告のみ、iptables部分はREJECTルールが無ければ末尾追加にフォールバック）
 - [x] プロビジョニング手順書 `docs/deploy/lightsail-provisioning.md` 作成（有料プラン切替・静的IP・スワップ2GB）
-- [ ] **オーナー作業（課金・登録）**: AWSアカウント作成 → **有料プランへ切り替え**（無料プランのままだと6ヶ月で閉鎖され本番が消える）
+- [x] **オーナー作業（登録）**: AWSアカウント作成（2026-08-13完了。MFA / 請求アラート / リージョン東京 / カード登録まで済）
+- [ ] **オーナー作業（課金）**: **有料プランへ切り替え**（無料プランのままだと6ヶ月で閉鎖され本番が消える）。**カード登録とは別の操作**なので請求コンソールの「アカウントプラン」でPaidになっているか要確認
 - [ ] **オーナー作業**: Lightsailインスタンス作成（東京 `ap-northeast-1a` / Ubuntu 24.04 / $7プラン）＋**静的IPの割り当て**（既定IPは再起動で変わる）
 - [ ] **オーナー作業**: IPv4 Firewall で 22 / 80 / 443 開放
 - [ ] **オーナー作業**: **スワップ2GB作成**（手順書5節。1GBプランは余裕が薄く、これが無いとバッチやビルドで落ちる）
@@ -39,7 +40,8 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - [ ] **ARM64動作確認は不要になった**（Lightsail $7プランはx86_64）
 
 ### #53 Cloudflare Pagesへのフロントエンドデプロイ（独立して着手可）
-- [ ] Pagesプロジェクト作成（root=`frontend/`、build=`npm run build`、output=`dist`）
+- [x] Pagesプロジェクト作成（2026-08-13。root=`frontend/`、build=`npm run build`、output=`dist`、フレームワークプリセット=なし、非本番ブランチのビルド=オフ）。**Workersの作成フロー（`npx wrangler deploy`）ではなくPagesを選ぶこと** — 静的成果物を配るだけで`frontend/public/_redirects`をそのまま解釈できる
+- [ ] 初回デプロイの成功確認と公開URLの記録（未確認）
 - [ ] `VITE_API_BASE_URL`に本番APIのURLを設定（#51でドメイン確定後）＋`_redirects`によるSPA直リンク確認
 - [ ] 確定したPagesのURLを`CORS_ALLOWED_ORIGINS`に追加（#51とセット）
 
