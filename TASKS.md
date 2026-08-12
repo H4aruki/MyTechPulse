@@ -4,28 +4,39 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 
 優先度は3分類: **A=デプロイのブロッカー**（本番公開前に必須）/ **B=ユーザー獲得のブロッカー**（一般公開・宣伝開始前に必須）/ **C=後回し可**（機能追加・コード品質）。
 
-最終更新: 2026-07-30
+最終更新: 2026-08-13
 
 ## A. デプロイのブロッカー
 
-構成は**#34で決着済み**: バックエンド（FastAPI + MySQL）を Oracle Cloud Always Free VM（Ampere A1 / ARM）で docker compose 運用、フロントエンド（静的LP + React SPA）を Cloudflare Pages。Render / Cloud Run / TiDB は検討の上で却下。
+構成は**#65 / #67で決着済み**: **フロントエンド（静的LP + React SPA）を Cloudflare Pages、バックエンド + DB を AWS Lightsail 1GB（東京 / $7）に同居**させる2分割構成。合計 月約$8。
+
+- **DBを3つ目に分けない理由**（#65）: テーブル3つ・低頻度書き込みに対しマネージドDBは要件過剰かつ月$8〜25で予算超過。1回の画面表示でDBに複数回問い合わせるため、外部に出すと往復遅延が積み上がる
+- **却下した候補**（#67）: Vercel（無料プランが非商用限定）/ GitHub Pages（URL書き換え不可）/ Netlify（転送量上限）/ Xserver VPS（年契約で変更しづらい）/ EC2（通信費が従量）/ GCP無料VM（米国のみ）/ Oracle無料VM（アカウント作成不可）
+- **次点**: さくらのVPS（Lightsailが駄目だった場合の最有力）
 
 **#50 → #51 → #52 → #54 → #55 が一本の依存チェーン**になっており、根っこの#50が終わるまで他は着手できない。#53のみ独立して進められるが、`VITE_API_BASE_URL`の確定は#51待ち。
 
-### #50 Oracle VMのプロビジョニングと初期セットアップ ← **いま最優先**
-- [x] VM初期セットアップスクリプト `ops/oracle-vm-setup.sh` 作成（Docker導入 / iptablesのREJECT問題対処 / SSH硬化 / fail2ban / TZ）
-- [x] プロビジョニング手順書 `docs/deploy/oracle-vm-provisioning.md` 作成（リージョン選定・容量エラー時のリトライ手順）
-- [ ] **オーナー作業**: Oracleアカウント作成（ホームリージョン=`ap-tokyo-1`狙い。後から変更不可）
-- [ ] **オーナー作業**: A1インスタンス作成（「Out of Host Capacity」対策は手順書4節を参照）
-- [ ] **オーナー作業**: Security List / NSG で ingress 22 / 80 / 443 開放
-- [ ] **オーナー作業**: `sudo ./ops/oracle-vm-setup.sh` 実行 → 手順書7節の完了チェックリストを満たす
+> **Issue #50〜#55 のタイトルはOracle前提のまま残っている。** 内容はLightsailに読み替える（タイトル修正の要否はオーナー判断）。
+
+### #50相当 Lightsailのプロビジョニングと初期セットアップ ← **いま最優先**
+- [x] VM初期セットアップスクリプト `ops/oracle-vm-setup.sh` 作成（Docker導入 / SSH硬化 / fail2ban / TZ）。**Lightsailでもそのまま動作する**（arm64チェックは警告のみ、iptables部分はREJECTルールが無ければ末尾追加にフォールバック）
+- [x] プロビジョニング手順書 `docs/deploy/lightsail-provisioning.md` 作成（有料プラン切替・静的IP・スワップ2GB）
+- [ ] **オーナー作業（課金・登録）**: AWSアカウント作成 → **有料プランへ切り替え**（無料プランのままだと6ヶ月で閉鎖され本番が消える）
+- [ ] **オーナー作業**: Lightsailインスタンス作成（東京 `ap-northeast-1a` / Ubuntu 24.04 / $7プラン）＋**静的IPの割り当て**（既定IPは再起動で変わる）
+- [ ] **オーナー作業**: IPv4 Firewall で 22 / 80 / 443 開放
+- [ ] **オーナー作業**: **スワップ2GB作成**（手順書5節。1GBプランは余裕が薄く、これが無いとバッチやビルドで落ちる）
+- [ ] **オーナー作業**: `sudo ./ops/oracle-vm-setup.sh` 実行 → 手順書8節の完了チェックリストを満たす
+- [ ] セットアップスクリプトをLightsail向けに整理（`ops/lightsail-vm-setup.sh`へリネーム / スワップ作成の内包 / arm64前提の警告文とiptables節の削除）
 
 ### #51 ドメイン取得とCaddyによるHTTPS化（#50依存）
-- [ ] **オーナー判断（課金）**: ドメイン取得・DNS Aレコード設定
+- [ ] **オーナー判断（課金）**: ドメイン取得（Cloudflare Registrarが原価販売）・DNS Aレコードを静的IPへ設定
 - [ ] `Caddyfile`新規作成（`api.<domain>` → `api:8000`。Let's Encryptは自動更新）＋`docker-compose.yml`に`caddy`サービス追加
+- [ ] APIのドメインもCloudflare経由（プロキシON）にしてサーバーの実IPを隠す
 
-### #52 docker-compose本番起動とARM64動作確認（#50依存）
-- [ ] `mysql:8.4` / `python:3.12-slim`（arm64）のビルド・起動確認、`init_db.py`完了確認、auth/news/click全エンドポイントの疎通
+### #52 docker-compose本番起動と疎通確認（#50依存）
+- [ ] `postgres:17-alpine` / `python:3.12-slim` のビルド・起動確認、`init_db.py`完了確認、auth/news/click全エンドポイントの疎通
+- [ ] `free -h` / `docker stats` でメモリ実測。**スワップを常時数百MB使っていたら$12の2GBプランへ移行を検討**
+- [ ] **ARM64動作確認は不要になった**（Lightsail $7プランはx86_64）
 
 ### #53 Cloudflare Pagesへのフロントエンドデプロイ（独立して着手可）
 - [ ] Pagesプロジェクト作成（root=`frontend/`、build=`npm run build`、output=`dist`）
@@ -34,15 +45,17 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 
 ### #54 GitHub Actionsによる自動デプロイ（#50 / #52依存）
 - [ ] **オーナー作業**: デプロイ用SSH鍵生成・Secrets登録
-- [ ] mainマージ→Oracle VMへSSHデプロイするワークフロー追加
+- [ ] mainマージ→LightsailへSSHデプロイするワークフロー追加
 
 ### #55 DEPLOYMENT.md整備（他Issue完了ごとに追記）
-- [ ] `docs/deploy/oracle-vm-provisioning.md`を統合＋無料枠限界の判断基準＋さくらVPS移行ランブック＋READMEからのリンク
+- [ ] `docs/deploy/lightsail-provisioning.md`を統合＋スケールアップ/移行の判断基準＋さくらVPS移行ランブック＋READMEからのリンク
+- [ ] 失効した`docs/deploy/oracle-vm-provisioning.md`を残すか削除するか判断（**削除はオーナー確認事項**）
 
 ### 本番運用開始後すぐ
 - [ ] 本番用`backend/.env`作成。**SECRET_KEYは本番用に新規生成し開発用と使い回さない**（S12対応）
-- [ ] ルート`.env`の`MYSQL_ROOT_PASSWORD`を既定値`rootpass`から変更
-- [ ] `ops/backup_db.sh`のcrontab日次登録（可能ならrclone等で外部ストレージ退避も）
+- [ ] ルート`.env`のDBパスワードを既定値から変更（#63完了後は`POSTGRES_PASSWORD`、未了なら`MYSQL_ROOT_PASSWORD`）
+- [ ] `ops/backup_db.sh`のcrontab日次登録
+- [ ] **バックアップの外部退避**: 現在は同一ホストの`backups/`に保存しており、インスタンス全損で失われる。Cloudflare R2（10GB無料枠）等へ逃がす
 
 ## B. ユーザー獲得のブロッカー（一般公開・宣伝開始前に必須）
 
@@ -55,6 +68,8 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 ## C. 後回し可（機能追加・コード品質）
 
 ### オープンなGitHub Issue
+- [ ] **#66**: 記事取得を「画面を開くたび」から日次の一括取得＋DB保存へ変更。**タグ100個を1日1回舐めても約200リクエスト/日で済み、この回数はユーザー数に依存しなくなる**（現状は利用者数×リロード数で増えQiitaの上限1000req/hに達する）。外部APIダウン時も記事を出せるようになる副次効果あり。要検討: 古い記事の保持期間、実行時刻と1日の回数
+- [ ] **#63**: MySQL 8.4 → PostgreSQL 17 移行（**A章のデプロイと並行して先行着手可**。`feat/db-postgres-migration`ブランチは未着手）
 - [ ] **#33**: 外部API（Qiita/Zenn/将来のX等）の部分的失敗が記事の多様性を静かに損なう問題（情報欠落の可視化・リトライ戦略）
 - [ ] **#22**: Qiita記事が複数タグにマッチしてもタグがマージされずスコアが過小評価される
 - [ ] **#14**: APIレスポンスをHTTPステータスコード方式へ全面移行（設計方針は Obsidian `notes/2026-07-09_...` に整理済み）
@@ -84,7 +99,7 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 
 ### フェーズ判断
 - [ ] Gitブランチルール運用の定着（実践フェーズ）
-- [ ] フェーズ1（DB記事キャッシュ・CI/CD整備）への移行判断（CI/CDは今回のAで一部前進）
+- [ ] フェーズ1（DB記事キャッシュ・CI/CD整備）への移行判断。**DB記事キャッシュは#66として起票済み**、CI/CDは#54でAに含まれる
 
 ## 直近完了（記録）
 
@@ -96,3 +111,4 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - **旧A章の実装タスク4件がmainマージ済み**: #35→PR#36（CORS環境変数化・`allow_credentials`削除）/ #37→PR#38（API_BASE_URL自動切替）/ #39→PR#40（QiitaタグURLエンコード）/ #41→PR#42（`ops/backup_db.sh`追加）
 - **フロントエンドのVite + React + TypeScript化（PR#49）: mainマージ済み**（旧`html/`・`js/`は削除済み）
 - **#34 技術スタック選定に決着**（2026-07-28）: Oracle Free VM + Cloudflare Pages + Caddy + GitHub Actions。子Issue #50〜#55 を起票
+- **デプロイ先の再選定に決着**（2026-08-13、#64 → #65 / #66 / #67）: Oracleはアカウント作成不可で断念、#59のGCP e2-micro + SQLite案も前提失効。**2分割（Cloudflare Pages + AWS Lightsail 1GB東京）に確定**し、DBはPostgreSQLでバックエンドに同居。記事の一括取得は#66へ切り出し
