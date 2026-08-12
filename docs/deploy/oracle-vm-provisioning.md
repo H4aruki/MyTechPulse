@@ -1,5 +1,17 @@
 # Oracle Cloud Always Free VM プロビジョニング手順
 
+> ## ⚠️ この手順は失効している（2026-08-13）
+>
+> **Oracle Cloud はアカウントを作成できず断念した**（サインアップがトランザクションエラーで通らず、
+> サポートからも解決不可の回答）。デプロイ先は **AWS Lightsail 1GB（東京）** に確定している。
+>
+> **現行の手順書は [`lightsail-provisioning.md`](./lightsail-provisioning.md) を参照すること。**
+>
+> このファイルは、Oracle 固有の落とし穴（Ampere A1 の容量枯渇、Ubuntu イメージの iptables 全 REJECT 問題）を
+> 調べ直さずに済むよう履歴として残している。**手順として実行しない。**
+>
+> 決定の経緯は Issue #65（2分割の判断）/ #67（デプロイ先の確定）にある。
+
 MyTechPulse のバックエンド（FastAPI + MySQL）を動かす Oracle Cloud Always Free VM を用意する手順。
 Issue #50 に対応する。フロントエンドは Cloudflare Pages に分離する構成なので、この VM は API と DB のみを持つ。
 
