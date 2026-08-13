@@ -1,9 +1,10 @@
 from sqlalchemy import create_engine
 from sqlalchemy.exc import OperationalError
 
-# データベース接続情報
-# フォーマット: "mysql+mysqlconnector://<user>:<password>@<host>:<port>/<database>"
-db_url = "mysql+mysqlconnector://root@localhost:3306/mydatabase"
+# データベース接続情報（pytestではなく手動実行の接続確認スクリプト）
+# フォーマット: "postgresql+psycopg://<user>:<password>@<host>:<port>/<database>"
+# 事前に `docker compose up -d db` でDBを起動しておくこと
+db_url = "postgresql+psycopg://postgres:postgres@localhost:5432/mytechpulse"
 
 try:
     # データベースエンジンを作成

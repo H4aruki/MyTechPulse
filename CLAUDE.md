@@ -7,17 +7,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 MyTechPulse — Qiita/Zennからユーザーの興味タグに基づいて記事を収集・スコアリングして届けるパーソナライズ技術ニュースアプリ。
 
 - **フロントエンド**: Vite + React + TypeScript。`frontend/`。LP（`frontend/index.html`）はReactを読み込まない静的HTML、ログイン後は `/app/` 配下のSPA
-- **バックエンド**: FastAPI + SQLAlchemy + MySQL（XAMPP経由）。`backend/app/`
+- **バックエンド**: FastAPI + SQLAlchemy + PostgreSQL 17（Dockerコンテナ）。`backend/app/`
 
 ## 開発コマンド
 
-前提: XAMPPでMySQLを起動しておく。`.env` は `app/config.py` が絶対パス（`backend/.env`）で読むため、リポジトリルート/`backend/` どちらから起動しても設定読み込みは失敗しない。ただし以下のコマンド例は `backend/` から実行する想定。
+前提: `docker compose up -d db` でPostgreSQLコンテナを起動しておく（XAMPPは使わない）。DB `mytechpulse` はコンテナ初回起動時に `POSTGRES_DB` が作るため、`init_db.py` はテーブル作成のみを行う。`.env` は `app/config.py` が絶対パス（`backend/.env`）で読むため、リポジトリルート/`backend/` どちらから起動しても設定読み込みは失敗しない。ただし以下のコマンド例は `backend/` から実行する想定。
 
 ```bash
 cd backend
-python init_db.py                  # DB "mytechpulse" とテーブルを作成（初回のみ）
+python init_db.py                  # モデル定義からテーブルを作成（冪等）
 uvicorn app.main:app --reload      # APIサーバー起動（http://127.0.0.1:8000）
 ```
+
+API込みで丸ごと動かす場合は `docker compose up -d --build`（`backend/entrypoint.sh` が `init_db.py` を実行してから uvicorn を起動する）。
 
 フロントエンドは `cd frontend && npm install && npm run dev` で起動する（http://localhost:5173）。CORS許可オリジンは `app/main.py` に列挙されている。APIのURLは `frontend/.env` の `VITE_API_BASE_URL` で切り替える（`.env.example` 参照）。フロント側の詳細は `frontend/README.md` にある。
 
