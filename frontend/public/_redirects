@@ -2,4 +2,9 @@
 # Netlify / Cloudflare Pages がこの形式を解釈する。
 # Vercel など他のホスティングを使う場合は、同等の rewrite を各設定ファイルで定義すること。
 # LP（/）は静的HTMLのままなので対象に含めない。
-/app/*  /app/index.html  200
+#
+# 書き換え先を `/app/index.html` にしてはいけない。Cloudflare Pages は書き換え先から
+# `.html` と `/index` を剥がして正規化するため `/app/` になり、それが再び `/app/*` に
+# 一致してループと判定され、ルールごと無視される（Parsed 0 valid redirect rules になる）。
+# 検証: `npx wrangler pages dev dist` で "Infinite loop detected in this rule" を再現できる。
+/app/*  /app  200

@@ -9,9 +9,11 @@ SEOが効く範囲と効かない範囲を分けたハイブリッド構成に�
 | パス | 実体 | 方式 |
 | --- | --- | --- |
 | `/` | `index.html` | 静的HTML（実質SSG）。Reactを読み込まないJSゼロのページ。検索インデックスとOGPのために事前生成された状態を保つ |
-| `/app/*` | `app/index.html` + `src/` | React SPA。認証必須のためインデックス対象外（`noindex`） |
+| `/app`・`/app/*` | `app.html` + `src/` | React SPA。認証必須のためインデックス対象外（`noindex`） |
 
 ログイン後の画面はユーザーごとにパーソナライズされインデックス不可なので、SSRサーバーは持たない。バックエンド（FastAPI）と合わせて「静的フロント + API」の2ピース構成。
+
+SPAのエントリを `app/index.html` ではなく `app.html` に置いているのは Cloudflare Pages の制約による。Pages は `_redirects` の書き換え先から `.html` と `/index` を剥がして正規化するため、`/app/*  /app/index.html  200` は書き換え先が自分のパターンに再度一致するループと判定され、ルールごと無視される。`npx wrangler pages dev dist` を実行すると `Infinite loop detected in this rule and has been ignored` として再現できる。
 
 ## 開発
 
