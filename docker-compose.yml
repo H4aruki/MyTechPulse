@@ -1,6 +1,8 @@
 services:
   db:
     image: postgres:17-alpine
+    # サーバー再起動後に自動で復帰させる（本番はこれが無いと落ちたまま気付けない）
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -22,16 +24,44 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    restart: unless-stopped
     env_file:
       - ./backend/.env
     environment:
       # DATABASE_URL は host を db に上書き（backend/.env の localhost 版より優先される）
       DATABASE_URL: "postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/mytechpulse"
+    # 外部への公開は caddy が443で受けて中継する。ここはローカルからの疎通確認用に
+    # ループバックだけへ公開する（0.0.0.0だとTLS無しのAPIが直接晒される）
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       db:
         condition: service_healthy
+
+  # ---- HTTPS終端（本番のみ）。ローカル開発では起動しない ----
+  # 起動: docker compose --profile prod up -d
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["prod"]
+    restart: unless-stopped
+    environment:
+      # ルートの .env で指定する（例: API_DOMAIN=api.mytechpulse.net）。
+      # 未設定だと caddy は起動時に落ちる。ここで `:?` による必須チェックを使わないのは、
+      # composeの変数展開がプロファイル外のサービスにも走り、ローカルの
+      # `docker compose up -d db` まで巻き添えで失敗するため
+      API_DOMAIN: ${API_DOMAIN:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      # HTTP/3。UDPを開けないと対応ブラウザで無駄な待ちが入ることがある
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 取得済み証明書の保存先。消すと再取得になりレート制限に近づくので消さない
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
 
   # ---- 任意（案B）: 静的フロント配信。`docker compose --profile frontend up` で有効化 ----
   # 事前に `cd frontend && npm install && npm run build` で dist/ を生成しておくこと。
@@ -51,3 +81,5 @@ services:
 
 volumes:
   db_data:
+  caddy_data:
+  caddy_config:
