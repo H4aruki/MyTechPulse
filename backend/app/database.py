@@ -1,5 +1,5 @@
 # app/database.py
-#FastAPIアプリケーションとMySQLデータベースを接続するための設定ファイル
+#FastAPIアプリケーションとPostgreSQLデータベースを接続するための設定ファイル
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

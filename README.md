@@ -16,7 +16,7 @@ MyTechPulseは、「色んなサイトがあって全部追いかけられない
 - **効率的なキャッチアップ**: 隙間時間で、今知るべきトレンドを効率よく把握。
 
 ## 技術スタック
-![](https://skillicons.dev/icons?i=react,ts,vite,tailwind,python,mysql,fastapi,notion)
+![](https://skillicons.dev/icons?i=react,ts,vite,tailwind,python,postgres,fastapi,notion)
 
 ## SETUP
 ### 方法A: Docker（推奨）
@@ -39,13 +39,15 @@ MyTechPulseは、「色んなサイトがあって全部追いかけられない
    ```
    `http://localhost:5173` でフロントエンドが起動します。
 
-### 方法B: ローカル環境（XAMPP）
+### 方法B: APIをローカルで直接動かす（DBのみDocker）
+コードを書き換えながら `--reload` で開発したい場合はこちら。DBだけコンテナで動かします。
+
 #### 1. 事前準備
 以下のツールがインストールされ、起動していることを確認して下さい。
 
 ・Python3.10以上
 
-・XAMPP（コントロールパネルからMYSQLを「Start」しておいてください。）
+・Docker（DBコンテナの起動に使います。XAMPPは不要です）
 
 #### 2. 環境構築
 1. [最新のZIPファイルをダウンロード](https://github.com/H4aruki/MyTechPulse/archive/refs/heads/main.zip) し、任意のフォルダに展開（解凍）してください。
@@ -59,11 +61,13 @@ MyTechPulseは、「色んなサイトがあって全部追いかけられない
    cp backend/.env.example backend/.env
    ```
    `backend/.env` を開き、`QIITA_ACCESS_TOKEN`（[Qiitaの設定画面](https://qiita.com/settings/applications)で発行）を設定してください。
-4. データベースの構築
+4. データベースの起動とテーブル作成
    ```bash
+   docker compose up -d db
    cd backend
    python init_db.py
    ```
+   データベース `mytechpulse` はコンテナの初回起動時に自動で作られます。`init_db.py` はテーブルの作成のみを行います。
 #### 3. システムの起動
 APIを起動します。
    ```bash

@@ -1,14 +1,19 @@
 services:
   db:
-    image: mysql:8.4
+    image: postgres:17-alpine
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
-      MYSQL_DATABASE: mytechpulse
-    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      # このDBはコンテナ初回起動時に自動作成される（init_db.py はテーブル作成のみを担当）
+      POSTGRES_DB: mytechpulse
+    # ローカルでuvicornを直接動かす開発方法のために公開する。
+    # 外部へ晒さないよう必ずループバックに束縛する（0.0.0.0にするとVPSでDBが世界に開く）
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
-      - db_data:/var/lib/mysql
+      - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-rootpass}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mytechpulse"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -21,7 +26,7 @@ services:
       - ./backend/.env
     environment:
       # DATABASE_URL は host を db に上書き（backend/.env の localhost 版より優先される）
-      DATABASE_URL: "mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-rootpass}@db:3306/mytechpulse"
+      DATABASE_URL: "postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/mytechpulse"
     ports:
       - "8000:8000"
     depends_on:
