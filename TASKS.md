@@ -4,7 +4,7 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 
 優先度は3分類: **A=デプロイのブロッカー**（本番公開前に必須）/ **B=ユーザー獲得のブロッカー**（一般公開・宣伝開始前に必須）/ **C=後回し可**（機能追加・コード品質）。
 
-最終更新: 2026-08-13
+最終更新: 2026-08-14
 
 ## A. デプロイのブロッカー
 
@@ -18,30 +18,39 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 
 > **Issue #50〜#55 のタイトルはOracle前提のまま残っている。** 内容はLightsailに読み替える（タイトル修正の要否はオーナー判断）。
 
-### #50相当 Lightsailのプロビジョニングと初期セットアップ ← **いま最優先**
+### #50相当 Lightsailのプロビジョニングと初期セットアップ ✅ **完了（2026-08-14）**
+本番インスタンス: 東京 `ap-northeast-1a` / Ubuntu 24.04.4 LTS / x86_64 / 静的IP `54.168.29.67`
+
 - [x] VM初期セットアップスクリプト `ops/oracle-vm-setup.sh` 作成（Docker導入 / SSH硬化 / fail2ban / TZ）。**Lightsailでもそのまま動作する**（arm64チェックは警告のみ、iptables部分はREJECTルールが無ければ末尾追加にフォールバック）
 - [x] プロビジョニング手順書 `docs/deploy/lightsail-provisioning.md` 作成（有料プラン切替・静的IP・スワップ2GB）
 - [x] **オーナー作業（登録）**: AWSアカウント作成（2026-08-13完了。MFA / 請求アラート / リージョン東京 / カード登録まで済）
-- [ ] **オーナー作業（課金）**: **有料プランへ切り替え**（無料プランのままだと6ヶ月で閉鎖され本番が消える）。**カード登録とは別の操作**なので請求コンソールの「アカウントプラン」でPaidになっているか要確認
-- [ ] **オーナー作業**: Lightsailインスタンス作成（東京 `ap-northeast-1a` / Ubuntu 24.04 / $7プラン）＋**静的IPの割り当て**（既定IPは再起動で変わる）
-- [ ] **オーナー作業**: IPv4 Firewall で 22 / 80 / 443 開放
-- [ ] **オーナー作業**: **スワップ2GB作成**（手順書5節。1GBプランは余裕が薄く、これが無いとバッチやビルドで落ちる）
-- [ ] **オーナー作業**: `sudo ./ops/oracle-vm-setup.sh` 実行 → 手順書8節の完了チェックリストを満たす
-- [ ] セットアップスクリプトをLightsail向けに整理（`ops/lightsail-vm-setup.sh`へリネーム / スワップ作成の内包 / arm64前提の警告文とiptables節の削除）
+- [x] **オーナー作業（課金）**: 有料プランへ切り替え（2026-08-14完了）
+- [x] **オーナー作業**: Lightsailインスタンス作成（$7プラン / Dual-stack）＋静的IPの割り当て
+- [x] **オーナー作業**: IPv4 Firewall で 22 / 80 / 443 開放（80/443はAnywhere IPv4+IPv6）
+- [x] **スワップ2GB作成**（`vm.swappiness=10`。`/etc/fstab`に登録済み）
+- [x] `sudo bash ops/oracle-vm-setup.sh` 実行 → 手順書8節のチェックリストを全て満たすことを確認（sudoなしdocker / Compose v5.4.0 / JST / パスワード認証・rootログイン無効 / fail2ban稼働）
+- [ ] **再起動後もスワップと静的IPが維持されることの確認**（`sudo reboot` 後に `free -h`）。まだ再起動を試していない
+- [ ] セットアップスクリプトをLightsail向けに整理（`ops/lightsail-vm-setup.sh`へリネーム / スワップ作成の内包 / arm64前提の警告文とiptables節の削除）。**完了メッセージが`MYSQL_ROOT_PASSWORD`とOracleの手順書を案内したままなので併せて直す**（#63でDBがPostgreSQLに変わったため誤った案内になっている）
 
-### #51 ドメイン取得とCaddyによるHTTPS化（#50依存）
-- [ ] **オーナー判断（課金）**: ドメイン取得（Cloudflare Registrarが原価販売）・DNS Aレコードを静的IPへ設定
+### #51 ドメイン取得とCaddyによるHTTPS化（#50依存）← **いま最優先。ここが唯一のブロッカー**
+APIは動いているがHTTPのみ。**Pages（HTTPS）から `http://54.168.29.67:8000` は混在コンテンツとしてブラウザに遮断される**ため、
+ドメインとHTTPSが揃うまでフロントとバックエンドを繋げられない。
+
+- [ ] **オーナー判断（課金）**: ドメイン取得（Cloudflare Registrarが原価販売）・DNS Aレコードを静的IP `54.168.29.67` へ設定
 - [ ] `Caddyfile`新規作成（`api.<domain>` → `api:8000`。Let's Encryptは自動更新）＋`docker-compose.yml`に`caddy`サービス追加
 - [ ] APIのドメインもCloudflare経由（プロキシON）にしてサーバーの実IPを隠す
 
-### #52 docker-compose本番起動と疎通確認（#50依存）
-- [ ] `postgres:17-alpine` / `python:3.12-slim` のビルド・起動確認、`init_db.py`完了確認、auth/news/click全エンドポイントの疎通
-- [ ] `free -h` / `docker stats` でメモリ実測。**スワップを常時数百MB使っていたら$12の2GBプランへ移行を検討**
-- [ ] **ARM64動作確認は不要になった**（Lightsail $7プランはx86_64）
+### #52 docker-compose本番起動と疎通確認（#50依存）✅ **完了（2026-08-14）**
+- [x] `postgres:17-alpine` / `python:3.12-slim` のビルド・起動確認、`init_db.py`完了確認、auth/news/click全エンドポイントの疎通
+      （サインアップ→ログイン→誤パスワードで`status:2`→記事取得Qiita10件/Zenn10件→クリック学習→トークン無しで401→CASCADE削除まで本番で確認）
+- [x] `free -h` / `docker stats` でメモリ実測。**結果: 起動直後 523Mi/911Mi 使用・スワップ59Mi・コンテナ合計121MiB（api 64 + db 57）。
+      見込みの580MiBを下回り余裕がある。$12の2GBプランへの移行は当面不要**
+- [x] **ARM64動作確認は不要になった**（Lightsail $7プランはx86_64）
+- [ ] 記事の日次バッチ（#66）を動かした後にメモリを再測する。ピークはそこで出る
 
 ### #53 Cloudflare Pagesへのフロントエンドデプロイ（独立して着手可）
 - [x] Pagesプロジェクト作成（2026-08-13。root=`frontend/`、build=`npm run build`、output=`dist`、フレームワークプリセット=なし、非本番ブランチのビルド=オフ）。**Workersの作成フロー（`npx wrangler deploy`）ではなくPagesを選ぶこと** — 静的成果物を配るだけで`frontend/public/_redirects`をそのまま解釈できる
-- [ ] 初回デプロイの成功確認と公開URLの記録（未確認）
+- [x] 初回デプロイ成功。公開URL: **https://mytechpulse.pages.dev/**
 - [ ] `VITE_API_BASE_URL`に本番APIのURLを設定（#51でドメイン確定後）＋`_redirects`によるSPA直リンク確認
 - [ ] 確定したPagesのURLを`CORS_ALLOWED_ORIGINS`に追加（#51とセット）
 
@@ -54,8 +63,8 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - [ ] 失効した`docs/deploy/oracle-vm-provisioning.md`を残すか削除するか判断（**削除はオーナー確認事項**）
 
 ### 本番運用開始後すぐ
-- [ ] 本番用`backend/.env`作成。**SECRET_KEYは本番用に新規生成し開発用と使い回さない**（S12対応）
-- [ ] ルート`.env`のDBパスワードを既定値から変更（#63完了後は`POSTGRES_PASSWORD`、未了なら`MYSQL_ROOT_PASSWORD`）
+- [x] 本番用`backend/.env`作成（2026-08-14）。**SECRET_KEYはサーバー上で新規生成**し開発用とは別の値（S12対応）。`CORS_ALLOWED_ORIGINS`にPagesのURLを設定済み。パーミッションは600
+- [x] ルート`.env`の`POSTGRES_PASSWORD`をランダム値（32文字）に設定。パーミッションは600
 - [ ] `ops/backup_db.sh`のcrontab日次登録
 - [ ] **バックアップの外部退避**: 現在は同一ホストの`backups/`に保存しており、インスタンス全損で失われる。Cloudflare R2（10GB無料枠）等へ逃がす
 
