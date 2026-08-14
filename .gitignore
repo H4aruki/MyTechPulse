@@ -39,3 +39,6 @@ desktop.ini
 
 # ===== Claude Code（個人メモ・共有しない） =====
 CLAUDE.md
+
+# wrangler pages dev のローカル作業ファイル（Pagesの挙動確認に使う）
+.wrangler/

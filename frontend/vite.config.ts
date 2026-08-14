@@ -15,7 +15,7 @@ function appSpaFallback(): Plugin {
     const url = req.url?.split('?')[0]
     // 拡張子付き（アセット要求）は対象外にして、HTMLへのナビゲーションだけを差し戻す
     if (url && /^\/app(\/|$)/.test(url) && !url.slice(1).includes('.')) {
-      req.url = '/app/index.html'
+      req.url = '/app.html'
     }
     next()
   }
@@ -31,8 +31,15 @@ function appSpaFallback(): Plugin {
   }
 }
 
-// LP（index.html）は静的HTMLのまま事前生成し、アプリ本体（app/index.html）だけを
+// LP（index.html）は静的HTMLのまま事前生成し、アプリ本体（app.html）だけを
 // React SPA として配信するマルチページ構成。SSRサーバーを持たずにLPのSEO/OGPを確保する。
+//
+// SPAのエントリを `app/index.html` ではなく `app.html` に置いているのは Cloudflare Pages の
+// 制約による。Pages は書き換え先から `.html` と `/index` を剥がして正規化するため、
+// `/app/*  /app/index.html  200` は「書き換え先が自分のパターンに再び一致する」ループと
+// 判定されてルールごと捨てられる（ローカルの `wrangler pages dev` で
+// "Infinite loop detected in this rule and has been ignored" を確認済み）。
+// 出力を `/app.html`（配信URLは `/app`）にすることでループ判定を回避している。
 export default defineConfig({
   plugins: [react(), tailwindcss(), appSpaFallback()],
   resolve: {
@@ -44,7 +51,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         lp: fileURLToPath(new URL('./index.html', import.meta.url)),
-        app: fileURLToPath(new URL('./app/index.html', import.meta.url)),
+        app: fileURLToPath(new URL('./app.html', import.meta.url)),
       },
     },
   },
