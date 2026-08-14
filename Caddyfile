@@ -1,0 +1,15 @@
+# 本番APIのHTTPS終端。
+#
+# 証明書は Let's Encrypt から自動取得され、期限が近づくと自動更新される。
+# そのため 80番ポートを開けたままにしておく必要がある（HTTP-01チャレンジに使われる）。
+# 取得済みの証明書は caddy_data ボリュームに永続化されるので、コンテナを作り直しても
+# 取り直しにはならない（Let's Encrypt のレート制限に当たらないための要）。
+#
+# ドメインはルートの .env の API_DOMAIN で指定する。値が無いと Caddy は起動に失敗する。
+
+{$API_DOMAIN} {
+	reverse_proxy api:8000
+
+	# HTTPSでしか繋がせない。ブラウザは一度アクセスすると以後HTTPを試さなくなる
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+}
