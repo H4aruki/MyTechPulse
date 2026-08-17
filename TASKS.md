@@ -4,7 +4,7 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 
 優先度は3分類: **A=デプロイのブロッカー**（本番公開前に必須）/ **B=ユーザー獲得のブロッカー**（一般公開・宣伝開始前に必須）/ **C=後回し可**（機能追加・コード品質）。
 
-最終更新: 2026-08-14
+最終更新: 2026-08-17
 
 ## A. デプロイのブロッカー
 
@@ -14,7 +14,9 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - **却下した候補**（#67）: Vercel（無料プランが非商用限定）/ GitHub Pages（URL書き換え不可）/ Netlify（転送量上限）/ Xserver VPS（年契約で変更しづらい）/ EC2（通信費が従量）/ GCP無料VM（米国のみ）/ Oracle無料VM（アカウント作成不可）
 - **次点**: さくらのVPS（Lightsailが駄目だった場合の最有力）
 
-**#50 → #51 → #52 → #54 → #55 が一本の依存チェーン**。**#50と#52は完了済み**で、残るブロッカーは**#51（ドメイン取得とHTTPS化）だけ**。#53のPagesデプロイも済んでいるが、`VITE_API_BASE_URL`の確定は#51待ち。
+**本番稼働中（2026-08-17〜）**: フロント **https://mytechpulse.net** / API **https://api.mytechpulse.net**
+
+**#50 → #51 → #52 → #54 → #55 が一本の依存チェーン**だったが、**#50・#51・#52・#53 は完了**。残るA章のタスクは **#54（自動デプロイ）** と **#55（DEPLOYMENT.md整備）**、および運用まわりの細部のみ。デプロイのブロッカーとしては解消済みで、次に効くのは**B章（一般公開前に必須の項目）**。
 
 > **Issue #50〜#55 のタイトルはOracle前提のまま残っている。** 内容はLightsailに読み替える（タイトル修正の要否はオーナー判断）。
 
@@ -29,16 +31,17 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - [x] **オーナー作業**: IPv4 Firewall で 22 / 80 / 443 開放（80/443はAnywhere IPv4+IPv6）
 - [x] **スワップ2GB作成**（`vm.swappiness=10`。`/etc/fstab`に登録済み）
 - [x] `sudo bash ops/oracle-vm-setup.sh` 実行 → 手順書8節のチェックリストを全て満たすことを確認（sudoなしdocker / Compose v5.4.0 / JST / パスワード認証・rootログイン無効 / fail2ban稼働）
-- [ ] **再起動後もスワップと静的IPが維持されることの確認**（`sudo reboot` 後に `free -h`）。まだ再起動を試していない
+- [x] **再起動テスト実施（2026-08-17）**。`sudo systemctl reboot` 後、**約40秒でAPIが自動復帰**。スワップ2GB / `vm.swappiness=10` / iptablesの80・443 ACCEPT / crontab / JST / fail2ban / 静的IP のすべてが維持され、3コンテナとも `restart: unless-stopped` で自動起動した
 - [ ] セットアップスクリプトをLightsail向けに整理（`ops/lightsail-vm-setup.sh`へリネーム / スワップ作成の内包 / arm64前提の警告文とiptables節の削除）。**完了メッセージが`MYSQL_ROOT_PASSWORD`とOracleの手順書を案内したままなので併せて直す**（#63でDBがPostgreSQLに変わったため誤った案内になっている）
 
-### #51 ドメイン取得とCaddyによるHTTPS化（#50依存）← **いま最優先。ここが唯一のブロッカー**
-APIは動いているがHTTPのみ。**Pages（HTTPS）から `http://54.168.29.67:8000` は混在コンテンツとしてブラウザに遮断される**ため、
-ドメインとHTTPSが揃うまでフロントとバックエンドを繋げられない。
+### #51 ドメイン取得とCaddyによるHTTPS化（#50依存）✅ **完了（2026-08-17）**
+本番URL: フロント **https://mytechpulse.net** / API **https://api.mytechpulse.net**
 
-- [ ] **オーナー判断（課金）**: ドメイン取得（Cloudflare Registrarが原価販売）・DNS Aレコードを静的IP `54.168.29.67` へ設定
-- [ ] `Caddyfile`新規作成（`api.<domain>` → `api:8000`。Let's Encryptは自動更新）＋`docker-compose.yml`に`caddy`サービス追加
-- [ ] APIのドメインもCloudflare経由（プロキシON）にしてサーバーの実IPを隠す
+- [x] **オーナー判断（課金）**: `mytechpulse.net` を Cloudflare Registrar で取得（`.com` は取得済みだったため `.net`）。`api` のAレコードを静的IP `54.168.29.67` へ設定
+- [x] `Caddyfile`新規作成＋`docker-compose.yml`に`caddy`サービス追加（PR#72）。Let's Encrypt証明書の取得を確認（有効期限 2026-11-12）
+- [x] APIのドメインもCloudflare経由（プロキシON）にした。SSL/TLSモードは**フル（厳格）**。DNSからは実IPが消え、エッジは東京（`CF-RAY: ...-NRT`）、`cf-cache-status: DYNAMIC` でAPIレスポンスはキャッシュされていない
+- [ ] **証明書の自動更新の確認（2026-10月頃）**。プロキシONにしたことでTLS-ALPN-01が使えなくなりHTTP-01へフォールバックする。Caddyが自動で切り替えるが、**初回の自動更新が通ることを一度確認する必要がある**
+- [ ] オリジンへの直接アクセスを塞ぐ → **#74**（実IPを知られていると Host ヘッダー付きで直接叩ける。優先度は低く、実ユーザーを迎える前に着手）
 
 ### #52 docker-compose本番起動と疎通確認（#50依存）✅ **完了（2026-08-14）**
 - [x] `postgres:17-alpine` / `python:3.12-slim` のビルド・起動確認、`init_db.py`完了確認、auth/news/click全エンドポイントの疎通
@@ -48,11 +51,13 @@ APIは動いているがHTTPのみ。**Pages（HTTPS）から `http://54.168.29.
 - [x] **ARM64動作確認は不要になった**（Lightsail $7プランはx86_64）
 - [ ] 記事の日次バッチ（#66）を動かした後にメモリを再測する。ピークはそこで出る
 
-### #53 Cloudflare Pagesへのフロントエンドデプロイ（独立して着手可）
+### #53 Cloudflare Pagesへのフロントエンドデプロイ ✅ **完了（2026-08-17）**
 - [x] Pagesプロジェクト作成（2026-08-13。root=`frontend/`、build=`npm run build`、output=`dist`、フレームワークプリセット=なし、非本番ブランチのビルド=オフ）。**Workersの作成フロー（`npx wrangler deploy`）ではなくPagesを選ぶこと** — 静的成果物を配るだけで`frontend/public/_redirects`をそのまま解釈できる
 - [x] 初回デプロイ成功。公開URL: **https://mytechpulse.pages.dev/**
-- [ ] `VITE_API_BASE_URL`に本番APIのURLを設定（#51でドメイン確定後）＋`_redirects`によるSPA直リンク確認
-- [ ] 確定したPagesのURLを`CORS_ALLOWED_ORIGINS`に追加（#51とセット）
+- [x] `VITE_API_BASE_URL`に `https://api.mytechpulse.net` を設定（Pagesの環境変数・テキスト型。**ビルド時に埋め込まれるので変更後は再デプロイが必須**）
+- [x] `mytechpulse.net` / `www.mytechpulse.net` をカスタムドメインとして追加
+- [x] `_redirects`によるSPA直リンクを修正（PR#73）。**Pagesは書き換え先から`.html`と`/index`を剥がすため`/app/index.html`はループ判定でルールごと無視される**。SPAエントリを`app.html`へ移し`/app/*  /app  200`とした
+- [x] `CORS_ALLOWED_ORIGINS`に `https://mytechpulse.net,https://www.mytechpulse.net,https://mytechpulse.pages.dev` を設定
 
 ### #54 GitHub Actionsによる自動デプロイ（#50 / #52依存）
 - [ ] **オーナー作業**: デプロイ用SSH鍵生成・Secrets登録
@@ -65,7 +70,7 @@ APIは動いているがHTTPのみ。**Pages（HTTPS）から `http://54.168.29.
 ### 本番運用開始後すぐ
 - [x] 本番用`backend/.env`作成（2026-08-14）。**SECRET_KEYはサーバー上で新規生成**し開発用とは別の値（S12対応）。`CORS_ALLOWED_ORIGINS`にPagesのURLを設定済み。パーミッションは600
 - [x] ルート`.env`の`POSTGRES_PASSWORD`をランダム値（32文字）に設定。パーミッションは600
-- [ ] `ops/backup_db.sh`のcrontab日次登録
+- [x] `ops/backup_db.sh`のcrontab日次登録（2026-08-17）。`0 4 * * *`（サーバーはJSTなので毎日午前4時）。ログは`backups/backup.log`。**実行権限が抜けていたため`fix/backup-script-exec-bit`（PR#75）で修正**
 - [ ] **バックアップの外部退避**: 現在は同一ホストの`backups/`に保存しており、インスタンス全損で失われる。Cloudflare R2（10GB無料枠）等へ逃がす
 
 ## B. ユーザー獲得のブロッカー（一般公開・宣伝開始前に必須）
@@ -74,12 +79,13 @@ APIは動いているがHTTPのみ。**Pages（HTTPS）から `http://54.168.29.
 - [ ] **レート制限・ブルートフォース対策**: `login_check`に試行回数制限が一切ない。slowapi等でIPベースの簡易レート制限を導入
 - [ ] **S10: パスワード/ユーザー名の長さ・複雑性検証**: レート制限とセットで「弱いパスワード×無制限試行」の最悪の組み合わせを解消
 - [ ] **ロギング基盤・本番監視**: エラーハンドリングが全て`print(f"Error: {e}")`形式（auth_service.py / click_service.py / news_service.py）。標準loggingへの置き換え＋Sentry等の導入で実ユーザーの障害を検知可能にする
-- [ ] **DBバックアップの実運用開始**: スクリプトはPR#42で用意。実ユーザーのデータが乗った時点から必須（crontab登録はAの外部作業）
+- [x] **DBバックアップの実運用開始**: crontab登録済み（2026-08-17）。残るのは**外部退避**（A章）で、現状はインスタンス全損でバックアップごと消える
 
 ## C. 後回し可（機能追加・コード品質）
 
 ### オープンなGitHub Issue
 - [ ] **#66**: 記事取得を「画面を開くたび」から日次の一括取得＋DB保存へ変更。**タグ100個を1日1回舐めても約200リクエスト/日で済み、この回数はユーザー数に依存しなくなる**（現状は利用者数×リロード数で増えQiitaの上限1000req/hに達する）。外部APIダウン時も記事を出せるようになる副次効果あり。要検討: 古い記事の保持期間、実行時刻と1日の回数
+- [ ] **#74**: オリジンへの直接アクセスを塞いでCloudflare経由に限定する（80/443をCloudflareのIPレンジからのみ許可）。**実ユーザーを迎える前に着手**
 - [ ] **#33**: 外部API（Qiita/Zenn/将来のX等）の部分的失敗が記事の多様性を静かに損なう問題（情報欠落の可視化・リトライ戦略）
 - [ ] **#22**: Qiita記事が複数タグにマッチしてもタグがマージされずスコアが過小評価される
 - [ ] **#14**: APIレスポンスをHTTPステータスコード方式へ全面移行（設計方針は Obsidian `notes/2026-07-09_...` に整理済み）
