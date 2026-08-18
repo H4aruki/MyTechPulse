@@ -4,7 +4,7 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 
 優先度は3分類: **A=デプロイのブロッカー**（本番公開前に必須）/ **B=ユーザー獲得のブロッカー**（一般公開・宣伝開始前に必須）/ **C=後回し可**（機能追加・コード品質）。
 
-最終更新: 2026-08-17
+最終更新: 2026-08-18
 
 ## A. デプロイのブロッカー
 
@@ -16,11 +16,11 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 
 **本番稼働中（2026-08-17〜）**: フロント **https://mytechpulse.net** / API **https://api.mytechpulse.net**
 
-**#50 → #51 → #52 → #54 → #55 が一本の依存チェーン**だったが、**#50・#51・#52・#53 は完了**。残るA章のタスクは **#54（自動デプロイ）** と **#55（DEPLOYMENT.md整備）**、および運用まわりの細部のみ。デプロイのブロッカーとしては解消済みで、次に効くのは**B章（一般公開前に必須の項目）**。
+**プロビジョニング → HTTPS化 → 本番起動 → 自動デプロイ → 手順書 が一本の依存チェーン**だったが、**自動デプロイと手順書を除く工程はすべて完了**（Cloudflare Pagesへのデプロイ含む）。残るA章のタスクは **#54（自動デプロイ）** と **#55（DEPLOYMENT.md作成）**、および運用まわりの細部のみ。デプロイのブロッカーとしては解消済みで、次に効くのは**B章（一般公開前に必須の項目）**。
 
-> **Issue #50〜#55 のタイトルはOracle前提のまま残っている。** 内容はLightsailに読み替える（タイトル修正の要否はオーナー判断）。
+> **2026-08-18にIssueを棚卸しした（#77）。** Oracle前提で失効していたIssueはクローズするか現行構成に書き直してある。以下の見出しのうち、完了してIssueを閉じたものは「(closed)」、GitHubからIssueごと削除されたものは「(Issue削除済み)」と表記する。
 
-### #50相当 Lightsailのプロビジョニングと初期セットアップ ✅ **完了（2026-08-14）**
+### Lightsailのプロビジョニングと初期セットアップ ✅ **完了（2026-08-14）**（#50 closed）
 本番インスタンス: 東京 `ap-northeast-1a` / Ubuntu 24.04.4 LTS / x86_64 / 静的IP `54.168.29.67`
 
 - [x] VM初期セットアップスクリプト `ops/oracle-vm-setup.sh` 作成（Docker導入 / SSH硬化 / fail2ban / TZ）。**Lightsailでもそのまま動作する**（arm64チェックは警告のみ、iptables部分はREJECTルールが無ければ末尾追加にフォールバック）
@@ -32,9 +32,9 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - [x] **スワップ2GB作成**（`vm.swappiness=10`。`/etc/fstab`に登録済み）
 - [x] `sudo bash ops/oracle-vm-setup.sh` 実行 → 手順書8節のチェックリストを全て満たすことを確認（sudoなしdocker / Compose v5.4.0 / JST / パスワード認証・rootログイン無効 / fail2ban稼働）
 - [x] **再起動テスト実施（2026-08-17）**。`sudo systemctl reboot` 後、**約40秒でAPIが自動復帰**。スワップ2GB / `vm.swappiness=10` / iptablesの80・443 ACCEPT / crontab / JST / fail2ban / 静的IP のすべてが維持され、3コンテナとも `restart: unless-stopped` で自動起動した
-- [ ] セットアップスクリプトをLightsail向けに整理（`ops/lightsail-vm-setup.sh`へリネーム / スワップ作成の内包 / arm64前提の警告文とiptables節の削除）。**完了メッセージが`MYSQL_ROOT_PASSWORD`とOracleの手順書を案内したままなので併せて直す**（#63でDBがPostgreSQLに変わったため誤った案内になっている）
+- [ ] セットアップスクリプトをLightsail向けに整理（`ops/lightsail-vm-setup.sh`へリネーム / スワップ作成の内包 / arm64前提の警告文とiptables節の削除）。**完了メッセージが`MYSQL_ROOT_PASSWORD`とOracleの手順書を案内したままなので併せて直す**（#63でDBがPostgreSQLに変わったため誤った案内になっている）。**#50をクローズしたので、この項目がこの作業の唯一の記録になる**
 
-### #51 ドメイン取得とCaddyによるHTTPS化（#50依存）✅ **完了（2026-08-17）**
+### ドメイン取得とCaddyによるHTTPS化 ✅ **完了（2026-08-17）**（#51 closed）
 本番URL: フロント **https://mytechpulse.net** / API **https://api.mytechpulse.net**
 
 - [x] **オーナー判断（課金）**: `mytechpulse.net` を Cloudflare Registrar で取得（`.com` は取得済みだったため `.net`）。`api` のAレコードを静的IP `54.168.29.67` へ設定
@@ -43,7 +43,7 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - [ ] **証明書の自動更新の確認（2026-10月頃）**。プロキシONにしたことでTLS-ALPN-01が使えなくなりHTTP-01へフォールバックする。Caddyが自動で切り替えるが、**初回の自動更新が通ることを一度確認する必要がある**
 - [ ] オリジンへの直接アクセスを塞ぐ → **#74**（実IPを知られていると Host ヘッダー付きで直接叩ける。優先度は低く、実ユーザーを迎える前に着手）
 
-### #52 docker-compose本番起動と疎通確認（#50依存）✅ **完了（2026-08-14）**
+### docker-compose本番起動と疎通確認 ✅ **完了（2026-08-14）**（Issue削除済み）
 - [x] `postgres:17-alpine` / `python:3.12-slim` のビルド・起動確認、`init_db.py`完了確認、auth/news/click全エンドポイントの疎通
       （サインアップ→ログイン→誤パスワードで`status:2`→記事取得Qiita10件/Zenn10件→クリック学習→トークン無しで401→CASCADE削除まで本番で確認）
 - [x] `free -h` / `docker stats` でメモリ実測。**結果: 起動直後 523Mi/911Mi 使用・スワップ59Mi・コンテナ合計121MiB（api 64 + db 57）。
@@ -51,7 +51,7 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - [x] **ARM64動作確認は不要になった**（Lightsail $7プランはx86_64）
 - [ ] 記事の日次バッチ（#66）を動かした後にメモリを再測する。ピークはそこで出る
 
-### #53 Cloudflare Pagesへのフロントエンドデプロイ ✅ **完了（2026-08-17）**
+### Cloudflare Pagesへのフロントエンドデプロイ ✅ **完了（2026-08-17）**（#53 closed）
 - [x] Pagesプロジェクト作成（2026-08-13。root=`frontend/`、build=`npm run build`、output=`dist`、フレームワークプリセット=なし、非本番ブランチのビルド=オフ）。**Workersの作成フロー（`npx wrangler deploy`）ではなくPagesを選ぶこと** — 静的成果物を配るだけで`frontend/public/_redirects`をそのまま解釈できる
 - [x] 初回デプロイ成功。公開URL: **https://mytechpulse.pages.dev/**
 - [x] `VITE_API_BASE_URL`に `https://api.mytechpulse.net` を設定（Pagesの環境変数・テキスト型。**ビルド時に埋め込まれるので変更後は再デプロイが必須**）
@@ -59,11 +59,11 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - [x] `_redirects`によるSPA直リンクを修正（PR#73）。**Pagesは書き換え先から`.html`と`/index`を剥がすため`/app/index.html`はループ判定でルールごと無視される**。SPAエントリを`app.html`へ移し`/app/*  /app  200`とした
 - [x] `CORS_ALLOWED_ORIGINS`に `https://mytechpulse.net,https://www.mytechpulse.net,https://mytechpulse.pages.dev` を設定
 
-### #54 GitHub Actionsによる自動デプロイ（#50 / #52依存）
+### #54 mainマージ時にLightsailへ自動デプロイする（依存する前工程はすべて完了済み）
 - [ ] **オーナー作業**: デプロイ用SSH鍵生成・Secrets登録
 - [ ] mainマージ→LightsailへSSHデプロイするワークフロー追加
 
-### #55 DEPLOYMENT.md整備（他Issue完了ごとに追記）
+### #55 DEPLOYMENT.mdを作成する（Lightsail運用手順＋移行ランブック）
 - [ ] `docs/deploy/lightsail-provisioning.md`を統合＋スケールアップ/移行の判断基準＋さくらVPS移行ランブック＋READMEからのリンク
 - [ ] 失効した`docs/deploy/oracle-vm-provisioning.md`を残すか削除するか判断（**削除はオーナー確認事項**）
 
@@ -86,12 +86,12 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 ### オープンなGitHub Issue
 - [ ] **#66**: 記事取得を「画面を開くたび」から日次の一括取得＋DB保存へ変更。**タグ100個を1日1回舐めても約200リクエスト/日で済み、この回数はユーザー数に依存しなくなる**（現状は利用者数×リロード数で増えQiitaの上限1000req/hに達する）。外部APIダウン時も記事を出せるようになる副次効果あり。要検討: 古い記事の保持期間、実行時刻と1日の回数
 - [ ] **#74**: オリジンへの直接アクセスを塞いでCloudflare経由に限定する（80/443をCloudflareのIPレンジからのみ許可）。**実ユーザーを迎える前に着手**
-- [ ] **#33**: 外部API（Qiita/Zenn/将来のX等）の部分的失敗が記事の多様性を静かに損なう問題（情報欠落の可視化・リトライ戦略）
+- [ ] **#33**: 外部API（Qiita/Zenn/将来のX等）の部分的失敗で記事の多様性が静かに損なわれる問題の対策を決める（情報欠落の可視化・リトライ戦略）
 - [ ] **#22**: Qiita記事が複数タグにマッチしてもタグがマージされずスコアが過小評価される
 - [ ] **#14**: APIレスポンスをHTTPステータスコード方式へ全面移行（設計方針は Obsidian `notes/2026-07-09_...` に整理済み）
 - [ ] **#47**: サインアップのタグリスト（`frontend/src/constants/tags.ts`）をバックエンドから動的取得にするか検討
 - [ ] **#46**: JWTの保管をlocalStorageからhttpOnly Cookieへ移行（実施する場合は`allow_credentials`とCORS設定も戻す必要あり）
-- [ ] **#45**: 未使用の可能性があるCORS許可オリジン（localhost:3000 / 127.0.0.1:8000）の調査
+- [ ] **#45**: 開発用のCORS許可オリジンを棚卸しする。3000 / 8000 に加え、**Live Server用の5500系2件もReact化（PR#49）で不要になった可能性**がある
 
 ### コード品質（要再確認・未再検証）
 - [ ] CR#3: 外部APIフィールドのハード添字参照によるKeyError/ValueError
@@ -126,6 +126,7 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - 2026-07-16 デプロイ準備Issue一括起票: #34（技術スタック議論）/ #35 / #37 / #39 / #41 / #43
 - **旧A章の実装タスク4件がmainマージ済み**: #35→PR#36（CORS環境変数化・`allow_credentials`削除）/ #37→PR#38（API_BASE_URL自動切替）/ #39→PR#40（QiitaタグURLエンコード）/ #41→PR#42（`ops/backup_db.sh`追加）
 - **フロントエンドのVite + React + TypeScript化（PR#49）: mainマージ済み**（旧`html/`・`js/`は削除済み）
-- **#34 技術スタック選定に決着**（2026-07-28）: Oracle Free VM + Cloudflare Pages + Caddy + GitHub Actions。子Issue #50〜#55 を起票
+- **#34 技術スタック選定に決着**（2026-07-28）: Oracle Free VM + Cloudflare Pages + Caddy + GitHub Actions。子Issue #50〜#55 を起票。**ただしこの結論は後に #67 で上書きされた**（推奨案だったさくらVPS 2GB + パスベース同一オリジン + MySQL はいずれも不採用。#34 は2026-08-18にクローズ済み）
 - **#63 MySQL 8.4 → PostgreSQL 17 移行（PR#70）: mainマージ済み**（2026-08-14）。ローカル開発DBもDockerコンテナに一本化しXAMPPは不要になった
-- **デプロイ先の再選定に決着**（2026-08-13、#64 → #65 / #66 / #67）: Oracleはアカウント作成不可で断念、#59のGCP e2-micro + SQLite案も前提失効。**2分割（Cloudflare Pages + AWS Lightsail 1GB東京）に確定**し、DBはPostgreSQLでバックエンドに同居。記事の一括取得は#66へ切り出し
+- **デプロイ先の再選定に決着**（2026-08-13、#64 → #65 / #66 / #67）: Oracleはアカウント作成不可で断念、GCP e2-micro + SQLite案（Issue削除済み）も前提失効。**2分割（Cloudflare Pages + AWS Lightsail 1GB東京）に確定**し、DBはPostgreSQLでバックエンドに同居。記事の一括取得は#66へ切り出し
+- **Issue/PRの棚卸し**（2026-08-18、#77）: 失効した前提のIssueを整理。**クローズ** = #34（結論が#67に上書き）/ #50（Oracle断念・Lightsailで完了）/ #51 / #53（いずれも完了）/ #57・PR#58（LPリデザインは起票し直し）。**現行構成に改訂** = #14 / #33 / #45 / #46 / #47 / #54 / #55 / #60。オーナー手書きの #64 / #65 / #66 / #67 は編集していない
