@@ -42,3 +42,6 @@ CLAUDE.md
 
 # wrangler pages dev のローカル作業ファイル（Pagesの挙動確認に使う）
 .wrangler/
+
+# Playwright MCP のブラウザ操作ログ（動作確認のたびに自動生成される一時ファイル）
+.playwright-mcp/
