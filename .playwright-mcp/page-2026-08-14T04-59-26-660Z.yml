@@ -1,0 +1,50 @@
+- generic [ref=e556]:
+  - banner [ref=e557]:
+    - generic [ref=e558]:
+      - link "MyTechPulse" [ref=e559] [cursor=pointer]:
+        - /url: /app/login
+      - navigation "提供元サイト" [ref=e560]:
+        - link [ref=e561] [cursor=pointer]:
+          - /url: https://qiita.com/
+          - img "Qiita" [ref=e562]
+        - link [ref=e563] [cursor=pointer]:
+          - /url: https://zenn.dev/
+          - img "Zenn" [ref=e564]
+      - generic [ref=e565]:
+        - link "新規登録" [ref=e566] [cursor=pointer]:
+          - /url: /app/signup
+        - link "ログイン" [ref=e567] [cursor=pointer]:
+          - /url: /app/login
+  - main [ref=e568]:
+    - generic [ref=e569]:
+      - heading "ログイン" [level=1] [ref=e570]
+      - generic [ref=e571]:
+        - generic [ref=e572]:
+          - generic [ref=e573]: ユーザー名
+          - textbox "ユーザー名" [ref=e574]
+        - generic [ref=e575]:
+          - generic [ref=e576]: パスワード
+          - textbox "パスワード" [ref=e577]
+        - button "ログイン" [ref=e578]
+        - paragraph [ref=e579]:
+          - text: アカウントをお持ちでない方は
+          - link "新規登録" [ref=e580] [cursor=pointer]:
+            - /url: /app/signup
+  - contentinfo [ref=e581]:
+    - generic [ref=e582]:
+      - generic [ref=e583]:
+        - heading "Created by" [level=3] [ref=e584]
+        - paragraph [ref=e585]: Harry
+        - paragraph [ref=e586]: K.Haruki
+      - generic [ref=e587]:
+        - heading "Event" [level=3] [ref=e588]
+        - paragraph [ref=e589]: Open Hack U 2025 Kanazawa
+      - generic [ref=e590]:
+        - heading "Powered by" [level=3] [ref=e591]
+        - list [ref=e592]:
+          - listitem [ref=e593]:
+            - link "Qiita" [ref=e594] [cursor=pointer]:
+              - /url: https://qiita.com/
+          - listitem [ref=e595]:
+            - link "Zenn" [ref=e596] [cursor=pointer]:
+              - /url: https://zenn.dev/

@@ -1,0 +1,4 @@
+[     262ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=98d5b1c5:14335
+[   38510ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=98d5b1c5:14335
+[  274090ms] Error: VITE_API_BASE_URL が未設定です。frontend/.env.example を参考に .env を作成してください。
+    at http://localhost:4173/assets/app-Jv5I9sZp.js:11:25977

@@ -1,0 +1,254 @@
+- generic [ref=e306]:
+  - banner [ref=e307]:
+    - generic [ref=e308]:
+      - link "MyTechPulse" [ref=e309] [cursor=pointer]:
+        - /url: /app/articles
+      - navigation "提供元サイト" [ref=e310]:
+        - link [ref=e311] [cursor=pointer]:
+          - /url: https://qiita.com/
+          - img "Qiita" [ref=e312]
+        - link [ref=e313] [cursor=pointer]:
+          - /url: https://zenn.dev/
+          - img "Zenn" [ref=e314]
+      - button "ログアウト" [ref=e316]
+  - main [ref=e317]:
+    - generic [ref=e318]:
+      - heading "あなたにおすすめの記事" [level=1] [ref=e319]
+      - generic [ref=e320]:
+        - generic [ref=e321]:
+          - heading "Qiita Articles" [level=2] [ref=e322]
+          - list [ref=e323]:
+            - listitem [ref=e324]:
+              - button "setCount した直後の count は、まだ更新前の値です Qiita 1 いいね 2026/08/14 React useState TypeScript 初心者 フロントエンド" [ref=e325] [cursor=pointer]:
+                - heading "setCount した直後の count は、まだ更新前の値です" [level=3] [ref=e326]
+                - generic [ref=e327]:
+                  - generic [ref=e328]: Qiita
+                  - generic "1 いいね" [ref=e329]: ♥ 1
+                  - generic [ref=e330]: 2026/08/14
+                - list [ref=e331]:
+                  - listitem [ref=e332]: React
+                  - listitem [ref=e333]: useState
+                  - listitem [ref=e334]: TypeScript
+                  - listitem [ref=e335]: 初心者
+                  - listitem [ref=e336]: フロントエンド
+            - listitem [ref=e337]:
+              - button "Googleサインインを使ってみた【React×Fastapi】①準備編 Qiita 0 いいね 2026/08/11 Python React GoogleCloud" [ref=e338] [cursor=pointer]:
+                - heading "Googleサインインを使ってみた【React×Fastapi】①準備編" [level=3] [ref=e339]
+                - generic [ref=e340]:
+                  - generic [ref=e341]: Qiita
+                  - generic "0 いいね" [ref=e342]: ♥ 0
+                  - generic [ref=e343]: 2026/08/11
+                - list [ref=e344]:
+                  - listitem [ref=e345]: Python
+                  - listitem [ref=e346]: React
+                  - listitem [ref=e347]: GoogleCloud
+            - listitem [ref=e348]:
+              - button "ブラウザでAI動画編集を実現する：React・WebGPU・Workerで多軌道タイムラインを安定化した設計 Qiita 1 いいね 2026/08/11 React WebGPU WebAssembly 動画編集 AI" [ref=e349] [cursor=pointer]:
+                - heading "ブラウザでAI動画編集を実現する：React・WebGPU・Workerで多軌道タイムラインを安定化した設計" [level=3] [ref=e350]
+                - generic [ref=e351]:
+                  - generic [ref=e352]: Qiita
+                  - generic "1 いいね" [ref=e353]: ♥ 1
+                  - generic [ref=e354]: 2026/08/11
+                - list [ref=e355]:
+                  - listitem [ref=e356]: React
+                  - listitem [ref=e357]: WebGPU
+                  - listitem [ref=e358]: WebAssembly
+                  - listitem [ref=e359]: 動画編集
+                  - listitem [ref=e360]: AI
+            - listitem [ref=e361]:
+              - button "リアルタイムAI音声で「JSON待ち」が会話を止める：Pydanticで発話契約と復旧経路を作る Qiita 0 いいね 2026/08/14 生成AI LLM Python 音声認識 TencentRTC" [ref=e362] [cursor=pointer]:
+                - heading "リアルタイムAI音声で「JSON待ち」が会話を止める：Pydanticで発話契約と復旧経路を作る" [level=3] [ref=e363]
+                - generic [ref=e364]:
+                  - generic [ref=e365]: Qiita
+                  - generic "0 いいね" [ref=e366]: ♥ 0
+                  - generic [ref=e367]: 2026/08/14
+                - list [ref=e368]:
+                  - listitem [ref=e369]: 生成AI
+                  - listitem [ref=e370]: LLM
+                  - listitem [ref=e371]: Python
+                  - listitem [ref=e372]: 音声認識
+                  - listitem [ref=e373]: TencentRTC
+            - listitem [ref=e374]:
+              - button "画面収録から利用者名を消す（目視で3回漏らして、最後は機械に検査させた話） Qiita 0 いいね 2026/08/14 ffmpeg Python numpy 画像処理 動画" [ref=e375] [cursor=pointer]:
+                - heading "画面収録から利用者名を消す（目視で3回漏らして、最後は機械に検査させた話）" [level=3] [ref=e376]
+                - generic [ref=e377]:
+                  - generic [ref=e378]: Qiita
+                  - generic "0 いいね" [ref=e379]: ♥ 0
+                  - generic [ref=e380]: 2026/08/14
+                - list [ref=e381]:
+                  - listitem [ref=e382]: ffmpeg
+                  - listitem [ref=e383]: Python
+                  - listitem [ref=e384]: numpy
+                  - listitem [ref=e385]: 画像処理
+                  - listitem [ref=e386]: 動画
+            - listitem [ref=e387]:
+              - button "Pythonで学ぶ単回帰分析 Qiita 0 いいね 2026/08/14 統計学 統計検定 Python" [ref=e388] [cursor=pointer]:
+                - heading "Pythonで学ぶ単回帰分析" [level=3] [ref=e389]
+                - generic [ref=e390]:
+                  - generic [ref=e391]: Qiita
+                  - generic "0 いいね" [ref=e392]: ♥ 0
+                  - generic [ref=e393]: 2026/08/14
+                - list [ref=e394]:
+                  - listitem [ref=e395]: 統計学
+                  - listitem [ref=e396]: 統計検定
+                  - listitem [ref=e397]: Python
+            - listitem [ref=e398]:
+              - button "Pythonの型ヒントの正しい使い方 Qiita 0 いいね 2026/08/14 Python 型ヒント mypy pydantic ポエム" [ref=e399] [cursor=pointer]:
+                - heading "Pythonの型ヒントの正しい使い方" [level=3] [ref=e400]
+                - generic [ref=e401]:
+                  - generic [ref=e402]: Qiita
+                  - generic "0 いいね" [ref=e403]: ♥ 0
+                  - generic [ref=e404]: 2026/08/14
+                - list [ref=e405]:
+                  - listitem [ref=e406]: Python
+                  - listitem [ref=e407]: 型ヒント
+                  - listitem [ref=e408]: mypy
+                  - listitem [ref=e409]: pydantic
+                  - listitem [ref=e410]: ポエム
+            - listitem [ref=e411]:
+              - button "Gemini 3.7 Flashの下書き混在をPythonで点検 Qiita 0 いいね 2026/08/14 Python AI 生成AI 業務効率化 LLM" [ref=e412] [cursor=pointer]:
+                - heading "Gemini 3.7 Flashの下書き混在をPythonで点検" [level=3] [ref=e413]
+                - generic [ref=e414]:
+                  - generic [ref=e415]: Qiita
+                  - generic "0 いいね" [ref=e416]: ♥ 0
+                  - generic [ref=e417]: 2026/08/14
+                - list [ref=e418]:
+                  - listitem [ref=e419]: Python
+                  - listitem [ref=e420]: AI
+                  - listitem [ref=e421]: 生成AI
+                  - listitem [ref=e422]: 業務効率化
+                  - listitem [ref=e423]: LLM
+            - listitem [ref=e424]:
+              - button "【中二が挑戦】C++で数学ライブラリ作ってみたらpython自作の数学ライブラリより実行速度が約30倍早くなった話 Qiita 0 いいね 2026/08/14 C++ Python 数学" [ref=e425] [cursor=pointer]:
+                - heading "【中二が挑戦】C++で数学ライブラリ作ってみたらpython自作の数学ライブラリより実行速度が約30倍早くなった話" [level=3] [ref=e426]
+                - generic [ref=e427]:
+                  - generic [ref=e428]: Qiita
+                  - generic "0 いいね" [ref=e429]: ♥ 0
+                  - generic [ref=e430]: 2026/08/14
+                - list [ref=e431]:
+                  - listitem [ref=e432]: C++
+                  - listitem [ref=e433]: Python
+                  - listitem [ref=e434]: 数学
+            - listitem [ref=e435]:
+              - 'button "NVIDIA NOOA 実機検証: sync def の ... は None を返す Qiita 0 いいね 2026/08/14 Python NVIDIA OpenSource AIAgent" [ref=e436] [cursor=pointer]':
+                - 'heading "NVIDIA NOOA 実機検証: sync def の ... は None を返す" [level=3] [ref=e437]'
+                - generic [ref=e438]:
+                  - generic [ref=e439]: Qiita
+                  - generic "0 いいね" [ref=e440]: ♥ 0
+                  - generic [ref=e441]: 2026/08/14
+                - list [ref=e442]:
+                  - listitem [ref=e443]: Python
+                  - listitem [ref=e444]: NVIDIA
+                  - listitem [ref=e445]: OpenSource
+                  - listitem [ref=e446]: AIAgent
+        - generic [ref=e447]:
+          - heading "Zenn Articles" [level=2] [ref=e448]
+          - list [ref=e449]:
+            - listitem [ref=e450]:
+              - button "Claude Code に「同じ指摘を二度させない」仕組みを hook で作った Zenn 33 いいね 2026/08/11 Python" [ref=e451] [cursor=pointer]:
+                - heading "Claude Code に「同じ指摘を二度させない」仕組みを hook で作った" [level=3] [ref=e452]
+                - generic [ref=e453]:
+                  - generic [ref=e454]: Zenn
+                  - generic "33 いいね" [ref=e455]: ♥ 33
+                  - generic [ref=e456]: 2026/08/11
+                - list [ref=e457]:
+                  - listitem [ref=e458]: Python
+            - listitem [ref=e459]:
+              - button "N+1 問題を、発行される SQL を数えて理解する Zenn 19 いいね 2026/08/11 Python" [ref=e460] [cursor=pointer]:
+                - heading "N+1 問題を、発行される SQL を数えて理解する" [level=3] [ref=e461]
+                - generic [ref=e462]:
+                  - generic [ref=e463]: Zenn
+                  - generic "19 いいね" [ref=e464]: ♥ 19
+                  - generic [ref=e465]: 2026/08/11
+                - list [ref=e466]:
+                  - listitem [ref=e467]: Python
+            - listitem [ref=e468]:
+              - button "CLI 上の Claude Code で Computer Use を再現する（追加課金ゼロ、441 行のエージェント） Zenn 20 いいね 2026/08/10 Python" [ref=e469] [cursor=pointer]:
+                - heading "CLI 上の Claude Code で Computer Use を再現する（追加課金ゼロ、441 行のエージェント）" [level=3] [ref=e470]
+                - generic [ref=e471]:
+                  - generic [ref=e472]: Zenn
+                  - generic "20 いいね" [ref=e473]: ♥ 20
+                  - generic [ref=e474]: 2026/08/10
+                - list [ref=e475]:
+                  - listitem [ref=e476]: Python
+            - listitem [ref=e477]:
+              - button "パスワードを知らずに「SSHのパスワード認証が有効か」を判定する—ブラックボックス脆弱性診断の小技集 Zenn 4 いいね 2026/08/13 Python" [ref=e478] [cursor=pointer]:
+                - heading "パスワードを知らずに「SSHのパスワード認証が有効か」を判定する—ブラックボックス脆弱性診断の小技集" [level=3] [ref=e479]
+                - generic [ref=e480]:
+                  - generic [ref=e481]: Zenn
+                  - generic "4 いいね" [ref=e482]: ♥ 4
+                  - generic [ref=e483]: 2026/08/13
+                - list [ref=e484]:
+                  - listitem [ref=e485]: Python
+            - listitem [ref=e486]:
+              - button "制御回路の自動検証とグラフ可視化ツールの実装 Zenn 0 いいね 2026/08/14 Python" [ref=e487] [cursor=pointer]:
+                - heading "制御回路の自動検証とグラフ可視化ツールの実装" [level=3] [ref=e488]
+                - generic [ref=e489]:
+                  - generic [ref=e490]: Zenn
+                  - generic "0 いいね" [ref=e491]: ♥ 0
+                  - generic [ref=e492]: 2026/08/14
+                - list [ref=e493]:
+                  - listitem [ref=e494]: Python
+            - listitem [ref=e495]:
+              - button "【本番ビルド編】後輩ちゃんと学ぶ自作フレームワーク！！ ビルドのエントリポイントは2つある Zenn 0 いいね 2026/08/14 React" [ref=e496] [cursor=pointer]:
+                - heading "【本番ビルド編】後輩ちゃんと学ぶ自作フレームワーク！！ ビルドのエントリポイントは2つある" [level=3] [ref=e497]
+                - generic [ref=e498]:
+                  - generic [ref=e499]: Zenn
+                  - generic "0 いいね" [ref=e500]: ♥ 0
+                  - generic [ref=e501]: 2026/08/14
+                - list [ref=e502]:
+                  - listitem [ref=e503]: React
+            - listitem [ref=e504]:
+              - 'button "React 18→19.2を学ぶ #5 useEffectEventと<Activity>について Zenn 0 いいね 2026/08/14 React" [ref=e505] [cursor=pointer]':
+                - 'heading "React 18→19.2を学ぶ #5 useEffectEventと<Activity>について" [level=3] [ref=e506]'
+                - generic [ref=e507]:
+                  - generic [ref=e508]: Zenn
+                  - generic "0 いいね" [ref=e509]: ♥ 0
+                  - generic [ref=e510]: 2026/08/14
+                - list [ref=e511]:
+                  - listitem [ref=e512]: React
+            - listitem [ref=e513]:
+              - button "useEffectの本来の役割 Zenn 12 いいね 2026/08/09 React" [ref=e514] [cursor=pointer]:
+                - heading "useEffectの本来の役割" [level=3] [ref=e515]
+                - generic [ref=e516]:
+                  - generic [ref=e517]: Zenn
+                  - generic "12 いいね" [ref=e518]: ♥ 12
+                  - generic [ref=e519]: 2026/08/09
+                - list [ref=e520]:
+                  - listitem [ref=e521]: React
+            - listitem [ref=e522]:
+              - button "いいねボタンの応答待ちの間に、ユーザーは平気で次の操作をしていた Zenn 0 いいね 2026/08/13 React" [ref=e523] [cursor=pointer]:
+                - heading "いいねボタンの応答待ちの間に、ユーザーは平気で次の操作をしていた" [level=3] [ref=e524]
+                - generic [ref=e525]:
+                  - generic [ref=e526]: Zenn
+                  - generic "0 いいね" [ref=e527]: ♥ 0
+                  - generic [ref=e528]: 2026/08/13
+                - list [ref=e529]:
+                  - listitem [ref=e530]: React
+            - listitem [ref=e531]:
+              - button "READMEが3つあったので、React と Laravel の2リポジトリを履歴ごとモノレポにした Zenn 0 いいね 2026/08/13 React" [ref=e532] [cursor=pointer]:
+                - heading "READMEが3つあったので、React と Laravel の2リポジトリを履歴ごとモノレポにした" [level=3] [ref=e533]
+                - generic [ref=e534]:
+                  - generic [ref=e535]: Zenn
+                  - generic "0 いいね" [ref=e536]: ♥ 0
+                  - generic [ref=e537]: 2026/08/13
+                - list [ref=e538]:
+                  - listitem [ref=e539]: React
+  - contentinfo [ref=e540]:
+    - generic [ref=e541]:
+      - generic [ref=e542]:
+        - heading "Created by" [level=3] [ref=e543]
+        - paragraph [ref=e544]: Harry
+        - paragraph [ref=e545]: K.Haruki
+      - generic [ref=e546]:
+        - heading "Event" [level=3] [ref=e547]
+        - paragraph [ref=e548]: Open Hack U 2025 Kanazawa
+      - generic [ref=e549]:
+        - heading "Powered by" [level=3] [ref=e550]
+        - list [ref=e551]:
+          - listitem [ref=e552]:
+            - link "Qiita" [ref=e553] [cursor=pointer]:
+              - /url: https://qiita.com/
+          - listitem [ref=e554]:
+            - link "Zenn" [ref=e555] [cursor=pointer]:
+              - /url: https://zenn.dev/

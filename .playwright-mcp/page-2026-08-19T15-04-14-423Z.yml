@@ -1,0 +1,149 @@
+- generic [ref=f3e3]:
+  - navigation [ref=f3e4]:
+    - link "MyTechPulse" [ref=f3e5] [cursor=pointer]:
+      - /url: /
+    - button [active] [ref=f3e10]
+  - generic [ref=f3e197]:
+    - link "機能" [ref=f3e198] [cursor=pointer]:
+      - /url: "#features"
+    - link "仕組み" [ref=f3e199] [cursor=pointer]:
+      - /url: "#how"
+    - link "対応ソース" [ref=f3e200] [cursor=pointer]:
+      - /url: "#sources"
+    - generic [ref=f3e201]:
+      - link "ログイン" [ref=f3e202] [cursor=pointer]:
+        - /url: https://mytechpulse.net/login
+      - link "無料で始める" [ref=f3e203] [cursor=pointer]:
+        - /url: https://mytechpulse.net/register
+  - generic [ref=f3e13]:
+    - heading "技術情報を、 あなた専用に。" [level=1] [ref=f3e14]: 技術情報を、あなた専用に。
+    - paragraph [ref=f3e15]: QiitaやZennなど複数のプラットフォームを横断して、 あなたの興味に合わせた記事だけを自動でピックアップ。
+    - generic [ref=f3e16]:
+      - link "無料アカウントを作成" [ref=f3e17] [cursor=pointer]:
+        - /url: https://mytechpulse.net/register
+      - link "すでにアカウントをお持ちの方" [ref=f3e20] [cursor=pointer]:
+        - /url: https://mytechpulse.net/login
+  - generic [ref=f3e23]:
+    - generic [ref=f3e24]:
+      - paragraph [ref=f3e25]: Personalization
+      - heading "100万人のエンジニアに、 100万通りのフィードを。" [level=2] [ref=f3e26]: 100万人のエンジニアに、100万通りのフィードを。
+      - paragraph [ref=f3e27]: MyTechPulseはタグ登録の組み合わせによって、あなただけのフィードを自動で構築します。同じサービスを使っていても、隣のエンジニアとはまったく異なる記事が届く。それがMyTechPulseの核心です。
+      - generic [ref=f3e28]:
+        - generic [ref=f3e29]: 自分の技術スタックに絞った記事のみ表示
+        - generic [ref=f3e34]: Qiita・Zennを横断して一括収集
+        - generic [ref=f3e39]: タグはいつでも追加・変更可能
+    - generic [ref=f3e44]:
+      - generic [ref=f3e45]:
+        - generic [ref=f3e46]:
+          - generic [ref=f3e47]: TypeScript
+          - generic [ref=f3e48]: Zenn
+        - paragraph [ref=f3e49]: TypeScript 5.5の新機能まとめ
+        - generic [ref=f3e50]:
+          - generic [ref=f3e51]: "@tanaka_dev"
+          - generic [ref=f3e52]: "847"
+      - generic [ref=f3e55]:
+        - generic [ref=f3e56]:
+          - generic [ref=f3e57]: Go
+          - generic [ref=f3e58]: Qiita
+        - paragraph [ref=f3e59]: GoでゼロからWebサーバーを実装する
+        - generic [ref=f3e60]:
+          - generic [ref=f3e61]: "@k_haruki"
+          - generic [ref=f3e62]: "612"
+      - generic [ref=f3e65]:
+        - generic [ref=f3e66]:
+          - generic [ref=f3e67]: AWS
+          - generic [ref=f3e68]: Qiita
+        - paragraph [ref=f3e69]: Lambda + API Gatewayでサーバーレス
+        - generic [ref=f3e70]:
+          - generic [ref=f3e71]: "@aws_nerd"
+          - generic [ref=f3e72]: "430"
+      - generic [ref=f3e75]:
+        - generic [ref=f3e76]:
+          - generic [ref=f3e77]: React
+          - generic [ref=f3e78]: Zenn
+        - paragraph [ref=f3e79]: React 19 Server Actionsを深掘りする
+        - generic [ref=f3e80]:
+          - generic [ref=f3e81]: "@harry_fe"
+          - generic [ref=f3e82]: 1,204
+  - generic [ref=f3e87]:
+    - generic [ref=f3e88]:
+      - paragraph [ref=f3e89]: Problem
+      - heading "情報収集に、 疲れていませんか？" [level=2] [ref=f3e90]: 情報収集に、疲れていませんか？
+      - paragraph [ref=f3e91]:
+        - text: 毎朝 Qiita を開いて、Zenn を開いて、気づけば30分。でも手元に残るのは、読みたい記事じゃなく「なんとなく眺めた記事」ばかり。MyTechPulse なら、
+        - strong [ref=f3e92]: あなたが本当に必要な情報だけ
+        - text: が、毎日自動で届きます。もう巡回しなくていい。
+    - generic [ref=f3e93]:
+      - generic [ref=f3e94]:
+        - generic [ref=f3e95]: 📑
+        - paragraph [ref=f3e96]: 複数サイトを毎朝巡回している
+      - generic [ref=f3e97]:
+        - generic [ref=f3e98]: ⏰
+        - paragraph [ref=f3e99]: 情報収集だけで30分以上かかる
+      - generic [ref=f3e100]:
+        - generic [ref=f3e101]: 🗑️
+        - paragraph [ref=f3e102]: 関係ない記事ばかりで本当に必要なものが埋もれる
+      - generic [ref=f3e103]:
+        - generic [ref=f3e104]: 😓
+        - paragraph [ref=f3e105]: トレンドを見逃すプレッシャーがある
+  - generic [ref=f3e107]:
+    - generic [ref=f3e108]:
+      - paragraph [ref=f3e109]: Features
+      - heading "MyTechPulseでできること" [level=2] [ref=f3e110]
+    - generic [ref=f3e111]:
+      - generic [ref=f3e117]:
+        - heading "パーソナライズドフィード" [level=3] [ref=f3e118]
+        - paragraph [ref=f3e119]: 登録したタグをもとに、あなただけの記事フィードを自動生成。他の人のフィードとはまったく異なる、自分専用のダッシュボードが完成します。
+      - generic [ref=f3e124]:
+        - heading "複数サイトを一画面に" [level=3] [ref=f3e125]
+        - paragraph [ref=f3e126]: Qiita・Zenn など複数のプラットフォームを横断して最新記事を一覧表示。複数タブを行き来する必要がなくなります。
+      - generic [ref=f3e131]:
+        - heading "リアルタイム更新" [level=3] [ref=f3e132]
+        - paragraph [ref=f3e133]: 登録したソースから自動で記事を取得・更新。常に最新の技術トレンドを逃しません。
+      - generic [ref=f3e139]:
+        - heading "学習時間を最適化" [level=3] [ref=f3e140]
+        - paragraph [ref=f3e141]: 読みたい記事だけが手元に届くので、情報収集にかける時間を最小化。本当の学習に集中できます。
+  - generic [ref=f3e143]:
+    - generic [ref=f3e144]:
+      - paragraph [ref=f3e145]: How it works
+      - heading "3ステップで始められる" [level=2] [ref=f3e146]
+    - generic [ref=f3e147]:
+      - generic [ref=f3e148]:
+        - generic [ref=f3e149]: "01"
+        - generic [ref=f3e152]:
+          - heading "アカウント作成" [level=3] [ref=f3e153]
+          - paragraph [ref=f3e154]: メールアドレスだけで30秒で登録完了。クレジットカード不要。
+      - generic [ref=f3e155]:
+        - generic [ref=f3e156]: "02"
+        - generic [ref=f3e159]:
+          - heading "タグを選択" [level=3] [ref=f3e160]
+          - paragraph [ref=f3e161]: 興味のある技術領域のタグを選ぶだけ。あとから自由に変更できます。
+      - generic [ref=f3e162]:
+        - generic [ref=f3e163]: "03"
+        - generic [ref=f3e165]:
+          - heading "フィードを受け取る" [level=3] [ref=f3e166]
+          - paragraph [ref=f3e167]: Qiita・Zennから自動収集された記事があなた専用のダッシュボードに届きます。
+  - generic [ref=f3e169]:
+    - paragraph [ref=f3e170]: Sources
+    - heading "対応プラットフォーム" [level=2] [ref=f3e171]
+    - paragraph [ref=f3e172]: 日本の開発者コミュニティが集まる主要プラットフォームに対応。今後も拡大予定。
+    - generic [ref=f3e173]:
+      - generic [ref=f3e174]:
+        - generic [ref=f3e175]: Q
+        - generic [ref=f3e176]:
+          - paragraph [ref=f3e177]: Qiita
+          - paragraph [ref=f3e178]: エンジニアの技術情報共有コミュニティ
+      - generic [ref=f3e179]:
+        - generic [ref=f3e180]: Z
+        - generic [ref=f3e181]:
+          - paragraph [ref=f3e182]: Zenn
+          - paragraph [ref=f3e183]: エンジニアのための情報共有コミュニティ
+  - generic [ref=f3e185]:
+    - heading "今すぐ無料で 始めてみよう" [level=2] [ref=f3e186]: 今すぐ無料で始めてみよう
+    - paragraph [ref=f3e187]: クレジットカード不要・30秒で登録完了。あなた専用の技術情報フィードをすぐに作れます。
+    - link "無料アカウントを作成" [ref=f3e188] [cursor=pointer]:
+      - /url: https://mytechpulse.net/register
+  - contentinfo [ref=f3e191]:
+    - generic [ref=f3e192]:
+      - paragraph [ref=f3e193]: Open Hack U 2025 KANAZAWA
+      - paragraph [ref=f3e194]: Created by Harry & K.Haruki
