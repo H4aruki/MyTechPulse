@@ -27,6 +27,10 @@ API込みで丸ごと動かす場合は `docker compose up -d --build`（`backen
 - テスト: pytestスイートは無い。`backend/tests/test_SQL.py` は手動実行のDB接続確認スクリプトのみ
 - 設定: `backend/.env` に `DATABASE_URL`、`QIITA_ACCESS_TOKEN`、`SECRET_KEY`（JWT署名鍵。未設定だと起動失敗する）が必要（pydantic-settingsの `app/config.py` が読む）
 
+## Issue・PR作成時の文章表現
+
+Issue・PRのタイトルと本文は、専門用語・関数名・変数名・クラス名の使用を極力避け、平易な日本語で書く。「何が起きているか／何をしたいか」を非エンジニアでも読める言葉で説明する。コード上の具体的な箇所を示す必要がある場合のみ、`file_path:line_number` の形式で参照する程度に留め、関数名を文中で多用しない。
+
 ## アーキテクチャ
 
 バックエンドはレイヤード構成。リクエストは routes → services → crud → models の順に流れる:
