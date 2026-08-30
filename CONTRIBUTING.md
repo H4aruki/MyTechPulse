@@ -109,14 +109,17 @@ git config commit.template .gitmessage.txt
 - **AI による PR の承認（approve）・マージは禁止**。承認とマージは必ず人間が行う。
 - AI は PR の作成・説明・修正提案までを担い、最終的な可否判断は人間が持つ。
 
-> **補足**: `main` を守る設定（直接 push の禁止・PR 必須・自動チェックの通過を必須にする）は、リポジトリオーナーが GitHub 側で行います。手順は次の4章にあります。
+> **補足**: `main` を守る設定（直接 push の禁止・PR 必須・自動チェックの通過を必須にする）は GitHub 側で設定済みです。内容は次の4章にあります。
 
 ---
 
 ## 4. 自動チェック（CI）
 
-プルリクエストを作る／更新するたびに、GitHub Actions が自動でチェックを走らせます。
+**どの枝に push しても、どの枝あてにプルリクエストを作っても**、GitHub Actions が自動でチェックを走らせます。
 定義は `.github/workflows/ci.yml` にあります。
+
+プルリクエストを開いている枝に push すると、「push による実行」と「プルリクエスト更新による実行」の
+2回動きます。中身は同じで、1回30秒ほどです。
 
 | チェック | 中身 | 落ちたら |
 |----------|------|----------|
@@ -144,24 +147,28 @@ npx tsc -b
 厳しさは意図的に段階を分けてあり、いまは「明らかな誤り」だけを必須にしています。
 既存コードを一括で整え終えたら、見た目のズレも必須に引き上げます。
 
-### `main` を守る設定（リポジトリオーナー向け・一度だけ）
+### `main` を守る設定（設定済み）
 
-**この設定は、上のチェックが一度でも実行されたあとに行ってください。**
-一度も走っていないチェックは選択肢に出てきません。
+`main` には次のルールがかかっています。設定場所は **Settings → Rules → Rulesets → `main`** です
+（古い方の *Settings → Branches* ではありません）。
 
-1. リポジトリの **Settings → Branches → Add branch protection rule**
-2. **Branch name pattern** に `main` と入力
-3. **Require a pull request before merging** にチェック
-   - レビュー必須人数は運用に合わせて決める（1人開発なら 0 のままでも、直接 push は禁止できる）
-4. **Require status checks to pass before merging** にチェック
-   - **Require branches to be up to date before merging** にもチェック（古い状態のまま取り込むのを防ぐ）
-   - 検索欄で次の2つを選ぶ
-     - `バックエンドの書き方チェック`
-     - `フロントエンドの書き方チェック`
-5. **Do not allow bypassing the above settings** にチェック（オーナー自身にもルールを適用する場合）
-6. **Create** で保存
+| ルール | 内容 |
+|--------|------|
+| Restrict deletions | `main` を消せない |
+| Block force pushes | 履歴を書き換える強制 push を禁止 |
+| Require a pull request before merging | 直接 push できない。承認の必須人数は 0（1人開発のため） |
+| Require status checks to pass | **上の2つのチェックが緑でないと取り込めない** |
 
-これで、チェックが赤いプルリクエストは取り込みボタンが押せなくなります。
+例外（bypass）は誰にも許可していないため、オーナー自身もこのルールに従います。
+GitHub Actions 側の障害などでどうしても取り込めない場合は、
+一時的に Ruleset の enforcement を `Disabled` に切り替えて対応してください。
+
+取り込む前に `main` の最新状態と合わせ直すこと（Require branches to be up to date）は、
+手間の方が勝つため必須にしていません。同時に走るプルリクエストが増えてきたら入れ直すのが良い判断です。
+
+> **注意**: 必須にできるチェックは、**一度でも実行されたことのあるもの**だけです。
+> ジョブの表示名（`.github/workflows/ci.yml` の `name:`）を変えると、
+> 必須指定が古い名前のまま残って取り込めなくなります。名前を変えるときは Ruleset 側も直してください。
 
 ---
 

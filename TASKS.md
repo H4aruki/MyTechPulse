@@ -59,11 +59,15 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - [x] `_redirects`によるSPA直リンクを修正（PR#73）。**Pagesは書き換え先から`.html`と`/index`を剥がすため`/app/index.html`はループ判定でルールごと無視される**。SPAエントリを`app.html`へ移し`/app/*  /app  200`とした
 - [x] `CORS_ALLOWED_ORIGINS`に `https://mytechpulse.net,https://www.mytechpulse.net,https://mytechpulse.pages.dev` を設定
 
-### #91 プルリクエストのたびに書き方チェックを自動で走らせる
-- [ ] `.github/workflows/ci.yml`追加（サーバー側=Ruff、画面側=oxlint＋型チェック）
-- [ ] **オーナー作業**: `main`の保護設定でこの2つのチェックを必須にする（手順は`CONTRIBUTING.md`の4章）
+### #91 プルリクエストのたびに書き方チェックを自動で走らせる ✅ **完了（2026-08-30）**（PR#92）
+- [x] `.github/workflows/ci.yml`追加（サーバー側=Ruff、画面側=oxlint＋型チェック）
+- [x] `main`のRulesetにチェック通過の必須条件を追加（2026-08-30）。**古い方のBranch protectionではなくRulesetsを使っている**
 - [ ] 見た目のズレ（27ファイル）を一括で整えてから、整形チェックも必須に引き上げる
 - テストの自動実行とカバレッジは、テストコードを書く段階で別Issueにする（現時点でテストが0件のため）
+
+### #93 main以外の枝でも自動チェックを走らせる
+- [ ] `ci.yml`のきっかけから枝の絞り込みを外す（どの枝へのpush・どの枝あてのPRでも実行）
+- [ ] `CONTRIBUTING.md`の保護設定手順をRulesets版に修正
 
 ### #54 mainマージ時にLightsailへ自動デプロイする（依存する前工程はすべて完了済み）
 - [ ] **オーナー作業**: デプロイ用SSH鍵生成・Secrets登録
