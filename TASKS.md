@@ -4,7 +4,7 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 
 優先度は3分類: **A=デプロイのブロッカー**（本番公開前に必須）/ **B=ユーザー獲得のブロッカー**（一般公開・宣伝開始前に必須）/ **C=後回し可**（機能追加・コード品質）。
 
-最終更新: 2026-08-18
+最終更新: 2026-08-30
 
 ## A. デプロイのブロッカー
 
@@ -80,10 +80,23 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
   - 詳細は`CONTRIBUTING.md`の4章に記載
 
 ### #95 CIが緑のときだけCloudflare Pagesにビルドさせる
-- [ ] **オーナー作業**: Cloudflare APIトークン発行 → GitHubのSecretsに登録
-- [ ] Cloudflare側のGit連携による自動ビルドを停止する
-- [ ] GitHub Actionsから配る形に変更し、書き方チェックが緑のときだけ動くようにする
-- 現状はCloudflareがGitHubと直接つながっており、**CIの結果を待たずに独自にビルドして公開している**
+現状はCloudflareがGitHubと直接つながっており、**CIの結果を待たずに独自にビルドして公開している**。
+公開の主導権をGitHub Actions側へ移し、書き方チェックが両方とも緑のときだけ公開する形にする。
+
+**取りかかる順番が重要**（順番を間違えると、公開が止まるか `main` が赤くなる）:
+
+- [ ] **オーナー作業**: Cloudflare APIトークンを発行し、GitHubのSecretsに登録する
+  - トークンの権限は **Account → Cloudflare Pages → Edit** のみで足りる（対象アカウントを絞る）
+  - Secrets名は `CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` の2つ。ワークフロー側がこの名前で読む
+- [ ] 公開の工程を`ci.yml`に追加してPRを取り込む（**トークン登録より先に取り込むと`main`が必ず赤くなる**）
+- [ ] `main`での実行が緑になり、実際に画面が更新されることを確認する
+- [ ] **オーナー作業**: 確認できてから Cloudflare 側のGit連携を切る（Pagesプロジェクト → Settings → Builds → Git連携の解除）
+  - **先に切ると、公開手段が一時的に無くなる**。必ず後にする
+
+**設定上の注意**:
+- 接続先APIのURL（`VITE_API_BASE_URL`）は**組み立て時に中へ埋め込まれる**。組み立ての場所がGitHubへ移るため、
+  Cloudflare側の設定画面に入れてある値は使われなくなる。`ci.yml`の公開ジョブに直接書いてある
+- Pagesプロジェクト名は `mytechpulse`、本番の枝名は `main` を前提にしている（`--project-name` / `--branch`）
 
 ### #54 mainマージ時にLightsailへ自動デプロイする（依存する前工程はすべて完了済み）
 - [ ] **オーナー作業**: デプロイ用SSH鍵生成・Secrets登録

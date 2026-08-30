@@ -11,10 +11,12 @@ on:
     types: [opened, reopened]
   push:
 
-# 同じブランチに続けて push したときは、古い実行を打ち切る（実行時間の節約）
+# 同じブランチに続けて push したときは、古い実行を打ち切る（実行時間の節約）。
+# ただし main は打ち切らない。main の実行には公開の工程が含まれるので、
+# 配信の途中で止められると中途半端な状態が残りかねないため。
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # 読み取りだけで足りる。既定より権限を絞っておく
 permissions:
@@ -75,3 +77,44 @@ jobs:
       # この工程は画面側だけに存在する
       - name: 型チェック
         run: npx tsc -b
+
+  deploy-frontend:
+    name: 画面の公開
+    # 上の2つの書き方チェックが両方とも成功したときだけ動く。
+    # どちらかが赤ければこの工程は実行されず、公開もされない
+    needs: [backend-lint, frontend-lint]
+    # main へ取り込まれたときだけ公開する。
+    # 作業用の枝への push やプルリクエストでは動かさない
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 依存の導入
+        working-directory: frontend
+        run: npm ci
+
+      # 接続先のURLは組み立てのときに中へ埋め込まれるため、ここで渡す必要がある。
+      # これまでは Cloudflare 側の設定画面に置いていたが、組み立てを GitHub 側へ
+      # 移したことで Cloudflare 側の値は使われなくなる
+      - name: 画面の組み立て
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: https://api.mytechpulse.net
+        run: npm run build
+
+      # 出来上がった一式（frontend/dist）を Cloudflare Pages へ送る。
+      # --branch=main を付けることで、本番の公開先として扱われる
+      - name: Cloudflare Pages へ公開
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: frontend
+          command: pages deploy dist --project-name=mytechpulse --branch=main
