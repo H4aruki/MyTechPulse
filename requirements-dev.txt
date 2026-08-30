@@ -1,0 +1,6 @@
+# 開発とCIでの品質チェック専用の依存。
+# 本番コンテナ（backend/Dockerfile）には入れない（本体の依存は requirements.txt）。
+#
+# 導入:
+#   backend/venv/Scripts/python.exe -m pip install -r requirements-dev.txt
+ruff==0.16.5

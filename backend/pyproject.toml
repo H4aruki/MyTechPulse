@@ -1,0 +1,31 @@
+# バックエンド（Python）の品質チェック設定。
+# Ruff は「書き方の統一」と「あやしい書き方の検出」を1つで兼ねる道具で、
+# GitHub Actions（.github/workflows/ci.yml）とローカルの両方から同じ設定で使う。
+#
+# ローカルで走らせる:
+#   backend/venv/Scripts/python.exe -m pip install -r ../requirements-dev.txt
+#   backend/venv/Scripts/python.exe -m ruff check backend      （リポジトリルートから）
+#   backend/venv/Scripts/python.exe -m ruff format backend     （見た目を自動で整える）
+
+[tool.ruff]
+line-length = 100
+# 本番コンテナ（backend/Dockerfile）が python:3.12-slim なので、それに合わせて判定する
+target-version = "py312"
+# venv の中身は自分たちのコードではないので見ない
+exclude = ["venv", "__pycache__"]
+
+[tool.ruff.lint]
+# いま必須にしているのは「明らかな誤り」だけ:
+#   E4/E7/E9 = import の書き方の誤り、構文エラーなど
+#   F        = 未定義の名前、消し忘れた読み込み、重複した定義など
+#
+# import の並び順（I）や新しい書き方への置き換え（UP）は、
+# 既存コードの修正量が大きいため意図的に外してある。
+# 一括で整え終えたタイミングで段階的に足していく。
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# __init__.py の読み込みは「まとめて外へ渡す」ための再公開であり、
+# そのファイルの中で使っていなくても消してはいけない。
+# 特に models/__init__.py は、ここで読み込むことでテーブル定義が登録される
+"__init__.py" = ["F401"]

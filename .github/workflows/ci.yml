@@ -1,0 +1,74 @@
+name: CI
+
+# 取り込む前（プルリクエスト）と、取り込んだ後（main）の両方で走らせる。
+# main でも走らせるのは、取り込み後の状態が壊れていないかを履歴として残すため。
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# 同じブランチに続けて push したときは、古い実行を打ち切る（実行時間の節約）
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# 読み取りだけで足りる。既定より権限を絞っておく
+permissions:
+  contents: read
+
+jobs:
+  backend-lint:
+    name: バックエンドの書き方チェック
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # 本番コンテナ（backend/Dockerfile）と同じ 3.12 に合わせる
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      # ruff はコードを読むだけで実行はしないため、アプリ本体の依存は入れなくてよい
+      - name: チェック用ツールの導入
+        run: pip install -r requirements-dev.txt
+
+      # 判定基準は backend/pyproject.toml にある。
+      # --output-format=github を付けると、指摘が差分の該当行に直接表示される
+      - name: 明らかな誤りの検出
+        run: ruff check backend --output-format=github
+
+      # 見た目のズレは既存コードに多数あるため、いまは落とさず一覧だけ残す。
+      # 一括で整え終えたら continue-on-error を外して必須に引き上げる
+      - name: 見た目のズレを一覧表示（まだ必須にしない）
+        continue-on-error: true
+        run: ruff format --check --diff backend
+
+  frontend-lint:
+    name: フロントエンドの書き方チェック
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # npm ci は package-lock.json のとおりに入れる（npm install と違い勝手に更新しない）
+      - name: 依存の導入
+        run: npm ci
+
+      - name: 書き方チェック
+        run: npm run lint
+
+      # 型の食い違いを検出する。Python にはコンパイルが無いので、
+      # この工程は画面側だけに存在する
+      - name: 型チェック
+        run: npx tsc -b

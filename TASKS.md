@@ -59,6 +59,12 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - [x] `_redirects`によるSPA直リンクを修正（PR#73）。**Pagesは書き換え先から`.html`と`/index`を剥がすため`/app/index.html`はループ判定でルールごと無視される**。SPAエントリを`app.html`へ移し`/app/*  /app  200`とした
 - [x] `CORS_ALLOWED_ORIGINS`に `https://mytechpulse.net,https://www.mytechpulse.net,https://mytechpulse.pages.dev` を設定
 
+### #91 プルリクエストのたびに書き方チェックを自動で走らせる
+- [ ] `.github/workflows/ci.yml`追加（サーバー側=Ruff、画面側=oxlint＋型チェック）
+- [ ] **オーナー作業**: `main`の保護設定でこの2つのチェックを必須にする（手順は`CONTRIBUTING.md`の4章）
+- [ ] 見た目のズレ（27ファイル）を一括で整えてから、整形チェックも必須に引き上げる
+- テストの自動実行とカバレッジは、テストコードを書く段階で別Issueにする（現時点でテストが0件のため）
+
 ### #54 mainマージ時にLightsailへ自動デプロイする（依存する前工程はすべて完了済み）
 - [ ] **オーナー作業**: デプロイ用SSH鍵生成・Secrets登録
 - [ ] mainマージ→LightsailへSSHデプロイするワークフロー追加
@@ -115,7 +121,7 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 
 ### フェーズ判断
 - [ ] Gitブランチルール運用の定着（実践フェーズ）
-- [ ] フェーズ1（DB記事キャッシュ・CI/CD整備）への移行判断。**DB記事キャッシュは#66として起票済み**、CI/CDは#54でAに含まれる
+- [ ] フェーズ1（DB記事キャッシュ・CI/CD整備）への移行判断。**DB記事キャッシュは#66として起票済み**、CI/CDは#54（自動デプロイ）と#91（書き方チェック）でAに含まれる
 
 ## 直近完了（記録）
 
