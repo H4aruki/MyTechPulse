@@ -59,11 +59,31 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - [x] `_redirects`によるSPA直リンクを修正（PR#73）。**Pagesは書き換え先から`.html`と`/index`を剥がすため`/app/index.html`はループ判定でルールごと無視される**。SPAエントリを`app.html`へ移し`/app/*  /app  200`とした
 - [x] `CORS_ALLOWED_ORIGINS`に `https://mytechpulse.net,https://www.mytechpulse.net,https://mytechpulse.pages.dev` を設定
 
-### #91 プルリクエストのたびに書き方チェックを自動で走らせる
-- [ ] `.github/workflows/ci.yml`追加（サーバー側=Ruff、画面側=oxlint＋型チェック）
-- [ ] **オーナー作業**: `main`の保護設定でこの2つのチェックを必須にする（手順は`CONTRIBUTING.md`の4章）
+### #91 プルリクエストのたびに書き方チェックを自動で走らせる ✅ **完了（2026-08-30）**（PR#92）
+- [x] `.github/workflows/ci.yml`追加（サーバー側=Ruff、画面側=oxlint＋型チェック）
+- [x] `main`のRulesetにチェック通過の必須条件を追加（2026-08-30）。**古い方のBranch protectionではなくRulesetsを使っている**
 - [ ] 見た目のズレ（27ファイル）を一括で整えてから、整形チェックも必須に引き上げる
 - テストの自動実行とカバレッジは、テストコードを書く段階で別Issueにする（現時点でテストが0件のため）
+
+### #93 main以外の枝でも自動チェックを走らせる
+- [ ] `ci.yml`のきっかけから枝の絞り込みを外す（どの枝へのpush・どの枝あてのPRでも実行）
+- [ ] PR側のきっかけは「作られたとき」だけに限定。**更新分はpushが拾い、その結果がそのまま必須条件として扱われる**ので二重実行を避けられる
+- [ ] `CONTRIBUTING.md`の保護設定手順をRulesets版に修正
+
+### mainの保護設定（Ruleset）に入れたもの・保留にしたもの
+- [x] チェック通過を必須に（2026-08-30）
+- [x] 取り込み方をSquashのみに制限（2026-08-30）。**1機能=1コミットを厳守するため**。PR#92は通常のマージで入ってしまっていた
+- [ ] **Require branches to be up to date を追加する（保留）**
+  - **根拠**: 別々のPRがそれぞれ単独では緑でも、順に取り込むと壊れる事故を防げる（片方が「古いmain」を前提に緑になっているため）
+  - **いま入れない理由**: mainが動くたびに開いている全PRで更新ボタンを押して再確認を待つ必要が出る。同時PRが1〜2本の現状では手間が上回る
+  - **入れどきの目安**: 同時に開くPRが3本以上常態化したとき、または複数人開発になったとき
+  - 詳細は`CONTRIBUTING.md`の4章に記載
+
+### #95 CIが緑のときだけCloudflare Pagesにビルドさせる
+- [ ] **オーナー作業**: Cloudflare APIトークン発行 → GitHubのSecretsに登録
+- [ ] Cloudflare側のGit連携による自動ビルドを停止する
+- [ ] GitHub Actionsから配る形に変更し、書き方チェックが緑のときだけ動くようにする
+- 現状はCloudflareがGitHubと直接つながっており、**CIの結果を待たずに独自にビルドして公開している**
 
 ### #54 mainマージ時にLightsailへ自動デプロイする（依存する前工程はすべて完了済み）
 - [ ] **オーナー作業**: デプロイ用SSH鍵生成・Secrets登録
