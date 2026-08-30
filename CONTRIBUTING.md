@@ -109,10 +109,62 @@ git config commit.template .gitmessage.txt
 - **AI による PR の承認（approve）・マージは禁止**。承認とマージは必ず人間が行う。
 - AI は PR の作成・説明・修正提案までを担い、最終的な可否判断は人間が持つ。
 
-> **補足**: GitHub 側の `main` ブランチ保護設定（直 push 禁止・PR 必須・レビュー必須）は、リポジトリオーナーが別途設定します。設定は GitHub の *Settings → Branches → Branch protection rules* から行えます。
+> **補足**: `main` を守る設定（直接 push の禁止・PR 必須・自動チェックの通過を必須にする）は、リポジトリオーナーが GitHub 側で行います。手順は次の4章にあります。
 
 ---
 
-## 4. 迷ったら
+## 4. 自動チェック（CI）
+
+プルリクエストを作る／更新するたびに、GitHub Actions が自動でチェックを走らせます。
+定義は `.github/workflows/ci.yml` にあります。
+
+| チェック | 中身 | 落ちたら |
+|----------|------|----------|
+| バックエンドの書き方チェック | Ruff で、未定義の名前・消し忘れた読み込み・構文の誤りを検出 | **取り込めない**（直す必要がある） |
+| （同上・見た目のズレ） | 字下げや引用符の統一のズレを一覧表示 | 落とさない（いまは参考情報のみ） |
+| フロントエンドの書き方チェック | oxlint と、型の食い違いの検出 | **取り込めない**（直す必要がある） |
+
+テストの自動実行とカバレッジ計測は、テストコードを書く段階で追加します（現時点ではテストが1件も無いため入れていません）。
+
+### 手元で同じチェックを走らせる
+
+```bash
+# バックエンド（初回のみ導入）
+backend/venv/Scripts/python.exe -m pip install -r requirements-dev.txt
+backend/venv/Scripts/python.exe -m ruff check backend      # 誤りの検出
+backend/venv/Scripts/python.exe -m ruff format backend     # 見た目を自動で整える
+
+# フロントエンド
+cd frontend
+npm run lint
+npx tsc -b
+```
+
+判定の基準は `backend/pyproject.toml` と `frontend/.oxlintrc.json` に書いてあります。
+厳しさは意図的に段階を分けてあり、いまは「明らかな誤り」だけを必須にしています。
+既存コードを一括で整え終えたら、見た目のズレも必須に引き上げます。
+
+### `main` を守る設定（リポジトリオーナー向け・一度だけ）
+
+**この設定は、上のチェックが一度でも実行されたあとに行ってください。**
+一度も走っていないチェックは選択肢に出てきません。
+
+1. リポジトリの **Settings → Branches → Add branch protection rule**
+2. **Branch name pattern** に `main` と入力
+3. **Require a pull request before merging** にチェック
+   - レビュー必須人数は運用に合わせて決める（1人開発なら 0 のままでも、直接 push は禁止できる）
+4. **Require status checks to pass before merging** にチェック
+   - **Require branches to be up to date before merging** にもチェック（古い状態のまま取り込むのを防ぐ）
+   - 検索欄で次の2つを選ぶ
+     - `バックエンドの書き方チェック`
+     - `フロントエンドの書き方チェック`
+5. **Do not allow bypassing the above settings** にチェック（オーナー自身にもルールを適用する場合）
+6. **Create** で保存
+
+これで、チェックが赤いプルリクエストは取り込みボタンが押せなくなります。
+
+---
+
+## 5. 迷ったら
 
 - どの type / scope にすべきか迷ったら、近い意味のものを選び、本文で補足すれば十分です。厳密さより「後から履歴を読んで意図が分かること」を優先してください。
