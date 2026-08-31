@@ -99,9 +99,21 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - **トークンに有効期限を付けた場合、切れた日から公開だけが静かに止まる**。今回は無期限で発行している
 - 発行したトークンは**本人に紐づく**もの。共同開発になったら、契約に紐づくトークン（Manage Account → Account API Tokens）へ作り直してSecretsの値を差し替える。名前は同じなので`ci.yml`は触らなくてよい
 
-### #54 mainマージ時にLightsailへ自動デプロイする（依存する前工程はすべて完了済み）
-- [ ] **オーナー作業**: デプロイ用SSH鍵生成・Secrets登録
-- [ ] mainマージ→LightsailへSSHデプロイするワークフロー追加
+### #54 mainマージ時にLightsailへ自動デプロイする ✅ **完了（2026-08-31）**（PR#100）
+- [x] **オーナー作業**: デプロイ専用の鍵を作成し、GitHubのSecretsに登録（2026-08-31）
+  - 既存の `mytechpulse_lightsail` とは別に `mytechpulse_deploy` を新規作成。**用途ごとに分けておくと、漏れたときにその鍵だけ切り離せる**
+  - **パスフレーズは空**（自動処理は入力できないため）
+  - Secrets名は `LIGHTSAIL_SSH_KEY` / `LIGHTSAIL_HOST` / `LIGHTSAIL_USER`
+  - **鍵は1行の文字列に変換してから登録している**。複数行のまま渡すとWindows/Linuxの改行の違いで壊れるため。戻す処理は`ci.yml`側にある
+- [x] `main`のチェックが緑のときだけサーバーへつなぎ、`git pull --ff-only && docker compose up -d --build` を実行するジョブを`ci.yml`に追加
+- [x] 反映後にAPIが応答するところまで確認する工程を入れた（建て直しの命令が通っても中で落ちていれば失敗扱いにする）
+
+**運用上おぼえておくこと**:
+- **サーバーを作り直すと接続できなくなる**。`ci.yml`に本番サーバーの身元（ホスト鍵）を控えてあるため。再取得は `ssh-keyscan -t ed25519 <IP>`
+- サーバー上のリポジトリは `~/MyTechPulse` を前提にしている。置き場所を変えるなら`ci.yml`も直す
+- 本番の `.env` はGit管理外なので、取り込みでは触られない
+- `git pull --ff-only` にしてあるため、**サーバー側に想定外の変更があるとその場で止まる**（黙って混ざらない）
+- 鍵を無効にしたいときは、サーバーの `~/.ssh/authorized_keys` から該当行を消す
 
 ### #55 DEPLOYMENT.mdを作成する（Lightsail運用手順＋移行ランブック）
 - [ ] `docs/deploy/lightsail-provisioning.md`を統合＋スケールアップ/移行の判断基準＋さくらVPS移行ランブック＋READMEからのリンク

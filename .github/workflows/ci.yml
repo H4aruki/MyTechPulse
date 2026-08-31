@@ -122,3 +122,67 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: frontend
           command: pages deploy dist --project-name=mytechpulse --branch=main
+
+  deploy-backend:
+    name: サーバーの反映
+    # 画面の公開と同じ条件。書き方チェックが両方とも緑のときだけ動く
+    needs: [backend-lint, frontend-lint]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # 建て直しが詰まったまま待ち続けないよう上限を置く（通常は2〜3分で終わる）
+    timeout-minutes: 15
+    steps:
+      # 鍵は改行が壊れやすいので、1行の文字列にした状態で預けてある。
+      # ここで元のファイルに戻す
+      - name: 鍵の用意
+        env:
+          SSH_KEY_B64: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "$SSH_KEY_B64" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # つなぐ相手が本当に本番サーバーかを、あらかじめ控えた身元と照合する。
+          # 控えずに毎回相手の言い分を信じる書き方だと、なりすましに気づけない。
+          #
+          # サーバーを作り直すとこの値は変わる。そのときは接続できなくなるので、
+          # 新しい値に書き換えること（取得方法: ssh-keyscan -t ed25519 <IP>）
+          printf '%s ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN+as38LhXOjDSb2DP/yi8npPGDVwTiBwqw1okewupf6\n' "$HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      # サーバー上でやることは、いま手作業でやっているのと同じ2つ。
+      # 本番の設定ファイル（.env）はGit管理の外にあるため、取り込みでは触られない
+      - name: 最新を取り込んで建て直す
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LOGIN_USER: ${{ secrets.LIGHTSAIL_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$LOGIN_USER@$HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd ~/MyTechPulse
+
+          # --ff-only にしておくと、サーバー側に想定外の変更があるときは
+          # 黙って混ぜずにその場で止まる
+          git pull --ff-only
+
+          docker compose up -d --build
+
+          # 古い版が溜まるとディスクを圧迫する（本番は1GBプラン）
+          docker image prune -f
+          REMOTE
+
+      # 建て直しの命令が通っても、中で落ちていれば意味がない。
+      # 実際に応答が返るところまで見て初めて成功とみなす
+      - name: 反映後にAPIが応答するか確認
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fsS -o /dev/null -m 10 https://api.mytechpulse.net/; then
+              echo "APIが応答した（${i}回目の確認）"
+              exit 0
+            fi
+            echo "まだ応答しない。5秒待って確認し直す（${i}/10）"
+            sleep 5
+          done
+          echo "時間切れ。APIが応答しないまま50秒が経過した"
+          exit 1
