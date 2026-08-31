@@ -4,7 +4,7 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 
 優先度は3分類: **A=デプロイのブロッカー**（本番公開前に必須）/ **B=ユーザー獲得のブロッカー**（一般公開・宣伝開始前に必須）/ **C=後回し可**（機能追加・コード品質）。
 
-最終更新: 2026-08-30
+最終更新: 2026-08-31
 
 ## A. デプロイのブロッカー
 
@@ -52,9 +52,11 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - [ ] 記事の日次バッチ（#66）を動かした後にメモリを再測する。ピークはそこで出る
 
 ### Cloudflare Pagesへのフロントエンドデプロイ ✅ **完了（2026-08-17）**（#53 closed）
-- [x] Pagesプロジェクト作成（2026-08-13。root=`frontend/`、build=`npm run build`、output=`dist`、フレームワークプリセット=なし、非本番ブランチのビルド=オフ）。**Workersの作成フロー（`npx wrangler deploy`）ではなくPagesを選ぶこと** — 静的成果物を配るだけで`frontend/public/_redirects`をそのまま解釈できる
+- [x] Pagesプロジェクト作成（2026-08-13。root=`frontend/`、build=`npm run build`、output=`dist`、フレームワークプリセット=なし）。**Workersの作成フロー（`npx wrangler deploy`）ではなくPagesを選ぶこと** — 静的成果物を配るだけで`frontend/public/_redirects`をそのまま解釈できる
+  - **旧記録の「非本番ブランチのビルド=オフ」は誤りだった**（#95で判明）。実際には作業用の枝でもCloudflareがビルドし、下見用URLを作っていた。**2026-08-31にGit連携ごと解除したため、この設定は存在しない**
 - [x] 初回デプロイ成功。公開URL: **https://mytechpulse.pages.dev/**
 - [x] `VITE_API_BASE_URL`に `https://api.mytechpulse.net` を設定（Pagesの環境変数・テキスト型。**ビルド時に埋め込まれるので変更後は再デプロイが必須**）
+  - **2026-08-31以降、この値は使われない**。組み立てがGitHub Actions側へ移ったため、`ci.yml`の公開ジョブに書いた値が効く（#95）。Cloudflare側に残っている設定は無害だが紛らわしいので、いずれ消す
 - [x] `mytechpulse.net` / `www.mytechpulse.net` をカスタムドメインとして追加
 - [x] `_redirects`によるSPA直リンクを修正（PR#73）。**Pagesは書き換え先から`.html`と`/index`を剥がすため`/app/index.html`はループ判定でルールごと無視される**。SPAエントリを`app.html`へ移し`/app/*  /app  200`とした
 - [x] `CORS_ALLOWED_ORIGINS`に `https://mytechpulse.net,https://www.mytechpulse.net,https://mytechpulse.pages.dev` を設定
@@ -65,10 +67,10 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 - [ ] 見た目のズレ（27ファイル）を一括で整えてから、整形チェックも必須に引き上げる
 - テストの自動実行とカバレッジは、テストコードを書く段階で別Issueにする（現時点でテストが0件のため）
 
-### #93 main以外の枝でも自動チェックを走らせる
-- [ ] `ci.yml`のきっかけから枝の絞り込みを外す（どの枝へのpush・どの枝あてのPRでも実行）
-- [ ] PR側のきっかけは「作られたとき」だけに限定。**更新分はpushが拾い、その結果がそのまま必須条件として扱われる**ので二重実行を避けられる
-- [ ] `CONTRIBUTING.md`の保護設定手順をRulesets版に修正
+### #93 main以外の枝でも自動チェックを走らせる ✅ **完了（2026-08-30）**（PR#94）
+- [x] `ci.yml`のきっかけから枝の絞り込みを外す（どの枝へのpush・どの枝あてのPRでも実行）
+- [x] PR側のきっかけは「作られたとき」だけに限定。**更新分はpushが拾い、その結果がそのまま必須条件として扱われる**ので二重実行を避けられる
+- [x] `CONTRIBUTING.md`の保護設定手順をRulesets版に修正
 
 ### mainの保護設定（Ruleset）に入れたもの・保留にしたもの
 - [x] チェック通過を必須に（2026-08-30）
@@ -79,24 +81,23 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
   - **入れどきの目安**: 同時に開くPRが3本以上常態化したとき、または複数人開発になったとき
   - 詳細は`CONTRIBUTING.md`の4章に記載
 
-### #95 CIが緑のときだけCloudflare Pagesにビルドさせる
-現状はCloudflareがGitHubと直接つながっており、**CIの結果を待たずに独自にビルドして公開している**。
-公開の主導権をGitHub Actions側へ移し、書き方チェックが両方とも緑のときだけ公開する形にする。
+### #95 CIが緑のときだけCloudflare Pagesにビルドさせる ✅ **完了（2026-08-31）**（PR#96）
+公開の主導権をCloudflare側からGitHub Actions側へ移した。書き方チェックの2つが両方とも緑のときだけ公開の工程が動く。
 
-**取りかかる順番が重要**（順番を間違えると、公開が止まるか `main` が赤くなる）:
+- [x] **オーナー作業**: Cloudflare APIトークンを発行し、GitHubのSecretsに登録（2026-08-30）
+  - 権限は **Account → Cloudflare Pages → Edit** の1行のみ。対象アカウントも1つに絞ってある
+  - Secrets名は `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`。`ci.yml`がこの名前で読む
+  - **クライアントIPフィルタは空にすること**。実行元はGitHub側の使い捨てマシンで毎回IPが変わる
+- [x] 公開の工程を`ci.yml`に追加（`needs`で書き方チェック2つを条件にし、`main`へのpushだけに限定）
+- [x] `main`での初回実行が成功（2026-08-31。11ファイル＋`_redirects`を配信、所要13秒）
+- [x] **オーナー作業**: Cloudflare側のGit連携を解除（2026-08-31）
 
-- [ ] **オーナー作業**: Cloudflare APIトークンを発行し、GitHubのSecretsに登録する
-  - トークンの権限は **Account → Cloudflare Pages → Edit** のみで足りる（対象アカウントを絞る）
-  - Secrets名は `CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` の2つ。ワークフロー側がこの名前で読む
-- [ ] 公開の工程を`ci.yml`に追加してPRを取り込む（**トークン登録より先に取り込むと`main`が必ず赤くなる**）
-- [ ] `main`での実行が緑になり、実際に画面が更新されることを確認する
-- [ ] **オーナー作業**: 確認できてから Cloudflare 側のGit連携を切る（Pagesプロジェクト → Settings → Builds → Git連携の解除）
-  - **先に切ると、公開手段が一時的に無くなる**。必ず後にする
-
-**設定上の注意**:
-- 接続先APIのURL（`VITE_API_BASE_URL`）は**組み立て時に中へ埋め込まれる**。組み立ての場所がGitHubへ移るため、
-  Cloudflare側の設定画面に入れてある値は使われなくなる。`ci.yml`の公開ジョブに直接書いてある
-- Pagesプロジェクト名は `mytechpulse`、本番の枝名は `main` を前提にしている（`--project-name` / `--branch`）
+**運用上おぼえておくこと**:
+- 接続先APIのURLは**組み立て時に中へ埋め込まれる**。変更するときは`ci.yml`の公開ジョブを直す（Cloudflare側の環境変数はもう効かない）
+- `--project-name=mytechpulse` / `--branch=main` を前提にしている。Pages側のプロジェクト名か本番ブランチ名を変えるなら`ci.yml`も直す
+- `main`の実行は後続のpushがあっても打ち切らない設定にしてある（配信の途中で止まらないようにするため）
+- **トークンに有効期限を付けた場合、切れた日から公開だけが静かに止まる**。今回は無期限で発行している
+- 発行したトークンは**本人に紐づく**もの。共同開発になったら、契約に紐づくトークン（Manage Account → Account API Tokens）へ作り直してSecretsの値を差し替える。名前は同じなので`ci.yml`は触らなくてよい
 
 ### #54 mainマージ時にLightsailへ自動デプロイする（依存する前工程はすべて完了済み）
 - [ ] **オーナー作業**: デプロイ用SSH鍵生成・Secrets登録
