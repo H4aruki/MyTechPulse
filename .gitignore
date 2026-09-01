@@ -23,6 +23,12 @@ backend/.env
 *.env
 !.env.example
 !*.env.example
+# 設定を書き換えたときに自動でできる控え（`sed -i.bak` やエディタが作る）。
+# 中身は本番の値をそのまま複製したものになるため、本体と同じ扱いで除外する。
+# 本体の名前だけを除外していると、`.env.bak` のような派生形が素通りする
+*.bak
+*.orig
+*~
 
 # ===== DBバックアップ（ops/backup_db.sh の生成物） =====
 backups/
