@@ -16,14 +16,22 @@ docs/
 │   ├── FeaturesList.md                   … 機能一覧
 │   ├── SystemArchitectureDiagram.md      … システム構成図
 │   ├── DataBaseArchitecture.md           … データベース構成
-│   └── API/                              … APIの設計書
-│       ├── ApiList.md                    … API一覧（APIの資料の入口）
-│       ├── ApiCommonRules.md             … APIに共通する決まりごと
-│       ├── ApiExternal.md                … 外部サービスへの問い合わせ
-│       └── Details/                      … 窓口ごとの詳細
-│           ├── Auth.md                   … 会員登録・ログイン
-│           ├── News.md                   … おすすめ記事の取得
-│           └── Article.md                … 記事クリックの記録
+│   ├── API/                              … APIの設計書
+│   │   ├── ApiList.md                    … API一覧（APIの資料の入口）
+│   │   ├── ApiCommonRules.md             … APIに共通する決まりごと
+│   │   ├── ApiExternal.md                … 外部サービスへの問い合わせ
+│   │   └── Details/                      … 窓口ごとの詳細
+│   │       ├── Auth.md                   … 会員登録・ログイン
+│   │       ├── News.md                   … おすすめ記事の取得
+│   │       └── Article.md                … 記事クリックの記録
+│   └── Screen/                           … 画面の設計書
+│       ├── ScreenList.md                 … 画面一覧（画面の資料の入口）
+│       ├── ScreenCommonRules.md          … 画面に共通する決まりごと
+│       └── Details/                      … 画面ごとの詳細
+│           ├── LandingPage.md            … G-01 サービス紹介ページ
+│           ├── SignUp.md                 … G-02 会員登録画面
+│           ├── Login.md                  … G-03 ログイン画面
+│           └── ArticleList.md            … G-04 記事一覧画面
 └── deploy/                               … 公開・運用の手順書
     ├── lightsail-provisioning.md         … サーバー準備手順（現行）
 
@@ -62,6 +70,18 @@ APIに共通する決まりごと。データの形式や送り方、結果を�
 ### BasicDesignSpecifications/API/Details/
 
 窓口ごとの詳細。送る項目・返る項目・結果の数値ごとの意味を表で示す。`Auth.md`が会員登録とログイン、`News.md`がおすすめ記事の取得（並べ替えの点数の付け方を含む）、`Article.md`が記事クリックの記録（興味の強さの更新のしかたを含む）に対応する。
+
+### BasicDesignSpecifications/Screen/ScreenList.md
+
+画面一覧。画面の資料の入口にあたる。画面ごとにID・名前・ログインの要否・実装場所・対応する機能・詳細ファイルへのリンクを表で示し、画面遷移の概要をMermaid図で掲載している。
+
+### BasicDesignSpecifications/Screen/ScreenCommonRules.md
+
+画面に共通する決まりごと。スマホ・タブレットを優先する方針、レイアウトを切り替える幅の境目（ブレークポイント）、共通のヘッダー・フッター構成、入力チェックの共通ルール、エラー表示の見た目（出す場所・形。文言そのものはAPI側の資料が対象）をまとめている。
+
+### BasicDesignSpecifications/Screen/Details/
+
+画面ごとの詳細。構成・表示項目・入力チェック・状態ごとの見え方（読み込み中／0件／失敗時）・レスポンシブの扱いを画面ごとに示す。`LandingPage.md`がサービス紹介ページ（G-01）、`SignUp.md`が会員登録画面（G-02）、`Login.md`がログイン画面（G-03）、`ArticleList.md`が記事一覧画面（G-04）に対応する。
 
 ### deploy/lightsail-provisioning.md
 
