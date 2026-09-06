@@ -82,6 +82,26 @@ jobs:
       - name: 型チェックと組み立て
         run: npm run build
 
+  hooks-test:
+    name: 設定まわりの仕掛けの確認
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # .claude/hooks/ の中身は Windows 上で書いているが、共同開発者の環境は
+      # Mac や Linux のこともある。手元だけで確かめると、他の人の環境で初めて
+      # 壊れていることが分かる。Linux 上でも動くことをここで確かめる。
+      #
+      # 追加の依存が無いので、依存の導入の手順は要らない。
+      # 公開の工程（下の needs）には入れていない。設定まわりの不具合で
+      # 本番公開まで止める必要はないため
+      - name: 仕掛けの確認
+        run: node --test ".claude/hooks/**/*.test.mjs"
+
   deploy-frontend:
     name: 画面の公開
     # 上の2つの書き方チェックが両方とも成功したときだけ動く。
