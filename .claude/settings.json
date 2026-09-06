@@ -49,6 +49,18 @@
             "statusMessage": "危険な操作でないか確認しています"
           }
         ]
+      },
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/loop-guard.mjs"],
+            "timeout": 10,
+            "statusMessage": "同じ操作の繰り返しを確認しています"
+          }
+        ]
       }
     ]
   }
