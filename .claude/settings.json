@@ -62,6 +62,20 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/format-edit.mjs"],
+            "timeout": 30,
+            "statusMessage": "書き方を整えています"
+          }
+        ]
+      }
     ]
   }
 }
