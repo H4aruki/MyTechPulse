@@ -75,6 +75,17 @@
             "statusMessage": "書き方を整えています"
           }
         ]
+      },
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/mark-verified.mjs"],
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -86,6 +97,19 @@
             "command": "node",
             "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start.mjs"],
             "timeout": 20
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/verify-gate.mjs"],
+            "timeout": 10,
+            "statusMessage": "検査を実行したか確認しています"
           }
         ]
       }
