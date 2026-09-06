@@ -1,0 +1,55 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./backend/.env)",
+      "Edit(./.env)",
+      "Edit(./backend/.env)",
+      "Write(./.env)",
+      "Write(./backend/.env)"
+    ],
+    "ask": [
+      "Bash(rm *)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean*)",
+      "Bash(docker compose down*)",
+      "Bash(psql*)"
+    ],
+    "allow": [
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git switch*)",
+      "Bash(git fetch*)",
+      "Bash(gh issue*)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr list*)",
+      "Bash(gh run*)",
+      "Bash(npm run lint*)",
+      "Bash(npm run build*)",
+      "Bash(npm ci*)",
+      "Bash(ruff*)",
+      "Bash(node --test*)",
+      "Bash(docker compose ps*)",
+      "Bash(docker compose logs*)",
+      "Bash(docker compose up*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-command.mjs"],
+            "timeout": 10,
+            "statusMessage": "危険な操作でないか確認しています"
+          }
+        ]
+      }
+    ]
+  }
+}
