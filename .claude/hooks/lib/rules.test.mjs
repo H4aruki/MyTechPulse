@@ -56,6 +56,35 @@ test('本番サーバーへの直接接続と手動公開を止める', () => {
   assert.equal(checkCommand('curl https://api.mytechpulse.net/').blocked, false);
 });
 
+test('同じ行に見本ファイルがあっても、接続情報を見る操作は止める', () => {
+  // 見本かどうかは行全体ではなく、ファイル1つずつで判定する必要がある
+  assert.equal(checkCommand('cat backend/.env .env.example').blocked, true);
+  assert.equal(checkCommand('cat .env.example backend/.env').blocked, true);
+});
+
+test('コンテナ越しに読む操作も止める', () => {
+  assert.equal(checkCommand('docker compose exec api cat /app/.env').blocked, true);
+});
+
+test('入力の向きを変える書き方でも止める', () => {
+  assert.equal(checkCommand('< backend/.env cat').blocked, true);
+});
+
+test('接続情報を記録対象に加える操作も止める', () => {
+  assert.equal(checkCommand('git add backend/.env').blocked, true);
+});
+
+test('中身を見ない存在確認は止めない', () => {
+  assert.equal(checkCommand('ls -la backend/.env').blocked, false);
+  assert.equal(checkCommand('test -f backend/.env').blocked, false);
+});
+
+test('コマンドの前に飾りが付いていても止める', () => {
+  assert.equal(checkCommand('sudo git push --force origin main').blocked, true);
+  assert.equal(checkCommand('CI=1 git push origin main').blocked, true);
+  assert.equal(checkCommand('gh --repo H4aruki/MyTechPulse pr merge 12').blocked, true);
+});
+
 test('止める理由の文章が付く', () => {
   const r = checkCommand('cat backend/.env');
   assert.equal(typeof r.message, 'string');
