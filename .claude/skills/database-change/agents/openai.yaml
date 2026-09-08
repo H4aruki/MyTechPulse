@@ -1,0 +1,3 @@
+interface:
+  display_name: "DB変更を安全に行う"
+  short_description: "既存データを守りながらDB変更を計画・検証"
