@@ -128,7 +128,7 @@ git config commit.template .gitmessage.txt
 |----------|------|----------|
 | バックエンドの書き方と計算テスト | Ruffで明らかな誤りを検出し、pytestで推薦の重み計算を確認 | **取り込めない**（直す必要がある） |
 | （同上・見た目のズレ） | 字下げや引用符の統一のズレを一覧表示 | 落とさない（いまは参考情報のみ） |
-| フロントエンドの書き方チェック | oxlint と、型の食い違いの検出 | **取り込めない**（直す必要がある） |
+| フロントエンドの書き方と画面テスト | oxlint、認証状態の画面動作、型、組み立てを確認 | **取り込めない**（直す必要がある） |
 | エージェント設定の確認 | Claude CodeとCodexのフック、Skillsの内容一致 | 公開は止めないが、設定修正が必要 |
 
 自動テストは推薦の重み計算から導入しています。認証やAPI、画面のテストは段階的に追加します。カバレッジ計測は、対象が増えた段階で導入します。
@@ -145,6 +145,7 @@ backend/venv/Scripts/python.exe -m pytest backend/tests/unit/test_scoring.py
 # フロントエンド
 cd frontend
 npm run lint
+npm run test
 npx tsc -b
 ```
 

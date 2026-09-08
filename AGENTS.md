@@ -89,7 +89,7 @@ npm run dev
 ```bash
 ruff check backend
 pytest backend/tests/unit/test_scoring.py
-cd frontend && npm run lint && npm run build
+cd frontend && npm run lint && npm run test && npm run build
 node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/agent-harness/**/*.test.mjs"
 ```
 
