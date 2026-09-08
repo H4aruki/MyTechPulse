@@ -9,6 +9,19 @@ MyTechPulse — Qiita/Zennからユーザーの興味タグに基づいて記事
 - **フロントエンド**: Vite + React + TypeScript。`frontend/`。LP（`frontend/index.html`）はReactを読み込まない静的HTML、ログイン後は `/app/` 配下のSPA
 - **バックエンド**: FastAPI + SQLAlchemy + PostgreSQL 17（Dockerコンテナ）。`backend/app/`
 
+## やってはいけないこと
+
+以下は `.claude/settings.json` と `.claude/hooks/` で機械的に止めている。**文章と設定は1対1で対応させているので、片方だけ変えないこと。**
+
+- **接続情報ファイル（`.env`）を読まない・持ち出さない・記録に加えない。** 項目名を知りたいときは `.env.example` を見る。値そのものが必要な作業はオーナーに依頼する
+- **履歴を強制的に上書きしない。** 他のメンバーの作業が消える。取り込み済みの内容を直したいときは新しいコミットを積む
+- **`main` へ直接反映しない。** `main` へ入ると本番公開まで自動で走る（`.github/workflows/ci.yml`）。必ずプルリクエスト経由で取り込む
+- **プルリクエストを承認・取り込みしない。** 判断は人間だけが行う。準備ができたことを報告して待つ
+- **データの入れ物ごと消さない。** データベースの中身が丸ごと失われる。止めるだけなら `docker compose down`
+- **本番サーバーへ直接つながない・手動で公開しない。** 公開は `main` に取り込まれたときの自動処理に一本化してある
+
+仕掛けの詳しい中身と、その限界は `.claude/README.md` にある。
+
 ## 開発コマンド
 
 前提: `docker compose up -d db` でPostgreSQLコンテナを起動しておく（XAMPPは使わない）。DB `mytechpulse` はコンテナ初回起動時に `POSTGRES_DB` が作るため、`init_db.py` はテーブル作成のみを行う。`.env` は `app/config.py` が絶対パス（`backend/.env`）で読むため、リポジトリルート/`backend/` どちらから起動しても設定読み込みは失敗しない。ただし以下のコマンド例は `backend/` から実行する想定。
@@ -26,6 +39,29 @@ API込みで丸ごと動かす場合は `docker compose up -d --build`（`backen
 - 依存: `pip install -r requirements.txt`（venvは `backend/venv/` にある）
 - テスト: pytestスイートは無い。`backend/tests/test_SQL.py` は手動実行のDB接続確認スクリプトのみ
 - 設定: `backend/.env` に `DATABASE_URL`、`QIITA_ACCESS_TOKEN`、`SECRET_KEY`（JWT署名鍵。未設定だと起動失敗する）が必要（pydantic-settingsの `app/config.py` が読む）
+
+## 作業の進め方
+
+1. **課題（GitHub Issue）を先に立てる。** 着手してから立てない。課題は GitHub Issues（H4aruki/MyTechPulse）で `gh` コマンド経由で管理する
+2. **`main` から作業用の枝を切る。** 枝の名前は `<種別>/<内容>`（例: `fix/login-error`）
+3. **プルリクエストを作る。** 送り先は枝であって、コミットを直接積む場所ではない
+4. **取り込みはオーナーが判断する**
+
+## 完了と言う前にやること
+
+**実際にコマンドを実行して、その出力を確認してから報告する。** 実行していないものを「動きました」と言わない。
+
+```bash
+ruff check backend                                  # サーバー側
+cd frontend && npm run lint && npm run build        # 画面側（型チェックも兼ねる）
+node --test ".claude/hooks/**/*.test.mjs"           # 設定まわりの仕掛け
+```
+
+`ruff` はどこからでも呼べる状態になっていないことがある。その場合は `backend/venv/Scripts/ruff.exe`（Windows）または `backend/venv/bin/ruff` を直接指定する。
+
+失敗しても構わない。**失敗しているならその内容をそのまま報告する。**
+
+なお、このリポジトリには動作を確かめる自動テストがまだ無い。上記で確認できるのは書き方と型と組み立てまでで、動作が正しいかどうかは確認できない。
 
 ## Issue・PR作成時の文章表現
 

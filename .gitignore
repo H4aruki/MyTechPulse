@@ -43,8 +43,14 @@ desktop.ini
 *.swp
 *~
 
-# ===== Claude Code（個人メモ・共有しない） =====
-CLAUDE.md
+# ===== Claude Code =====
+# 設定と自動で走る仕掛けは共有する（.claude/settings.json と .claude/hooks/）。
+# 各自の好みと、仕掛けが使う作業ファイルだけを外す。
+#
+# もともとここには CLAUDE.md を共有しない指定があったが、実際には既に
+# コミット済みで効いておらず、全員で共有する方針とも逆だったため削除した。
+.claude/settings.local.json
+.claude/.cache/
 
 # wrangler pages dev のローカル作業ファイル（Pagesの挙動確認に使う）
 .wrangler/
