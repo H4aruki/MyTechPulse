@@ -1,0 +1,3 @@
+interface:
+  display_name: "認証と安全性を確認する"
+  short_description: "JWT・権限・秘密情報の変更を安全性確認"

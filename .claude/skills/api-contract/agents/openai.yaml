@@ -1,0 +1,3 @@
+interface:
+  display_name: "API契約を変更する"
+  short_description: "バックエンドと画面のAPI契約を同期"

@@ -39,6 +39,7 @@ test('mainへの直接反映を止める', () => {
 test('プルリクエストの承認と取り込みを止める', () => {
   assert.equal(checkCommand('gh pr merge 12 --squash').blocked, true);
   assert.equal(checkCommand('gh pr review 12 --approve').blocked, true);
+  assert.equal(checkCommand('gh pr review 12 --comment --body "確認しました"').blocked, false);
   assert.equal(checkCommand('gh pr view 12').blocked, false);
   assert.equal(checkCommand('gh pr create --fill').blocked, false);
 });

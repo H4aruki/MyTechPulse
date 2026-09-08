@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ファイルを編集した直後に、そのファイル1つだけを対象に書き方を整える。
+// ファイルを編集した直後に、そのファイル1つだけを対象に書き方を確認する。
 //
 // 道具（ruff / oxlint）が見つからない環境では黙って何もしない。
 // 仕掛けの失敗で他のメンバーの作業が止まるほうが害が大きいため。
@@ -51,9 +51,9 @@ function run(cmd, args) {
 }
 
 if (file.endsWith('.py')) {
-  // 見た目を整えてから、機械的に直せる指摘を直す
-  run(RUFF, ['format', file]);
-  run(RUFF, ['check', '--fix', file]);
+  // 利用者が確認していない変更を増やさないよう、自動修正はしない
+  run(RUFF, ['format', '--check', file]);
+  run(RUFF, ['check', file]);
 } else if (/\.(ts|tsx|js|jsx|mjs)$/.test(file)) {
   // このリポジトリのフロントエンドには整形の道具が無いので検査だけ行う。
   // CIと同じ基準で早めに壊れに気づける

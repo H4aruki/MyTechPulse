@@ -19,8 +19,14 @@ if (input?.tool_name === 'Bash') {
     writeState(sessionId, { ...state, needsVerify: false });
   }
 } else {
-  const file = input?.tool_response?.filePath ?? input?.tool_input?.file_path ?? '';
-  if (CODE_FILE.test(file)) {
+  // Claude Codeはファイルパスを、Codexのapply_patchは差分本文を渡す。
+  // どちらでもコード変更を見つけられるよう、候補をまとめて判定する。
+  const edit =
+    input?.tool_response?.filePath ??
+    input?.tool_input?.file_path ??
+    input?.tool_input?.command ??
+    '';
+  if (CODE_FILE.test(edit)) {
     writeState(sessionId, { ...state, needsVerify: true, stuckCount: 0 });
   }
 }

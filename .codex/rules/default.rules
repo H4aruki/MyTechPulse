@@ -1,0 +1,65 @@
+# このファイルは、Codexがサンドボックス外で実行しようとする禁止操作を止める。
+# 引数の位置が変わり得る操作は、PreToolUseフックでも確認する。
+
+prefix_rule(
+    pattern = ["git", "push", ["--force", "--force-with-lease", "-f"]],
+    decision = "forbidden",
+    justification = "履歴の強制上書きは禁止です。新しいコミットで修正してください。",
+    match = ["git push --force origin feature/example", "git push -f"],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "origin", ["main", "HEAD:main"]],
+    decision = "forbidden",
+    justification = "mainへの直接pushは禁止です。作業ブランチからPRを作成してください。",
+    match = ["git push origin main", "git push origin HEAD:main"],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "merge"],
+    decision = "forbidden",
+    justification = "PRのマージは人間が行います。準備完了を報告してください。",
+    match = ["gh pr merge 12 --squash"],
+)
+
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "forbidden",
+    justification = "未保存の変更を失うため禁止です。安全な修正方法を相談してください。",
+    match = ["git reset --hard", "git reset --hard HEAD~1"],
+)
+
+prefix_rule(
+    pattern = ["git", "clean"],
+    decision = "forbidden",
+    justification = "未追跡ファイルを削除するため禁止です。対象を確認して利用者へ相談してください。",
+    match = ["git clean -fd"],
+)
+
+prefix_rule(
+    pattern = ["docker", "volume", "rm"],
+    decision = "forbidden",
+    justification = "DBを含む永続データを失うため禁止です。停止だけならdocker compose downを使ってください。",
+    match = ["docker volume rm mytechpulse_db"],
+)
+
+prefix_rule(
+    pattern = ["ssh"],
+    decision = "forbidden",
+    justification = "本番サーバーへの直接接続は禁止です。公開はCI経由で行ってください。",
+    match = ["ssh user@example.com"],
+)
+
+prefix_rule(
+    pattern = ["wrangler"],
+    decision = "forbidden",
+    justification = "手動公開は禁止です。公開はmain反映後のCIに任せてください。",
+    match = ["wrangler pages deploy dist"],
+)
+
+prefix_rule(
+    pattern = ["npx", "wrangler"],
+    decision = "forbidden",
+    justification = "手動公開は禁止です。公開はmain反映後のCIに任せてください。",
+    match = ["npx wrangler pages deploy dist"],
+)

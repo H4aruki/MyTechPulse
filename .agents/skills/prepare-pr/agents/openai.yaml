@@ -1,0 +1,3 @@
+interface:
+  display_name: "PRを準備する"
+  short_description: "規約に沿うコミットとPR説明を準備"

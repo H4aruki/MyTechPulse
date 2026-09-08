@@ -1,0 +1,3 @@
+interface:
+  display_name: "ハーネスを保守する"
+  short_description: "CodexとClaude Codeの共通設定を同期"

@@ -26,7 +26,7 @@ Issue作成 → ブランチ作成 → コミット → push → PR作成 → �
 2. `main` から作業ブランチを切る
    ```bash
    git switch main
-   git pull
+   git pull --ff-only
    git switch -c fix/recommend-typo
    ```
 3. コミット規約（下記2章）に沿ってコミットする
@@ -120,17 +120,18 @@ git config commit.template .gitmessage.txt
 **どの枝に push しても、どの枝あてにプルリクエストを作っても**、GitHub Actions が自動でチェックを走らせます。
 定義は `.github/workflows/ci.yml` にあります。
 
-同じ確認を2回しないよう、プルリクエスト側のきっかけは「作られたとき」だけに限っています。
-枝を更新したぶんは push のきっかけが拾い、その結果はコミットに紐づくので、
-そのままプルリクエストの必須条件として扱われます。
+プルリクエスト側のきっかけは、作成・再開・更新を対象にしています。
+同じリポジトリの枝は push でも確認されますが、外部フォークの枝へのpushは
+このリポジトリのpushにならないため、プルリクエスト更新時の確認も必要です。
 
 | チェック | 中身 | 落ちたら |
 |----------|------|----------|
-| バックエンドの書き方チェック | Ruff で、未定義の名前・消し忘れた読み込み・構文の誤りを検出 | **取り込めない**（直す必要がある） |
+| バックエンドの書き方と計算テスト | Ruffで明らかな誤りを検出し、pytestで推薦の重み計算を確認 | **取り込めない**（直す必要がある） |
 | （同上・見た目のズレ） | 字下げや引用符の統一のズレを一覧表示 | 落とさない（いまは参考情報のみ） |
-| フロントエンドの書き方チェック | oxlint と、型の食い違いの検出 | **取り込めない**（直す必要がある） |
+| フロントエンドの書き方と画面テスト | oxlint、認証状態の画面動作、型、組み立てを確認 | **取り込めない**（直す必要がある） |
+| エージェント設定の確認 | Claude CodeとCodexのフック、Skillsの内容一致 | 公開は止めないが、設定修正が必要 |
 
-テストの自動実行とカバレッジ計測は、テストコードを書く段階で追加します（現時点ではテストが1件も無いため入れていません）。
+自動テストは推薦の重み計算から導入しています。認証やAPI、画面のテストは段階的に追加します。カバレッジ計測は、対象が増えた段階で導入します。
 
 ### 手元で同じチェックを走らせる
 
@@ -139,10 +140,12 @@ git config commit.template .gitmessage.txt
 backend/venv/Scripts/python.exe -m pip install -r requirements-dev.txt
 backend/venv/Scripts/python.exe -m ruff check backend      # 誤りの検出
 backend/venv/Scripts/python.exe -m ruff format backend     # 見た目を自動で整える
+backend/venv/Scripts/python.exe -m pytest backend/tests/unit/test_scoring.py
 
 # フロントエンド
 cd frontend
 npm run lint
+npm run test
 npx tsc -b
 ```
 

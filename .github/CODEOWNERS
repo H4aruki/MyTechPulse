@@ -1,0 +1,10 @@
+# 既定ではリポジトリ所有者が確認する。
+* @H4aruki
+
+# エージェントの権限と自動化は、意図しない変更の影響が大きいため明示する。
+/AGENTS.md @H4aruki
+/CLAUDE.md @H4aruki
+/.agents/ @H4aruki
+/.claude/ @H4aruki
+/.codex/ @H4aruki
+/scripts/agent-harness/ @H4aruki

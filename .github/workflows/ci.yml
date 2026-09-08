@@ -3,12 +3,11 @@ name: CI
 # 枝は絞らない。main 以外へのやりとりが素通りすると、
 # 最後に main へ来たところで初めて問題が見つかることになるため。
 #
-# プルリクエスト側を「作られたとき」だけに限っているのは、同じ確認を2回しないため。
-# 枝が更新されたぶんは下の push が拾うので、プルリクエストの更新では動かさなくてよい。
-# （push で出た結果はコミットに紐づくので、そのままプルリクエストの必須条件として扱われる）
+# プルリクエストの更新も拾う。フォーク元の枝へのpushは、このリポジトリの
+# pushイベントにならないため、synchronizeが無いと更新後の確認が抜ける。
 on:
   pull_request:
-    types: [opened, reopened]
+    types: [opened, reopened, synchronize]
   push:
 
 # 同じブランチに続けて push したときは、古い実行を打ち切る（実行時間の節約）。
@@ -34,16 +33,23 @@ jobs:
           # 本番コンテナ（backend/Dockerfile）と同じ 3.12 に合わせる
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
-      # ruff はコードを読むだけで実行はしないため、アプリ本体の依存は入れなくてよい
+      # テストはアプリ本体を読み込むため、本番用と検査用の両方を入れる
       - name: チェック用ツールの導入
-        run: pip install -r requirements-dev.txt
+        run: pip install -r requirements.txt -r requirements-dev.txt
 
       # 判定基準は backend/pyproject.toml にある。
       # --output-format=github を付けると、指摘が差分の該当行に直接表示される
       - name: 明らかな誤りの検出
         run: ruff check backend --output-format=github
+
+      # 最初の自動テストとして、推薦結果の土台になる重み計算を確認する。
+      # 既存の必須チェック名を変えず、この工程が失敗したときも取り込みを止める
+      - name: 推薦の重み計算を確認
+        run: python -m pytest backend/tests/unit/test_scoring.py
 
       # 見た目のズレは既存コードに多数あるため、いまは落とさず一覧だけ残す。
       # 一括で整え終えたら continue-on-error を外して必須に引き上げる
@@ -73,6 +79,9 @@ jobs:
       - name: 書き方チェック
         run: npm run lint
 
+      - name: 認証状態の画面動作を確認
+        run: npm run test
+
       # 組み立てが通るところまで確かめる。この命令は中で
       # 「型チェック → 組み立て」の順に走るので、型の検査も兼ねている。
       #
@@ -92,7 +101,7 @@ jobs:
         with:
           node-version: "22"
 
-      # .claude/hooks/ の中身は Windows 上で書いているが、共同開発者の環境は
+      # エージェント設定は Windows 上で書いているが、共同開発者の環境は
       # Mac や Linux のこともある。手元だけで確かめると、他の人の環境で初めて
       # 壊れていることが分かる。Linux 上でも動くことをここで確かめる。
       #
@@ -100,7 +109,7 @@ jobs:
       # 公開の工程（下の needs）には入れていない。設定まわりの不具合で
       # 本番公開まで止める必要はないため
       - name: 仕掛けの確認
-        run: node --test ".claude/hooks/**/*.test.mjs"
+        run: node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/agent-harness/**/*.test.mjs"
 
   deploy-frontend:
     name: 画面の公開

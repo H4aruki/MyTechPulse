@@ -4,3 +4,4 @@
 # 導入:
 #   backend/venv/Scripts/python.exe -m pip install -r requirements-dev.txt
 ruff==0.16.5
+pytest==9.1.1

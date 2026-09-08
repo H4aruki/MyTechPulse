@@ -1,0 +1,3 @@
+interface:
+  display_name: "画面を実装する"
+  short_description: "既存設計に沿って安全で使いやすい画面を実装"

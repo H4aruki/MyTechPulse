@@ -70,7 +70,9 @@ const RULES = [
   {
     id: 'pr-merge-or-approve',
     // gh と pr の間に別の指定が入ることがあるので、間を許して照合する
-    test: (s) => /^gh\b/.test(s) && /\bpr\s+(merge|review)\b/.test(s),
+    test: (s) =>
+      /^gh\b/.test(s) &&
+      (/\bpr\s+merge\b/.test(s) || (/\bpr\s+review\b/.test(s) && /\s--approve\b/.test(s))),
     message:
       'プルリクエストの承認と取り込みは、人間だけが行います。自分の書いたものを自分で通せてしまうためです。準備ができたことを報告して、オーナーの判断を待ってください。',
   },

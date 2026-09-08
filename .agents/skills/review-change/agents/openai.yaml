@@ -1,0 +1,3 @@
+interface:
+  display_name: "変更をレビューする"
+  short_description: "差分の不具合・安全性・検証不足をレビュー"
