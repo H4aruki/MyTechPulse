@@ -26,7 +26,7 @@ Issue作成 → ブランチ作成 → コミット → push → PR作成 → �
 2. `main` から作業ブランチを切る
    ```bash
    git switch main
-   git pull
+   git pull --ff-only
    git switch -c fix/recommend-typo
    ```
 3. コミット規約（下記2章）に沿ってコミットする
