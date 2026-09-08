@@ -126,12 +126,12 @@ git config commit.template .gitmessage.txt
 
 | チェック | 中身 | 落ちたら |
 |----------|------|----------|
-| バックエンドの書き方チェック | Ruff で、未定義の名前・消し忘れた読み込み・構文の誤りを検出 | **取り込めない**（直す必要がある） |
+| バックエンドの書き方と計算テスト | Ruffで明らかな誤りを検出し、pytestで推薦の重み計算を確認 | **取り込めない**（直す必要がある） |
 | （同上・見た目のズレ） | 字下げや引用符の統一のズレを一覧表示 | 落とさない（いまは参考情報のみ） |
 | フロントエンドの書き方チェック | oxlint と、型の食い違いの検出 | **取り込めない**（直す必要がある） |
 | エージェント設定の確認 | Claude CodeとCodexのフック、Skillsの内容一致 | 公開は止めないが、設定修正が必要 |
 
-テストの自動実行とカバレッジ計測は、テストコードを書く段階で追加します（現時点ではテストが1件も無いため入れていません）。
+自動テストは推薦の重み計算から導入しています。認証やAPI、画面のテストは段階的に追加します。カバレッジ計測は、対象が増えた段階で導入します。
 
 ### 手元で同じチェックを走らせる
 
@@ -140,6 +140,7 @@ git config commit.template .gitmessage.txt
 backend/venv/Scripts/python.exe -m pip install -r requirements-dev.txt
 backend/venv/Scripts/python.exe -m ruff check backend      # 誤りの検出
 backend/venv/Scripts/python.exe -m ruff format backend     # 見た目を自動で整える
+backend/venv/Scripts/python.exe -m pytest backend/tests/unit/test_scoring.py
 
 # フロントエンド
 cd frontend

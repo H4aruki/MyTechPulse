@@ -44,6 +44,11 @@ jobs:
       - name: 明らかな誤りの検出
         run: ruff check backend --output-format=github
 
+      # 最初の自動テストとして、推薦結果の土台になる重み計算を確認する。
+      # 既存の必須チェック名を変えず、この工程が失敗したときも取り込みを止める
+      - name: 推薦の重み計算を確認
+        run: pytest backend/tests/unit/test_scoring.py
+
       # 見た目のズレは既存コードに多数あるため、いまは落とさず一覧だけ残す。
       # 一括で整え終えたら continue-on-error を外して必須に引き上げる
       - name: 見た目のズレを一覧表示（まだ必須にしない）
