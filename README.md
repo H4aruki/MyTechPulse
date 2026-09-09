@@ -6,6 +6,12 @@
 
 MyTechPulseは、複数の技術情報サイトを巡回する手間を減らし、短い時間で必要な記事を見つけるためのWebアプリです。登録した興味タグと記事の閲覧傾向をもとに、Qiita・Zennの新しい記事を優先度順に表示します。
 
+## 使ってみる
+
+**https://mytechpulse.net**
+
+ブラウザから、そのまま使えます。インストールは不要です。
+
 ## 主な機能
 
 - ユーザー登録・ログイン（JWT認証）
@@ -30,104 +36,50 @@ MyTechPulseは、複数の技術情報サイトを巡回する手間を減らし
 
 ## 仕組み
 
-1. ユーザー登録時に興味のある技術タグを選びます。
-2. 興味度の高いタグを使い、Qiita・Zennから記事を同時に取得します。
-3. 記事を読むと、その記事のタグが興味の傾向へ反映されます。
+記事は画面を開くたびに外部サイトから取得します。読んだ記事のタグが興味の傾向へ反映され、次に開いたときの並び順が変わります。
 
-現在は画面を開くたびに外部サイトから記事を取得します。Qiitaは直近5日、Zennは直近2週間の記事を基本の対象とし、該当するZenn記事がない場合は期間条件を外して補完します。
+```mermaid
+sequenceDiagram
+    actor User as 利用者
+    participant App as MyTechPulse
+    participant DB as データベース
+    participant Qiita as Qiita
+    participant Zenn as Zenn
+
+    Note over User,DB: 1. 登録時に興味を登録する
+    User->>App: 興味のあるタグを選ぶ
+    App->>DB: タグごとの興味の強さを保存
+
+    Note over User,Zenn: 2. 記事一覧を開く
+    User->>App: 記事一覧を開く
+    App->>DB: 興味の強いタグ上位5件を取り出す
+    DB-->>App: タグ一覧
+    par 2つの提供元へ同時に問い合わせる
+        App->>Qiita: 上位5タグで記事を検索
+        Qiita-->>App: 記事一覧
+    and
+        App->>Zenn: 上位5タグで記事を検索
+        Zenn-->>App: 記事一覧
+    end
+    App->>App: 期間で絞り込み、点数をつけて並べ替える
+    App-->>User: 提供元ごとに上位10件を表示
+
+    Note over User,DB: 3. 読んだ記事を次に活かす
+    User->>App: 気になった記事を開く
+    App->>DB: その記事のタグの興味を強め、他を少しずつ弱める
+```
+
+記事を集める期間の条件は提供元で異なります。Qiitaは直近5日、Zennは直近2週間を対象とし、該当するZenn記事が1件も無かった場合のみ、期間の条件を外して補います。
+
+並べ替えの点数は、Zennが興味の強さの合計、Qiitaがそれに反響の大きさを掛けた値です。Zennは取得の時点で提供元のトレンド順に絞り込まれているため、反響を重ねて数えていません。
 
 ## 技術スタック
 
-| 区分 | 主な技術 |
-| --- | --- |
-| フロントエンド | React 19、TypeScript、Vite、Tailwind CSS 4、TanStack Query、Zod |
-| バックエンド | Python 3.12、FastAPI、SQLAlchemy |
-| データベース | PostgreSQL 17 |
-| 認証 | JWT、bcrypt |
-| 開発・運用 | Docker Compose、GitHub Actions、Caddy |
-| 本番環境 | Cloudflare Pages（フロントエンド）、AWS Lightsail（API・DB） |
+![技術スタック](https://skillicons.dev/icons?i=react,ts,vite,tailwind,python,fastapi,postgres,docker,githubactions,cloudflare,aws)
+
+アイコンに無いものとして、ログイン状態の保持にJWT、パスワードの保護にbcrypt、本番環境のHTTPS化にCaddyを使っています。
 
 構成の詳細は[システム構成図](./docs/BasicDesignSpecifications/SystemArchitectureDiagram.md)を参照してください。
-
-## ローカルで動かす
-
-### 必要なもの
-
-- Git
-- Docker Desktop（Docker Composeを含む）
-- Node.js 22
-- Qiitaのアクセストークン（[Qiitaの設定画面](https://qiita.com/settings/applications)で発行）
-
-### 1. リポジトリを準備する
-
-```bash
-git clone https://github.com/H4aruki/MyTechPulse.git
-cd MyTechPulse
-```
-
-ZIPは[mainブランチの最新版](https://github.com/H4aruki/MyTechPulse/archive/refs/heads/main.zip)からも取得できます。
-
-### 2. 環境変数を準備する
-
-```bash
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
-```
-
-Windows PowerShellでは、`cp`の代わりに次を使えます。
-
-```powershell
-Copy-Item backend/.env.example backend/.env
-Copy-Item frontend/.env.example frontend/.env
-```
-
-`backend/.env`で次の2項目を設定してください。
-
-- `QIITA_ACCESS_TOKEN`: Qiitaから記事を取得するためのトークン
-- `SECRET_KEY`: JWTへの署名に使うランダムな文字列
-
-`SECRET_KEY`は次のコマンドで生成できます。
-
-```bash
-python -c "import secrets; print(secrets.token_hex(32))"
-```
-
-Docker Composeで起動する場合、`DATABASE_URL`はDBコンテナ向けに自動で上書きされるため、開発用の初期値から変更する必要はありません。
-
-### 3. APIとデータベースを起動する
-
-```bash
-docker compose up --build
-```
-
-初回起動時にデータベースとテーブルが作成されます。APIは `http://127.0.0.1:8000`、APIドキュメントは `http://127.0.0.1:8000/docs` で確認できます。
-
-### 4. フロントエンドを起動する
-
-別のターミナルで実行します。
-
-```bash
-cd frontend
-npm ci
-npm run dev
-```
-
-`http://localhost:5173` をブラウザで開いてください。
-
-## バックエンドを直接動かして開発する
-
-自動再読み込みを使う場合は、DBだけをDockerで起動します。Python 3.12を推奨します。
-
-```bash
-python -m venv backend/venv
-backend/venv/Scripts/python.exe -m pip install -r requirements.txt
-docker compose up -d db
-cd backend
-venv/Scripts/python.exe init_db.py
-venv/Scripts/python.exe -m uvicorn app.main:app --reload
-```
-
-macOS・Linuxでは、仮想環境内の実行ファイルを `backend/venv/bin/python` に読み替えてください。フロントエンドは前節と同じ手順で起動します。
 
 ## Roadmap
 
