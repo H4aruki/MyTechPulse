@@ -1,128 +1,163 @@
+# MyTechPulse
 
-# 「MyTechPulse」ー私専用のTechニュースー
+> Qiita・Zennから、興味に合う技術記事を集めるパーソナライズニュースアプリ
 
-## Your daily does of tech：パーソナライズされた技術情報の躍動をあなたに。
+[公開版を試す](https://mytechpulse.net) ・ [機能一覧](./docs/BasicDesignSpecifications/FeaturesList.md) ・ [コントリビューションガイド](./CONTRIBUTING.md)
 
-MyTechPulseは、「色んなサイトがあって全部追いかけられない」、「サイトを巡回するのが面倒」といった悩みを解決するために生まれました。
+MyTechPulseは、複数の技術情報サイトを巡回する手間を減らし、短い時間で必要な記事を見つけるためのWebアプリです。登録した興味タグと記事の閲覧傾向をもとに、Qiita・Zennの新しい記事を優先度順に表示します。
 
-<div origin= center>
-    <img src="./img\Articles.png" width= "1000" height="800">
-</div>
+## 主な機能
 
-### What MyTechPulse does
-複数の技術メディアやブログから情報を自動収集。あなたの過去の閲覧傾向や興味関心を分析し、膨大な情報の中から「あなたに最適化された技術の脈動」を届けます。
-- **情報の集約**: 主要な技術サイトを巡回する手間をゼロに。
-- **パーソナライズ**: 読めば読むほど、あなたの好みに合った記事が優先的に届きます。
-- **効率的なキャッチアップ**: 隙間時間で、今知るべきトレンドを効率よく把握。
+- ユーザー登録・ログイン（JWT認証）
+- カテゴリ別の興味タグ選択と一括選択
+- 興味の強い上位5タグを使ったQiita・Zennの記事取得
+- 提供元ごとに最大10件の記事を表示
+- 興味度をもとにした並べ替え（Qiitaの記事は反響の大きさも加味）
+- 記事クリックを次回以降のおすすめへ反映
+- 読み込み中・取得失敗・記事がない場合の状態表示
 
-## 技術スタック
-![](https://skillicons.dev/icons?i=react,ts,vite,tailwind,python,postgres,fastapi,notion)
-
-## SETUP
-### 方法A: Docker（推奨）
-1. [最新のZIPファイルをダウンロード](https://github.com/H4aruki/MyTechPulse/archive/refs/heads/main.zip) し、任意のフォルダに展開（解凍）してください。
-2. `.env` の準備
-   ```bash
-   cp backend/.env.example backend/.env
-   ```
-   `backend/.env` を開き、`QIITA_ACCESS_TOKEN`（[Qiitaの設定画面](https://qiita.com/settings/applications)で発行）を設定してください。`DATABASE_URL` はDocker起動時に自動でDBコンテナ向けに上書きされるため変更不要です。
-3. 起動
-   ```bash
-   docker compose up --build
-   ```
-   `http://127.0.0.1:8000` でAPIが起動します。
-4. フロントエンドを起動
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-   `http://localhost:5173` でフロントエンドが起動します。
-
-### 方法B: APIをローカルで直接動かす（DBのみDocker）
-コードを書き換えながら `--reload` で開発したい場合はこちら。DBだけコンテナで動かします。
-
-#### 1. 事前準備
-以下のツールがインストールされ、起動していることを確認して下さい。
-
-・Python3.10以上
-
-・Docker（DBコンテナの起動に使います。XAMPPは不要です）
-
-#### 2. 環境構築
-1. [最新のZIPファイルをダウンロード](https://github.com/H4aruki/MyTechPulse/archive/refs/heads/main.zip) し、任意のフォルダに展開（解凍）してください。
-
-2. 必要ライブラリのインストール
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. `.env` の準備
-   ```bash
-   cp backend/.env.example backend/.env
-   ```
-   `backend/.env` を開き、`QIITA_ACCESS_TOKEN`（[Qiitaの設定画面](https://qiita.com/settings/applications)で発行）を設定してください。
-4. データベースの起動とテーブル作成
-   ```bash
-   docker compose up -d db
-   cd backend
-   python init_db.py
-   ```
-   データベース `mytechpulse` はコンテナの初回起動時に自動で作られます。`init_db.py` はテーブルの作成のみを行います。
-#### 3. システムの起動
-APIを起動します。
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-別のターミナルでフロントエンドを起動します。
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-`http://localhost:5173` をブラウザで開いてください。
-
-## Features/Roadmap
-- [ ] Xの記事の追加
-- [ ] Zennのパーソナライズ化
-- [ ] キーワード検索
-- [ ] ダークモード対応
-- [ ] ブックマーク
-- [ ] 既読管理
-- [ ] AI要約機能
-- [ ] 自動カテゴリ分類
-- [x] Dockerの導入
+詳しい実装状況は[機能一覧](./docs/BasicDesignSpecifications/FeaturesList.md)を参照してください。
 
 ## Gallery
-### メインページ
-![メインページ](./img/main-page.png)
 
-### タグ選択
-![タグ選択](./img/tag-serect.png)
+### サービス紹介ページ
 
+![MyTechPulseのサービス紹介ページ](./img/gallery-landing.png)
 
-## Contributors ✨
+### 興味タグの選択
+
+![MyTechPulseの興味タグ選択画面](./img/gallery-tag-selection.png)
+
+## 仕組み
+
+1. ユーザー登録時に興味のある技術タグを選びます。
+2. 興味度の高いタグを使い、Qiita・Zennから記事を同時に取得します。
+3. 記事を読むと、その記事のタグが興味の傾向へ反映されます。
+
+現在は画面を開くたびに外部サイトから記事を取得します。Qiitaは直近5日、Zennは直近2週間の記事を基本の対象とし、該当するZenn記事がない場合は期間条件を外して補完します。
+
+## 技術スタック
+
+| 区分 | 主な技術 |
+| --- | --- |
+| フロントエンド | React 19、TypeScript、Vite、Tailwind CSS 4、TanStack Query、Zod |
+| バックエンド | Python 3.12、FastAPI、SQLAlchemy |
+| データベース | PostgreSQL 17 |
+| 認証 | JWT、bcrypt |
+| 開発・運用 | Docker Compose、GitHub Actions、Caddy |
+| 本番環境 | Cloudflare Pages（フロントエンド）、AWS Lightsail（API・DB） |
+
+構成の詳細は[システム構成図](./docs/BasicDesignSpecifications/SystemArchitectureDiagram.md)を参照してください。
+
+## ローカルで動かす
+
+### 必要なもの
+
+- Git
+- Docker Desktop（Docker Composeを含む）
+- Node.js 22
+- Qiitaのアクセストークン（[Qiitaの設定画面](https://qiita.com/settings/applications)で発行）
+
+### 1. リポジトリを準備する
+
+```bash
+git clone https://github.com/H4aruki/MyTechPulse.git
+cd MyTechPulse
+```
+
+ZIPは[mainブランチの最新版](https://github.com/H4aruki/MyTechPulse/archive/refs/heads/main.zip)からも取得できます。
+
+### 2. 環境変数を準備する
+
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
+
+Windows PowerShellでは、`cp`の代わりに次を使えます。
+
+```powershell
+Copy-Item backend/.env.example backend/.env
+Copy-Item frontend/.env.example frontend/.env
+```
+
+`backend/.env`で次の2項目を設定してください。
+
+- `QIITA_ACCESS_TOKEN`: Qiitaから記事を取得するためのトークン
+- `SECRET_KEY`: JWTへの署名に使うランダムな文字列
+
+`SECRET_KEY`は次のコマンドで生成できます。
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Docker Composeで起動する場合、`DATABASE_URL`はDBコンテナ向けに自動で上書きされるため、開発用の初期値から変更する必要はありません。
+
+### 3. APIとデータベースを起動する
+
+```bash
+docker compose up --build
+```
+
+初回起動時にデータベースとテーブルが作成されます。APIは `http://127.0.0.1:8000`、APIドキュメントは `http://127.0.0.1:8000/docs` で確認できます。
+
+### 4. フロントエンドを起動する
+
+別のターミナルで実行します。
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+`http://localhost:5173` をブラウザで開いてください。
+
+## バックエンドを直接動かして開発する
+
+自動再読み込みを使う場合は、DBだけをDockerで起動します。Python 3.12を推奨します。
+
+```bash
+python -m venv backend/venv
+backend/venv/Scripts/python.exe -m pip install -r requirements.txt
+docker compose up -d db
+cd backend
+venv/Scripts/python.exe init_db.py
+venv/Scripts/python.exe -m uvicorn app.main:app --reload
+```
+
+macOS・Linuxでは、仮想環境内の実行ファイルを `backend/venv/bin/python` に読み替えてください。フロントエンドは前節と同じ手順で起動します。
+
+## Roadmap
+
+- 登録後の興味タグ変更
+- 記事の日次一括取得とDB保存
+- ブックマーク・既読管理
+- キーワード検索
+- ダークモード
+- AI要約・自動カテゴリ分類
+- 利用規約・プライバシーポリシー
+- ログイン試行回数の制限とパスワード強度チェック
+- バックアップの外部保管
+
+優先順位と進捗は[TASKS.md](./TASKS.md)で管理しています。
+
+## Contributors
+
 <table>
-    <tr>
-        <td align="center">
-            <a href="https://github.com/H4aruki">
-                <img src="https://github.com/H4aruki.png" width="100px;" alt=""/><br />
-                <sub><b>H4aruki</b></sub>
-            </a><br />
-            <a href="https://github.com/H4aruki/MyTechPulse/commits?author=H4aruki" title="Code">💻</a>
-            <a href="https://github.com/H4aruki/MyTechPulse/commits?author=H4aruki" title="Construction">🚧</a>
-            <a href="https://github.com/H4aruki/MyTechPulse/commits?author=H4aruki" title="Design">🎨</a>
-        </td>
-        <td align="center">
-            <a href="https://github.com/KaichoHarry">
-                <img src="https://github.com/KaichoHarry.png" width="100px;" alt=""/><br />
-                <sub><b>はりぃ会長</b></sub>
-            </a><br />
-            <a href="https://github.com/H4aruki/MyTechPulse/commits?author=KaichoHarry" title="Code">💻</a>
-            <a href="https://github.com/H4aruki/MyTechPulse/commits?author=KaichoHarry" title="Construction">🚧</a>
-            <a href="https://github.com/H4aruki/MyTechPulse/commits?author=KaichoHarry" title="Ideas">🤔</a>
-            <a href="https://github.com/H4aruki/MyTechPulse/commits?author=KaichoHarry" title="Design">🎨</a>
-        </td>
-    </tr>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/H4aruki">
+        <img src="https://github.com/H4aruki.png" width="100" alt="H4aruki"><br>
+        <sub><b>H4aruki</b></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/KaichoHarry">
+        <img src="https://github.com/KaichoHarry.png" width="100" alt="はりぃ会長"><br>
+        <sub><b>はりぃ会長</b></sub>
+      </a>
+    </td>
+  </tr>
 </table>
-
-
