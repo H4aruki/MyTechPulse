@@ -24,7 +24,10 @@
 
 ## File Map
 
-- Create: `backend/tests/conftest.py` — import前の合成環境変数
+- Create: `backend/app/settings.py` — dotenvの有無を引数で選べる設定読込境界
+- Modify: `backend/app/config.py` — 通常起動とtest起動で設定読込境界を使い分ける
+- Create: `backend/tests/unit/test_config.py` — dotenv無効時にfileを読まない検査
+- Create: `backend/tests/conftest.py` — import前にdotenvを無効化し、合成環境変数を固定
 - Create: `testdata/compatibility/qiita_articles.json` — Qiita固定応答
 - Create: `testdata/compatibility/zenn_articles.json` — Zenn固定応答
 - Create: `testdata/compatibility/compatibility_cases.json` — Go版と共有する期待値
@@ -38,6 +41,9 @@
 ### Task 1: 合成設定と共有fixtureを作る
 
 **Files:**
+- Create: `backend/app/settings.py`
+- Modify: `backend/app/config.py`
+- Create: `backend/tests/unit/test_config.py`
 - Create: `backend/tests/conftest.py`
 - Create: `testdata/compatibility/qiita_articles.json`
 - Create: `testdata/compatibility/zenn_articles.json`
@@ -46,34 +52,65 @@
 
 **Interfaces:**
 - Consumes: 現行 `backend/app/config.py` の `DATABASE_URL`、`QIITA_ACCESS_TOKEN`、`SECRET_KEY`
+- Produces: `load_settings(*, dotenv_path: Path | None) -> Settings`。`None` はdotenvを一切読まない
 - Produces: `fixture_path(name: str) -> pathlib.Path` と、Go版でも読めるUTF-8 JSON
 
-- [ ] **Step 1: import時に実設定へ依存することを確認する**
+- [ ] **Step 1: dotenvを無効化できる境界の失敗testを書く**
+
+`backend/tests/unit/test_config.py` は実 `backend/.env` を開かず、`tmp_path` に
+次のsentinel `.env` を作る。
+
+```dotenv
+DATABASE_URL=postgresql+psycopg://sentinel-file-value/must-not-be-read
+QIITA_ACCESS_TOKEN=sentinel-file-token
+SECRET_KEY=sentinel-file-secret
+```
+
+test内では `from app.settings import load_settings` として、
+`monkeypatch.setenv` で3必須値を合成値へ固定し、
+`load_settings(dotenv_path=None)` が環境変数の合成値を返すことを確認する。
+さらに別の対照caseでは `monkeypatch.delenv` でこの3環境変数を消してから
+`dotenv_path=sentinel_path` を渡し、sentinel値が読まれることを確認する。
+OS環境変数はdotenvより優先されるため、対照caseでも合成値を残さない。
+`None` のcaseがfile読込経路を通っていないことを証明する。errorやassert messageへ
+設定値を出さない。
 
 Run:
 
 ```powershell
-Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
-Remove-Item Env:QIITA_ACCESS_TOKEN -ErrorAction SilentlyContinue
-Remove-Item Env:SECRET_KEY -ErrorAction SilentlyContinue
-backend/venv/Scripts/python.exe -c "import sys; sys.path.insert(0, 'backend'); import app.config"
+backend/venv/Scripts/python.exe -m pytest backend/tests/unit/test_config.py -q
 ```
 
-Expected: 必須設定不足で失敗する。`.env` の値は表示しない。
+Expected: `app.settings` または `load_settings` が未実装のためFAILする。
 
-- [ ] **Step 2: 合成設定だけを入れるconftestを書く**
+- [ ] **Step 2: 小さな設定読込境界を実装する**
+
+`backend/app/settings.py` へ現行 `Settings` classを移し、class自体の
+`SettingsConfigDict` には `env_file` を固定しない。dotenvはfactory引数だけで選ぶ。
+
+```python
+def load_settings(*, dotenv_path: Path | None) -> Settings:
+    return Settings(_env_file=dotenv_path)
+```
+
+`backend/app/config.py` は既存の `settings` import契約を維持し、
+`MTP_DISABLE_DOTENV=1` のときだけ `load_settings(dotenv_path=None)`、通常起動では
+従来どおり `ENV_PATH` を渡す。flagの値や設定値はlogへ出さない。これによりtest
+processだけが実 `backend/.env` を開かず、通常のlocal起動動作は維持される。
+
+- [ ] **Step 3: import前にdotenvを止め、合成設定を固定するconftestを書く**
 
 ```python
 # backend/tests/conftest.py
 import os
 from pathlib import Path
 
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/mytechpulse_test",
-)
-os.environ.setdefault("QIITA_ACCESS_TOKEN", "synthetic-qiita-token")
-os.environ.setdefault("SECRET_KEY", "synthetic-test-key-with-at-least-32-bytes")
+os.environ["MTP_DISABLE_DOTENV"] = "1"
+os.environ["DATABASE_URL"] = "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/mytechpulse_test"
+os.environ["QIITA_ACCESS_TOKEN"] = "synthetic-qiita-token"
+os.environ["SECRET_KEY"] = "synthetic-test-key-with-at-least-32-bytes"
+os.environ["DB_ECHO"] = "false"
+os.environ["CORS_ALLOWED_ORIGINS"] = "http://localhost:5173"
 
 FIXTURE_DIR = Path(__file__).parents[2] / "testdata" / "compatibility"
 
@@ -82,7 +119,10 @@ def fixture_path(name: str) -> Path:
     return FIXTURE_DIR / name
 ```
 
-- [ ] **Step 3: 提供元fixtureを最小の実応答形で作る**
+`setdefault` はdeveloper machineの値を優先してしまうため使わない。test processでは
+全項目を合成値へ上書きし、`MTP_DISABLE_DOTENV=1` をapp importより前に設定する。
+
+- [ ] **Step 4: 提供元fixtureを最小の実応答形で作る**
 
 `qiita_articles.json`:
 
@@ -148,7 +188,7 @@ def fixture_path(name: str) -> Path:
 }
 ```
 
-- [ ] **Step 4: fixtureがJSONとして読めることを確認する**
+- [ ] **Step 5: dotenv遮断とfixture読込を確認する**
 
 Run:
 
@@ -157,14 +197,16 @@ backend/venv/Scripts/python.exe -m json.tool testdata/compatibility/qiita_articl
 backend/venv/Scripts/python.exe -m json.tool testdata/compatibility/zenn_articles.json > $null
 backend/venv/Scripts/python.exe -m json.tool testdata/compatibility/compatibility_cases.json > $null
 backend/venv/Scripts/python.exe -m json.tool testdata/compatibility/auth.json > $null
+backend/venv/Scripts/python.exe -m pytest backend/tests/unit/test_config.py -q
 ```
 
-Expected: すべてexit 0。
+Expected: すべてexit 0。testは一時sentinel fileだけを使い、実 `backend/.env` を
+読まない。環境変数をunsetして `app.config` をimportする確認は禁止する。
 
-- [ ] **Step 5: fixture作成をコミットする**
+- [ ] **Step 6: 設定境界とfixture作成をコミットする**
 
 ```bash
-git add backend/tests/conftest.py testdata/compatibility
+git add backend/app/settings.py backend/app/config.py backend/tests/unit/test_config.py backend/tests/conftest.py testdata/compatibility
 git commit -m "test(migration): 移行比較用fixtureを追加" -m "Refs #118"
 ```
 
