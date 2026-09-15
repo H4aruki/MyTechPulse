@@ -6,6 +6,8 @@
 
 **Architecture:** 標準 `net/http` のServeMuxにHuma v2を接続し、`internal/app` が依存を組み立てる。業務モジュールはHuma・pgxへ直接依存せず、設定と技術アダプターを `internal/platform` に閉じ込める。
 
+**Execution order:** #119のスキーマ監査・バックアップ準備後に実施する。本IssueはSQLマイグレーション0件の状態でcompile/test・Docker検証まで完了でき、ベースラインSQLには依存しない。完了後に#119後半が同じmigrationディレクトリへベースラインを追加し、復元検証を完成する。
+
 **Tech Stack:** Go 1.26、Huma v2.39.1、pgx v5.11.0、goose v3.28.0、sqlc v1.31.1、PostgreSQL 17
 
 **Spec:** `docs/superpowers/specs/2026-09-14-go-backend-migration-design.md`
@@ -38,8 +40,8 @@
 - Create: `server/internal/platform/httpx/problem.go`, `problem_test.go` — Problem Details
 - Create: `server/internal/platform/postgres/pool.go`, `pool_test.go` — pgxpool生成
 - Create: `server/internal/health/handler.go`, `handler_test.go` — live/ready
-- Create: `server/internal/migrate/run.go` — 埋め込みgoose実行
-- Create: `server/db/migrations/embed.go` — migration FS
+- Create: `server/internal/migrate/run.go`, `run_test.go` — SQL0件対応の埋め込みgoose実行
+- Create: `server/db/migrations/embed.go`, `README.md` — migration FSと常設marker
 - Create: `server/openapi/openapi.json` — 生成仕様
 - Create: `server/.env.example`, `server/Dockerfile`, `server/.dockerignore`
 - Modify: `docker-compose.yml` — `api-go` を並行追加
@@ -320,7 +322,9 @@ git commit -m "feat(backend): HTTP共通処理と安全なログを追加" -m "R
 - Create: `server/internal/platform/postgres/pool.go`
 - Create: `server/internal/platform/postgres/pool_test.go`
 - Create: `server/internal/migrate/run.go`
+- Create: `server/internal/migrate/run_test.go`
 - Create: `server/db/migrations/embed.go`
+- Create: `server/db/migrations/README.md`
 - Create: `server/cmd/migrate/main.go`
 
 **Interfaces:**
@@ -334,7 +338,7 @@ func TestOpenDoesNotReturnDatabaseURL(t *testing.T) {
     raw := "postgresql://secret-user:secret-pass@127.0.0.1:1/missing"
     ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
     defer cancel()
-    _, err := Open(ctx, raw, slog.New(slog.NewTextHandler(io.Discard, nil)))
+    _, err := Open(ctx, raw)
     if err == nil || strings.Contains(err.Error(), "secret-pass") {
         t.Fatalf("unsafe error: %v", err)
     }
@@ -364,24 +368,57 @@ func Open(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 - [ ] **Step 3: goose runnerと埋め込みFSを実装する**
 
 ```go
-//go:embed *.sql
+package migrations
+
+import "embed"
+
+//go:embed *
 var FS embed.FS
 ```
 
-`migrate.Run` はpgxpoolから標準 `database/sql` 接続を受け取る変換を1か所に閉じ込め、`goose.SetBaseFS`、dialect `postgres`、`goose.UpContext` を呼ぶ。API `main.go` からは呼ばない。
+常設 `server/db/migrations/README.md` の本文は「このディレクトリにはgoose SQLを追加する。SQLが0件でも埋め込みを成立させるため、このファイルを保持する。最初のSQLは#119で追加する。」とする。単一pattern `*` がREADMEと後続SQLを含み、SQL0件でも一致する。Goソース等もFSに含まれるが、runner/gooseが処理対象にするのは直下のSQLだけとする。#119は既定パスに `00001_legacy_baseline.sql` を追加するだけでよく、ディレクトリやsqlcのschema設定を変えない。
+
+`migrate.Run` の冒頭で次を実行し、SQLが0件ならDBへ触れず成功する。SQLがある場合のみ `goose.SetBaseFS(migrationFS)`、dialect `postgres`、`goose.UpContext(ctx, db, ".")` を呼ぶ。標準 `database/sql` 接続を用意する処理は `cmd/migrate` へ集約し、API `main.go` からは呼ばない。
+
+```go
+files, err := fs.Glob(migrationFS, "*.sql")
+if err != nil {
+    return err
+}
+if len(files) == 0 {
+    return nil
+}
+```
+
+`run_test.go` には次を追加する。DB結合テストと異なり、SQL0件のテストはDB設定なしでも必ず実行する。
+
+```go
+func TestRunWithoutSQLDoesNotAccessDatabase(t *testing.T) {
+    markerOnly := fstest.MapFS{
+        "README.md": &fstest.MapFile{Data: []byte("migration marker")},
+    }
+    if err := Run(context.Background(), nil, markerOnly); err != nil {
+        t.Fatalf("empty migrations: %v", err)
+    }
+}
+```
+
+`cmd/migrate` は標準 `flag` で `--help` をDB接続・設定読込より先に処理し、使い方を表示してexit 0とする。通常実行は `DATABASE_URL` を検証し、SQL0件も正常終了する。
 
 - [ ] **Step 4: テストする**
 
 ```bash
 go test ./internal/platform/postgres ./internal/migrate -race -v
+go test ./db/migrations
+go build ./cmd/migrate
 ```
 
-Expected: URL非漏えいテストpass。DB結合テストは `TEST_DATABASE_URL` 未設定時skip。
+Expected: SQLファイルを追加していない状態でcompile/test成功、SQL0件とURL非漏えいテストpass。DB結合テストは `TEST_DATABASE_URL` 未設定時skip。
 
 - [ ] **Step 5: DB基盤をコミットする**
 
 ```bash
-git add server/internal/platform/postgres server/internal/migrate server/db/migrations/embed.go server/cmd/migrate/main.go
+git add server/internal/platform/postgres server/internal/migrate server/db/migrations/embed.go server/db/migrations/README.md server/cmd/migrate/main.go
 git commit -m "feat(db): Goの接続と明示マイグレーション基盤を追加" -m "Refs #120"
 ```
 
@@ -499,10 +536,12 @@ COPY server/go.mod server/go.sum ./
 RUN go mod download
 COPY server/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
 
 FROM scratch
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/api /api
+COPY --from=build /out/migrate /migrate
 EXPOSE 8001
 USER 65532:65532
 ENTRYPOINT ["/api"]
@@ -543,10 +582,11 @@ go run ./cmd/openapi
 git diff --exit-code -- openapi/openapi.json
 cd ..
 docker compose config
-docker build -f server/Dockerfile .
+docker build -t mytechpulse-go:issue120 -f server/Dockerfile .
+docker run --rm --entrypoint /migrate mytechpulse-go:issue120 --help
 ```
 
-Expected: all exit 0。Docker daemonが利用不能なら、他の検査結果を記録してDockerだけ未検証と明記し、完了扱いにしない。
+Expected: SQLが0件でもall exit 0。最終image内の `/migrate --help` がDB設定なし・非rootで起動し、使い方を表示することを確認する。APIの既定entrypointは `/api` とする。#125のrelease imageでも同じ検証を行い、#119追加後の実際のDB適用は空DB・既存相当DBで別途検証する。Docker daemonが利用不能なら、他の検査結果を記録してDockerだけ未検証と明記し、完了扱いにしない。
 
 - [ ] **Step 6: Docker基盤をコミットする**
 
