@@ -10,12 +10,15 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-14-go-backend-migration-design.md`
 
+**開始条件:** #119の完了と、同Issueの `ops/sql/audit_tag_collisions.sql` による `lower(btrim(tag_name))` 監査が0件・終了コード0であることを確認してから開始する。衝突が1件以上、監査失敗、結果未確認の場合は開始しない。既存データを自動統合せず、統合が必要なら#119の対象・影響・統合方法・復旧方法の提示と別途明示承認に従い、対応後の再監査が0件になるまで停止する。
+
 ## Global Constraints
 
 - `recommend.match_int` は10000倍整数のまま保存し、既存値を一括変換しない
 - 計算は浮動小数を使わず、減衰 `old*8/10`、クリック加算 `+2000` を整数で行う
 - Python浮動小数との差1は設計承認済みの意図的修正としてテスト名とPRへ記録する
 - タグ照合は前後空白除去と小文字化を行い、同一クリック内の重複タグを1回にする
+- 既存タグのIDと表示名を維持する。未解決の正規化衝突は不変条件違反とし、クリック更新を行わない
 - Qiitaは5日、Zennは14日。Zennだけ期間内0件時に取得済みの古い候補へフォールバックする
 - Qiita scoreは一致興味度合計×(likes+1)、Zenn scoreは一致興味度合計だけにする
 - 外部HTTP通信中にDB transactionやrow lockを保持しない
@@ -26,7 +29,7 @@
 ## File Map
 
 - Create: `server/internal/interest/model.go` — Weight
-- Create: `server/internal/interest/normalize.go`, `normalize_test.go` — タグ正規化
+- Create: `server/internal/interest/normalize.go`, `normalize_test.go` — タグ正規化と既存タグの衝突検査
 - Create: `server/internal/interest/click.go`, `click_test.go` — 固定小数点更新
 - Create: `server/internal/recommendation/model.go` — ScoredArticleとfeed結果
 - Create: `server/internal/recommendation/score.go`, `score_test.go` — 提供元別順位
@@ -57,19 +60,42 @@ const (
     ClickBoost = int64(2000)
 )
 type Weight struct { TagID int64; Tag string; Value int64 }
+var ErrNormalizedTagCollision = errors.New("tag normalization collision")
 func NormalizeTag(string) string
-func UpdateOnClick(current []Weight, clicked []string) []Weight
+func ValidateCurrent(current []Weight) error
+func UpdateOnClick(current []Weight, clicked []string) ([]Weight, error)
 ```
+
+`ValidateCurrent` は正規化名の重複を検出して `ErrNormalizedTagCollision` を返す。`current` はDBから読み出した既存タグだけを受け取り、未解決の正規化衝突がないことを前提とする。前提を満たさない入力は自動補正しない。`UpdateOnClick` は入力sliceを変更せず、検査失敗時は `nil, err` を返す。
 
 - [ ] **Step 1: 共有fixtureから境界テストを書く**
 
-`875 -> 700`、`1725 -> 1380`、`10000 -> 8000`、clickedは減衰後に2000加算して10000へclamp、未登録clickedは2000、空白・大小文字・重複は1件、と固定する。結果順は既存TagID昇順、新規タグは正規化名昇順にする。
+`875 -> 700`、`1725 -> 1380`、`10000 -> 8000`、clickedは減衰後に2000加算して10000へclamp、と固定する。clickedの空白・大小文字・重複は正規化名で1件にし、既存タグと一致すれば既存TagIDと表示名を保つ。currentにないclickedは `TagID: 0`、正規化名、値2000の未解決Weightとして返し、DBのタグ解決はTask 3で行う。空文字のclickedは除外する。結果順は既存TagID昇順、未解決Weightは正規化名昇順にする。
 
 ```go
 func TestUpdateOnClickUsesApprovedIntegerRounding(t *testing.T) {
-    got := UpdateOnClick([]Weight{{TagID: 1, Tag: "Go", Value: 875}}, []string{" go ", "GO"})
+    got, err := UpdateOnClick([]Weight{{TagID: 1, Tag: "Go", Value: 875}}, []string{" go ", "GO"})
+    if err != nil { t.Fatal(err) }
     want := []Weight{{TagID: 1, Tag: "Go", Value: 2700}}
     if !reflect.DeepEqual(got, want) { t.Fatalf("got %#v want %#v", got, want) }
+}
+
+func TestUpdateOnClickRejectsNormalizedCurrentCollision(t *testing.T) {
+    current := []Weight{{TagID: 1, Tag: "Go", Value: 875}, {TagID: 2, Tag: " go ", Value: 1725}}
+    before := append([]Weight(nil), current...)
+    got, err := UpdateOnClick(current, []string{"GO"})
+    if !errors.Is(err, ErrNormalizedTagCollision) || got != nil {
+        t.Fatalf("expected collision error and no result, got %#v, %v", got, err)
+    }
+    if !reflect.DeepEqual(current, before) { t.Fatal("current was mutated") }
+}
+
+func TestUpdateOnClickReturnsUnresolvedNewTagOnce(t *testing.T) {
+    got, err := UpdateOnClick(nil, []string{" Rust ", "RUST", " "})
+    want := []Weight{{TagID: 0, Tag: "rust", Value: 2000}}
+    if err != nil || !reflect.DeepEqual(got, want) {
+        t.Fatalf("got %#v, %v; want %#v", got, err, want)
+    }
 }
 ```
 
@@ -82,7 +108,7 @@ go test ./internal/interest -run 'Test(Normalize|Update)' -v
 
 - [ ] **Step 3: 純粋関数を実装する**
 
-`NormalizeTag` は `strings.TrimSpace` 後に `strings.ToLower`。空文字を除外する。各既存値は0〜10000へclampしてから `value*8/10`、正規化名がclicked集合にあれば2000を加え再度clampする。複数表記が同じ正規化名なら最小TagIDの表記へ統合する。
+`NormalizeTag` は `strings.TrimSpace` 後に `strings.ToLower`。最初に `ValidateCurrent` でcurrent全体を検査し、同じ正規化名を持つ行があれば計算結果を返さずエラーにする。正常時だけ各既存値を0〜10000へclampしてから `value*8/10`、正規化名がclicked集合にあれば2000を加え再度clampする。正規化名は照合にだけ使い、出力の既存TagIDとTagは入力のまま維持する。currentにない非空の正規化clicked名は重複を除き、`TagID: 0`、Tagは正規化名、Valueは2000として追加する。入力sliceへ書き込まない。
 
 - [ ] **Step 4: Python差分をfixtureへ固定する**
 
@@ -127,7 +153,7 @@ score降順、PublishedAt降順、Provider辞書順、URL辞書順を固定し�
 
 - [ ] **Step 3: 実装する**
 
-weight mapは正規化タグをkeyにする。scoreの乗算は `math.MaxInt64/(likes+1)` を超える場合 `math.MaxInt64` へclampする。Likes負値はprovider変換で拒否済みだが、純粋関数でも0として扱う。
+weightsはTask 3の `List` が `ValidateCurrent` を通過させた既存タグだけを受け取り、weight mapは正規化タグをkeyにする。未解決衝突のあるweightsをserviceから渡さない。scoreの乗算は `math.MaxInt64/(likes+1)` を超える場合 `math.MaxInt64` へclampする。Likes負値はprovider変換で拒否済みだが、純粋関数でも0として扱う。
 
 - [ ] **Step 4: テストしてコミットする**
 
@@ -154,9 +180,13 @@ type InterestRepository interface {
 }
 ```
 
+`List` は読み出し結果を `interest.ValidateCurrent` で検査し、衝突なら `nil, interest.ErrNormalizedTagCollision` を返す。`UpdateForClick` も同じ不変条件を満たす必要があり、純粋関数のエラーを握りつぶさず、DB更新なしで返す。正常終了時の返却WeightはすべてDBで解決済みのTagIDと表示名を持つ。
+
 - [ ] **Step 1: 同時更新とrollbackの結合テストを書く**
 
 一時DBへuser/tag/recommendを作り、同一利用者への2 goroutine更新を開始barrierで揃える。完了後にlost updateが無いこと、途中で存在しないTagを注入した失敗では全行が開始前と一致することを確認する。
+
+合成DBに `Go` と ` go ` の2タグと同一利用者のrecommendを意図的に用意し、ListとUpdateForClickが `ErrNormalizedTagCollision` を返すこと、失敗前後でtagのID・表示名とrecommendの全行・値が一致することを確認する。正常ケースでは、currentにないclickedが既存DBタグと一致するとそのID・表示名を再利用し、DBにもない場合だけ正規化名のタグ1件と値2000のrecommendを作ることを確認する。
 
 - [ ] **Step 2: SQLを書く**
 
@@ -174,7 +204,9 @@ ON CONFLICT ("user_ID", "tag_ID") DO UPDATE SET match_int = EXCLUDED.match_int;
 
 - [ ] **Step 3: transactionを実装する**
 
-`pgx.BeginTx` → user row lock → interests読込 →純粋関数計算→ #121のLockNormalizedTag/FindTagByNormalizedName/CreateTagでTag解決→upsert→commitの順にする。defer rollbackを置き、commit後のrollbackエラーは無視する。外部HTTP呼び出しはrepository interfaceに存在させない。
+`pgx.BeginTx` → user row lock → interests読込 → `UpdateOnClick` の検査・計算 → 未解決WeightのTag解決 → upsert → commitの順にする。純粋関数がエラーならTag作成・upsertへ進まずrollbackして返す。既存WeightのTagIDと表示名はそのまま使い、タグの改名・統合を行わない。
+
+`TagID: 0` のWeightだけを正規化名昇順に、#121の `LockNormalizedTag` → `FindTagByNormalizedName` で再検索する。#119監査0件を前提とするため、既存タグがあればそのTagIDと表示名へ解決する。存在しない場合だけ正規化名を `CreateTag` へ渡し、返却されたTagIDと表示名を使う。値は2000を維持し、すべてのタグ解決成功後にrecommendをupsertする。defer rollbackを置き、commit後のrollbackエラーは無視する。外部HTTP呼び出しはrepository interfaceに存在させない。
 
 - [ ] **Step 4: sqlc生成と結合テストを行う**
 
@@ -224,6 +256,8 @@ func (s Service) RecordClick(context.Context, int64, []string) error
 
 Qiita成功/Zenn失敗、逆、両方失敗、親context cancel、FeedTimeout超過を表形式で確認する。片方成功はResultとwarning、両方失敗は `ErrAllProvidersFailed`。エラー文字列へ検索タグを入れない。
 
+repositoryのListが `ErrNormalizedTagCollision` を返した場合はproviderを呼ばずGetがエラーになること、UpdateForClickが同じエラーを返した場合はRecordClickも成功扱いせずエラーを返すことを確認する。自動再試行は行わない。
+
 - [ ] **Step 4: 実装する**
 
 興味度をDBから取得してからFeedTimeout contextを作り、上位5タグ×2提供元の最大10 requestをgoroutineで取得する。buffer 10のchannelへ各goroutineが必ず1結果を送り、全件回収後にURL統合とScoreArticlesを行う。提供元内で1件でもrequestが失敗すればwarningを付け、1件以上成功すれば空配列でもその提供元は利用可能と判定する。Qiita/Zennをそれぞれ上位10件へ絞り、内部scoreを外したArticleとして返す。`RecordClick` はrepositoryへ委譲する。
@@ -244,8 +278,8 @@ git commit -m "feat(feed): 記事統合と部分成功を実装" -m "Refs #123"
 - Modify: `server/internal/app/app.go`, `app_test.go`
 
 **Interfaces:**
-- Produces: `GET /api/v1/feed` 200/401/503
-- Produces: `POST /api/v1/feedback/article-clicks` 204/401/422
+- Produces: `GET /api/v1/feed` 200/401/500/503
+- Produces: `POST /api/v1/feedback/article-clicks` 204/401/422/500
 
 - [ ] **Step 1: 認証境界テストを書く**
 
@@ -257,7 +291,7 @@ feedは `qiita_articles`、`zenn_articles`、`warnings` を返し、各記事は
 
 - [ ] **Step 3: handlerと経路登録を実装する**
 
-auth middlewareがcontextへ入れたUserを取得する。外部両失敗だけ503 Problem Details、部分成功warningは提供元名と分類codeだけを公開し、生エラーを返さない。
+auth middlewareがcontextへ入れたUserを取得する。外部両失敗だけ503 Problem Details、部分成功warningは提供元名と分類codeだけを公開し、生エラーを返さない。`ErrNormalizedTagCollision` は内部の不変条件違反として共通の500 Problem Detailsへ変換し、タグ名・IDや生エラーを公開しない。衝突時にfeedが200やclickが204を返さないこともテストする。
 
 - [ ] **Step 4: HTTPテストしてコミットする**
 
