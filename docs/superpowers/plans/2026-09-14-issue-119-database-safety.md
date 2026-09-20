@@ -300,7 +300,7 @@ git commit -m "test(db): バックアップ復元検証を追加" -m "Refs #119"
 - Consumes: #120の `server/db/migrations/embed.go` と常設 `README.md`（SQLが0件の状態でもcompile/test可能）
 - Produces: 空DBへの3テーブル作成、既存DBの構造検証、goose version 1
 
-- [ ] **Step 1: 空DBと不正な既存DBの失敗テストを書く**
+- [ ] **Step 1: 空DB・完全な既存DB・不完全な既存DBのテストを書く**
 
 ```go
 func TestLegacyBaselineCreatesEmptyDatabase(t *testing.T) {
@@ -311,17 +311,31 @@ func TestLegacyBaselineCreatesEmptyDatabase(t *testing.T) {
     assertLegacySchema(t, db)
 }
 
-func TestLegacyBaselineRejectsIncompatibleExistingUserTable(t *testing.T) {
+func TestLegacyBaselineAcceptsCompatibleExistingDatabase(t *testing.T) {
+    db := newIsolatedDatabase(t)
+    createLegacyCompatibleSchema(t, db)
+    if err := migrate.Run(context.Background(), db, migrations.FS); err != nil {
+        t.Fatalf("migrate compatible existing database: %v", err)
+    }
+    assertLegacySchema(t, db)
+}
+
+func TestLegacyBaselineRejectsPartialExistingUserTableBeforeDDL(t *testing.T) {
     db := newIsolatedDatabase(t)
     mustExec(t, db, `CREATE TABLE "user" ("user_ID" text PRIMARY KEY)`)
     err := migrate.Run(context.Background(), db, migrations.FS)
     if err == nil || !strings.Contains(err.Error(), "legacy schema mismatch") {
         t.Fatalf("expected schema mismatch, got %v", err)
     }
+    if strings.Contains(strings.ToLower(err.Error()), "foreign key") {
+        t.Fatalf("expected pre-DDL schema mismatch, got %v", err)
+    }
 }
 ```
 
-`newIsolatedDatabase` は `TEST_DATABASE_URL` が無ければskipし、既存DBをdropしない。テスト自身が作成したDBだけを `t.Cleanup` で削除する。
+`createLegacyCompatibleSchema` は、現行の3表、列、既定値、制約、所有シーケンスを手動で作り、ベースラインSQLを適用する前から完全互換な状態を用意する。`newIsolatedDatabase` は `TEST_DATABASE_URL` が無ければskipし、既存DBをdropしない。テスト自身が作成したDBだけを `t.Cleanup` で削除する。
+
+不完全状態のテストは、`"user"` だけが存在し、`"user_ID"` が `text` の状態を使う。この状態は型不一致以前に「3表がそろっていない混在状態」であるため、`tag` や `recommend` のDDL、特に `recommend` の外部キー作成を試みず、固定の `legacy schema mismatch` で失敗しなければならない。外部キー由来のエラーではないことをエラー文でも確認する。
 
 - [ ] **Step 2: テストがmigration欠如で失敗することを確認する**
 
@@ -330,30 +344,17 @@ cd server
 go test ./db/migrations -run LegacyBaseline -v
 ```
 
-Expected: ビルドは成功するが、SQLが0件でrunnerが何も適用しないため、3テーブル作成・不正スキーマ拒否のassertionがFAILする。
+Expected: ビルドは成功するが、SQLが0件でrunnerが何も適用しないため、空DB作成・完全互換DBの適用・不完全スキーマ拒否のassertionがFAILする。
 
 - [ ] **Step 3: ベースラインSQLを書く**
 
-```sql
--- +goose Up
-CREATE TABLE IF NOT EXISTS "user" (
-  "user_ID" serial PRIMARY KEY,
-  user_name varchar(50) NOT NULL UNIQUE,
-  password varchar(255) NOT NULL
-);
-CREATE TABLE IF NOT EXISTS tag (
-  "tag_ID" serial PRIMARY KEY,
-  tag_name varchar(50) NOT NULL UNIQUE
-);
-CREATE TABLE IF NOT EXISTS recommend (
-  "user_ID" integer NOT NULL REFERENCES "user"("user_ID") ON DELETE CASCADE,
-  "tag_ID" integer NOT NULL REFERENCES tag("tag_ID") ON DELETE CASCADE,
-  match_int integer NOT NULL,
-  PRIMARY KEY ("user_ID", "tag_ID")
-);
-```
+`-- +goose Up` の先頭で、DDLより前に `to_regclass`（または同等のsystem catalog参照）により `public."user"`、`public.tag`、`public.recommend` の存在を一度だけ取得し、次の順序で分岐する。途中で `CREATE TABLE IF NOT EXISTS` を実行して存在状態を変えてから判定してはならない。
 
-この後へsystem catalog検査のDO blockを置く。`information_schema.columns` でuser 3列・tag 2列・recommend 3列の計8列を、次のテーブル名と列名の組ごとに照合する。総列数だけで互換と判定しない。
+1. 3表がすべて不存在なら、`user`、`tag`、`recommend` を現行スキーマどおりに作成する。IDはserialの主キー、利用者名・タグ名は長さ50のNOT NULL UNIQUE、passwordは長さ255のNOT NULL、recommendは整数のNOT NULL・複合主キー・2本のCASCADE外部キーとする。
+2. 3表がすべて存在するなら、DDLを一切実行せず、後述の完全な互換性検査を実行する。検査が成功した場合にだけSQLを正常終了させ、gooseがversion 1を適用済みとして記録できるようにする。
+3. 1表または2表だけが存在する混在状態なら、その時点で `RAISE EXCEPTION 'legacy schema mismatch'` として停止する。列型の差異や外部キーの作成可否を検査するためのDDLは実行しない。
+
+すべて存在する経路の互換性検査は、1つの `DO` block（または同等に失敗をロールバックできるSQL）で行い、不一致はすべて `RAISE EXCEPTION 'legacy schema mismatch'` に正規化する。`information_schema.columns` でuser 3列・tag 2列・recommend 3列の計8列を、次のテーブル名と列名の組ごとに照合する。総列数だけで互換と判定しない。
 
 | テーブル | 列 | 型 | NULL | 追加の照合 |
 | --- | --- | --- | --- | --- |
@@ -366,7 +367,7 @@ CREATE TABLE IF NOT EXISTS recommend (
 | recommend | tag_ID | integer | 不可 | 参照先tag.tag_ID |
 | recommend | match_int | integer | 不可 | 興味度の整数保存 |
 
-不足列、対象3テーブルの余分な列、型・文字数上限・NULL条件の不一致を拒否する。`pg_constraint` も件数だけでなく、3 PKの対象列（recommendはuser_ID/tag_IDの複合キー）、2 UNIQUEの対象列（user_name/tag_name）、2 FKの参照元・参照先と両方のCASCADEを照合する。`pg_get_serial_sequence` でuser/tag sequenceを検査し、不一致なら `RAISE EXCEPTION 'legacy schema mismatch'` とする。down節は作らない。SQLは既定の `server/db/migrations/00001_legacy_baseline.sql` へ追加し、#120のembed設定を変更せずに取り込めることを確認する。
+不足列、対象3テーブルの余分な列、型・文字数上限・NULL条件の不一致を拒否する。`pg_constraint` も件数だけでなく、3 PKの対象列（recommendはuser_ID/tag_IDの複合キー）、2 UNIQUEの対象列（user_name/tag_name）、2 FKの参照元・参照先と両方のCASCADEを照合する。`pg_get_serial_sequence` でuser/tag sequenceを検査し、不一致なら `RAISE EXCEPTION 'legacy schema mismatch'` とする。検査成功以外ではSQLを成功終了させず、gooseの適用済み記録を残さない。down節は作らない。SQLは既定の `server/db/migrations/00001_legacy_baseline.sql` へ追加し、#120のembed設定を変更せずに取り込めることを確認する。
 
 - [ ] **Step 4: 空DB・互換DB・不正DBを検証する**
 
@@ -376,7 +377,7 @@ go test ./db/migrations -v
 go test ./... -race
 ```
 
-Expected: 空DBと互換DBはpass、不正DBを拒否するテストもpass。
+Expected: 空DBでは3表を作成してpass、完全互換DBではDDLなしの検査後にpass、`"user"` だけが存在し`"user_ID"` がtextの不完全DBではDDL由来の外部キーエラーではなく `legacy schema mismatch` で拒否してpass。
 
 - [ ] **Step 5: ベースラインをコミットする**
 
