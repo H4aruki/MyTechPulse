@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Go・Python互換・frontend・OpenAPI・DockerをPRで検証し、mainの同一commitから作ったimmutable imageだけを承認済み本番環境へ反映する。
+**Goal:** Go・Python互換・frontend・OpenAPI・DockerをPRで検証し、同一commitのAPI image・frontend成果物・運用bundleを1つのmanifestへ固定する。
 
-**Architecture:** PRではread-only権限で全検査とimage buildを行う。mainでは別release workflowがGHCRへcommit SHA tagでpushしてdigestを成果物にする。このIssueでは本番へ反映せず、#127がGitHub Environment承認後に同じdigestを本番へ渡す。
+**Architecture:** PRではread-only権限で全検査とimage buildを行う。mainのrelease workflowは同一checkoutからAPI image、frontend archive、compose/ops bundleを作り、release-manifest.jsonとそのSHA256を保存する。このIssueでは本番へ反映せず、#126と#127が同じmanifestと3成果物を検証して使う。
 
 **Tech Stack:** GitHub Actions、Go 1.26、Node.js 22、Python 3.12、Docker Buildx、GHCR、Docker Compose
 
@@ -16,6 +16,8 @@
 - PR workflowにwrite権限や本番secretを渡さない
 - actionは40桁commit SHAへ固定し、版tagはコメントとして残す
 - release imageは `ghcr.io/h4aruki/mytechpulse-api-go` のdigestで本番指定する
+- frontendはrelease生成CIで一度buildした成果物を使い、リハーサル・本番公開時に再buildしない
+- manifestと3成果物は同一commit SHA・workflow run ID/attemptに結び付け、latestや実行時branch先頭で置き換えない
 - 本番サーバー上で `docker compose build`、`go build`、`git reset` を実行しない
 - 本番反映は #127 でGitHub Environment `production` の承認後だけ行う
 - image/packageの公開範囲、保存費用、認証用secretの登録はオーナー承認前に変更しない
@@ -28,16 +30,18 @@
 ## File Map
 
 - Modify: `.github/workflows/ci.yml` — Go、生成差分、Docker build検査
-- Create: `.github/workflows/release.yml` — 本番反映を含まないimage push
-- Create: `scripts/verify-actions-pinned.mjs`, `verify-actions-pinned.test.mjs` — action固定検査
-- Create: `ops/deploy_release.sh`, `ops/deploy_release_test.sh` — digest限定反映
+- Create: `.github/workflows/release.yml` — 本番反映を含まない3成果物とmanifestの保存
+- Create: `scripts/release-manifest.mjs`, `scripts/release-manifest.test.mjs` — manifest生成・検証
+- Create: `ops/verify_release.sh`, `ops/verify_release_test.sh` — hash検証と運用bundle展開
+- Create: `scripts/verify-actions-pinned.mjs`, `scripts/verify-actions-pinned.test.mjs` — action固定検査
+- Create: `ops/deploy_release.sh`, `ops/deploy_release_test.sh` — manifest指定releaseの準備
 - Modify: `docker-compose.yml` — local buildとdigest imageを両立
 - Create: `docs/deploy/ci-and-release.md` — 必須check、secret、rollback入力
 
 ### Task 1: workflow actionのimmutable pinを検査する
 
 **Files:**
-- Create: `scripts/verify-actions-pinned.mjs`, `verify-actions-pinned.test.mjs`
+- Create: `scripts/verify-actions-pinned.mjs`, `scripts/verify-actions-pinned.test.mjs`
 - Modify: `.github/workflows/ci.yml`
 
 - [ ] **Step 1: 未固定actionを検出するテストを書く**
@@ -108,7 +112,7 @@ frontend jobでは `npm run api:check` をlint前に実行する。
 
 - [ ] **Step 3: PRのDocker buildを追加する**
 
-Buildxで `server/Dockerfile` を `push: false`、cacheなしでもbuildする。secretとproduction設定は渡さない。
+Buildxで `server/Dockerfile` を `push: false, load: true`、cacheなしでもbuildする。最終imageから `/migrate --help` をDB設定なしで実行しexit 0を確認する。同じ最終imageの既定entrypoint `/api` を合成DB・合成設定で起動し、live/ready 200と非root実行を確認する。source上のbinaryの実行だけでは合格にしない。secretとproduction設定は渡さない。
 
 - [ ] **Step 4: 旧frontend/backendの自動公開を凍結する**
 
@@ -125,19 +129,22 @@ git add .github/workflows/ci.yml
 git commit -m "ci(backend): Goと生成契約の検査を追加" -m "Refs #125"
 ```
 
-### Task 3: digest限定の反映scriptをTDDで作る
+### Task 3: manifest指定のrelease準備scriptをTDDで作る
 
 **Files:**
 - Create: `ops/deploy_release.sh`, `ops/deploy_release_test.sh`
+- Create: `ops/verify_release.sh`, `ops/verify_release_test.sh`
+- Create: `scripts/release-manifest.mjs`, `scripts/release-manifest.test.mjs`
 - Modify: `docker-compose.yml`
 
 **Interfaces:**
-- Consumes: `GO_API_IMAGE=ghcr.io/h4aruki/mytechpulse-api-go@sha256:` + 64桁hex
-- Produces: `api-go` pull、migrate、起動、ready確認。source buildなし
+- Consumes: `MTP_RELEASE_MANIFEST`（download済みJSONのpath）、`MTP_MANIFEST_SHA256`、`MTP_RELEASE_RUN_ID`、`MTP_RELEASE_RUN_ATTEMPT`、同じrunからdownloadしたarchive directory
+- Produces: 検証済み `MTP_RELEASE_DIR`、hash照合済みfrontend archive path、manifest由来の `GO_API_IMAGE`。migration、Cloudflare公開、起動は #127 のmaintenance工程が行う
+- CLI: `node scripts/release-manifest.mjs create|verify` はCIで標準Node APIだけを使う。`bash ops/verify_release.sh` は同じschemaをBash/psqlと標準hash/archiveコマンドで検証し、本番へNode/jqや新規依存を要求しない
 
 - [ ] **Step 1: fake docker/git/curlで拒否条件を書く**
 
-未設定、tagだけ、別repository、短いdigestはexit 2。正しいdigestは `git pull --ff-only`、`docker compose pull api-go`、one-shot migrate、`docker compose up -d --no-build api-go caddy`、ready確認の順とする。`docker compose build` とpruneが一度も呼ばれないことを検査する。
+manifest未設定、manifest hash不一致、run ID/attempt不一致、tagだけ、別repository、短いdigest、frontend/ops hash不一致はexit 2。正常時はmanifest照合→両archive hash照合→release固有directoryへops展開→そのcomposeによるAPI digest pullの順とする。git更新、build、prune、migration、Caddy切替が一度も呼ばれないことを検査する。archiveの絶対path、`..`、symlink/hardlink、既存release directoryへの上書きも拒否する。
 
 - [ ] **Step 2: composeのimage指定を追加する**
 
@@ -149,23 +156,25 @@ api-go:
     dockerfile: server/Dockerfile
 ```
 
-localはbuild可能、本番は環境変数のdigestをpullする。
+localはbuild可能。本番はops bundle内のcomposeを `-p mytechpulse -f "$MTP_RELEASE_DIR/docker-compose.yml"` で明示し、manifestから設定したdigestをpullする。project名と既存DB/Caddy volume名を固定し、release directoryの変更で別volumeを作らない。secretはrelease外の承認済み設定から渡す。
 
 - [ ] **Step 3: 反映scriptを実装する**
 
-`set -euo pipefail`、完全一致regex、`git pull --ff-only`、pull、migration、起動、最大10回のready確認を実装する。失敗時は終了し、旧containerやimageを削除しない。ログにはdigestとhealth statusだけを出す。
+`set -euo pipefail` とmanifest厳密検査を実装する。workflow側の固定された検証処理とserver側の既に承認済み検証入口でhashを確認してから、`releases/<commit_sha>-<run_id>-<run_attempt>/` の新規directoryへops bundleを展開し、frontend archiveも同directoryへ検証済み入力として配置する。その中のcompose/scriptだけを使い、未検証bundle内のscriptを検証入口として起動しない。source checkoutの更新やserver上buildに依存しない。失敗時は終了し、旧release directory・container・imageを保持する。直前のmanifest SHA256、API識別子、frontend deployment ID、frontend artifact名/hash、ops bundle名/hash/release directoryを `previous-release.json` に保存し、 #127 のrollback入力とする。初回Python版も稼働image ID/digestと実際のfrontend/compose/ops一式を保全して記録し、可変tagから再取得しない。
 
 - [ ] **Step 4: shellとcomposeを検証してコミットする**
 
 ```bash
-bash -n ops/deploy_release.sh ops/deploy_release_test.sh
+bash -n ops/deploy_release.sh ops/deploy_release_test.sh ops/verify_release.sh ops/verify_release_test.sh
 bash ops/deploy_release_test.sh
+bash ops/verify_release_test.sh
+node --test scripts/release-manifest.test.mjs
 docker compose config
-git add ops/deploy_release.sh ops/deploy_release_test.sh docker-compose.yml
+git add ops/deploy_release.sh ops/deploy_release_test.sh ops/verify_release.sh ops/verify_release_test.sh scripts/release-manifest.mjs scripts/release-manifest.test.mjs docker-compose.yml
 git commit -m "feat(deploy): digest限定のGo反映手順を追加" -m "Refs #125"
 ```
 
-### Task 4: 本番反映を含まないGHCR release workflowを作る
+### Task 4: 本番反映を含まない3成果物のrelease workflowを作る
 
 **Files:**
 - Create: `.github/workflows/release.yml`
@@ -176,11 +185,28 @@ git commit -m "feat(deploy): digest限定のGo反映手順を追加" -m "Refs #1
 
 - [ ] **Step 2: publish jobを書く**
 
-`on: workflow_dispatch` とmain push、permissionsはjob単位で `contents: read`、`packages: write`。login後、commit SHA tagでbuild-pushし、`docker/build-push-action` の `digest` outputをjob outputにする。latest tagは使わない。
+`on: workflow_dispatch` とmain push、permissionsはjob単位で `contents: read`、`packages: write`。同一 `github.sha` をcheckoutし、login後commit SHA tagでAPIをbuild-pushする。最終imageの完全digestをpullし、Task 2と同じ `/api` 起動/healthと `/migrate --help` を実行する。latest tagは使わない。
+
+同じcheckoutのfrontendを `npm ci` →契約/lint/test→ `npm run build` で一度buildし、`frontend/dist/` を `frontend-<commit_sha>.tar.gz` へ固める。公開先API URLなどbuild時設定もこの時点で固定し、#126は隔離DNS/経路でそのURLを検証APIへ向ける。再buildでURLを差し替えない。`docker-compose.yml`、`Caddyfile`、追跡済み `ops/`、存在する場合の `docker-compose.rehearsal.yml` を同じcheckoutから `ops-<commit_sha>.tar.gz` にし、秘密設定・dump・未追跡fileを含めない。
+
+`release-manifest.json` のschemaを次に固定する（値は生成時に実値を入れる）。frontend/opsの `artifact_name` は同名archiveを含むGitHub Actions artifact名、`sha256` はarchive本体のhashである。
+
+```json
+{
+  "schema_version": 1,
+  "commit_sha": "<40桁commit SHA>",
+  "api_image": "ghcr.io/h4aruki/mytechpulse-api-go@sha256:<64桁hex>",
+  "frontend": {"artifact_name": "frontend-<commit_sha>", "file": "frontend-<commit_sha>.tar.gz", "sha256": "<64桁hex>"},
+  "ops": {"artifact_name": "ops-<commit_sha>", "file": "ops-<commit_sha>.tar.gz", "sha256": "<64桁hex>"},
+  "workflow": {"run_id": "<run ID>", "run_attempt": "<attempt>", "url": "<そのrunのURL>"}
+}
+```
+
+両archiveとmanifestをrun/attempt単位で上書き不可のartifactへ保存し、manifest artifact名は `release-manifest-<commit_sha>-<run_attempt>` とする。manifest自身のSHA256は自己参照fieldにせず `.sha256` とworkflow summaryへ記録する。消失・期限切れ時は同名再生成で代用せず、新しいreleaseと #126 の再合格を要求する。#126/#127の運用script追加後にはそれらを含む候補を再生成し、その最終manifestを #126 で検証する。合格後のops変更も新manifestとして再検証する。
 
 - [ ] **Step 3: 本番反映が無いことをtestする**
 
-workflowにSSH、Lightsail secret、`ops/deploy_release.sh`、production Environment、public healthへのcallが無いことをtestする。publish後はdigestをworkflow summaryへ出し、#126/#127が入力として使えるようにする。
+このpublish jobにSSH、Lightsail secret、`ops/deploy_release.sh`、production Environment、public healthへのcallが無いことをtestする。manifest生成・検証testではcommit/run不一致、欠損成果物、archiveの1byte改変、APIだけ差替え、mutable tagを拒否する。publish後はmanifest SHA256、run URL/ID/attemptと3成果物の識別子をworkflow summaryへ出し、#126/#127が入力として使えるようにする。
 
 - [ ] **Step 4: workflowを静的検査してコミットする**
 
@@ -199,7 +225,7 @@ git commit -m "ci(release): Go imageのimmutable配布を追加" -m "Refs #125"
 
 - [ ] **Step 1: 文書を書く**
 
-必須check名、PR/mainの権限差、GHCR package、必要secret名、digest確認方法、このIssueでは本番反映しないこと、#127のproduction Environmentとrollback入口を記載する。secret値と本番host値は書かない。
+必須check名、PR/mainの権限差、GHCR package、必要secret名、manifestと3成果物のdownload/hash照合方法、保持期間、このIssueでは本番反映しないこと、#127のproduction Environmentとprevious release recordによる組合せrollbackを記載する。secret値と本番host値は書かない。
 
 - [ ] **Step 2: 全検証を行う**
 
@@ -207,6 +233,8 @@ git commit -m "ci(release): Go imageのimmutable配布を追加" -m "Refs #125"
 node --test scripts/verify-actions-pinned.test.mjs
 node scripts/verify-actions-pinned.mjs
 bash ops/deploy_release_test.sh
+bash ops/verify_release_test.sh
+node --test scripts/release-manifest.test.mjs
 cd server
 go test ./... -race
 go build ./cmd/api ./cmd/migrate ./cmd/openapi
@@ -217,7 +245,8 @@ npm run test
 npm run build
 cd ..
 docker compose config
-docker build -f server/Dockerfile .
+docker build -t mytechpulse-go:issue125 -f server/Dockerfile .
+docker run --rm --entrypoint /migrate mytechpulse-go:issue125 --help
 ```
 
 - [ ] **Step 3: 文書をコミットする**
