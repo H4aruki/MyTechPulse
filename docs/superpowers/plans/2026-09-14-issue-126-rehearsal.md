@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 本番切り替え前に、復元DBとrelease imageを使ってmigration、主要操作、性能、切り戻しを再現し、停止時間30分以内を実測する。
+**Goal:** 本番切り替え前に、復元DBと1つのrelease manifestに固定された3成果物を使ってmigration、既存データ内容保全、主要操作、性能、切り戻しを再現し、停止時間30分以内を実測する。
 
-**Architecture:** 本番とは隔離したrehearsal Compose projectを使う。自動scriptは秘密値を出さず、件数・制約・health・所要時間を機械判定する。ブラウザ操作と本番相当バックアップの利用は人間が承認・実行し、結果だけをIssueへ記録する。
+**Architecture:** 本番とは隔離したrehearsal Compose projectを使う。自動scriptは同一manifestのAPI digest・frontend artifact・ops bundleをdownload/hash検証し、件数・制約・sequenceと秘密nonce付きのデータ内容比較を行う。ブラウザ操作と本番相当バックアップの利用は人間が承認・実行し、機密値を含まない結果だけをIssueへ記録する。
 
 **Tech Stack:** Docker Compose、PostgreSQL 17、Bash、Go release image、React production build、GitHub Issues
 
@@ -16,8 +16,8 @@
 - rehearsalは既存Compose project、DB volume、portと別名を使う
 - 本番由来dumpをrepositoryへ追加せず、内容・利用者名・password hashをログへ出さない
 - 入力dumpと既存backupを削除・上書きしない
-- migration後の件数、FK、unique、sequenceをmigration前と比較する
-- release imageは #125 が作ったdigestを使い、rehearsal中にsource buildしない
+- migration後の件数、FK、unique、sequenceに加え、既存user/tag/recommendのキーと値をmigration前と比較する
+- #125の1つのmanifest SHA256・workflow run ID/attemptを入力し、指定された3成果物を使う。APIだけの差替えとsource/frontend再buildは禁止
 - 合格条件は停止相当工程30分以内、主要flow全成功、rollback全成功、重大なdata差分0
 - 合格しない状態で #127 を開始しない
 
@@ -27,39 +27,69 @@
 
 - Create: `docker-compose.rehearsal.yml` — 隔離DB/API/Caddy構成
 - Create: `ops/rehearsal.sh`, `ops/rehearsal_test.sh` — 全工程orchestrator
-- Create: `ops/sql/snapshot_migration_state.sql` — 秘密値なしの件数・制約snapshot
-- Create: `ops/compare_migration_state.sh`, `compare_migration_state_test.sh` — 前後比較
-- Create: `ops/rehearsal_smoke.sh`, `rehearsal_smoke_test.sh` — healthとAPI flow
+- Create: `ops/sql/snapshot_migration_state.sql` — DB内のnonce付き内容digestと件数・制約snapshot
+- Create: `ops/snapshot_migration_state.sh`, `ops/snapshot_migration_state_test.sh` — nonce管理・非公開snapshot
+- Create: `ops/compare_migration_state.sh`, `ops/compare_migration_state_test.sh` — 前後比較
+- Create: `ops/rehearsal_smoke.sh`, `ops/rehearsal_smoke_test.sh` — healthとAPI flow
 - Create: `docs/deploy/go-migration-rehearsal.md` — 人間向けchecklist・記録欄
 
 ### Task 1: dataを露出しないmigration snapshotを作る
 
 **Files:**
 - Create: `ops/sql/snapshot_migration_state.sql`
-- Create: `ops/compare_migration_state.sh`, `compare_migration_state_test.sh`
+- Create: `ops/snapshot_migration_state.sh`, `ops/snapshot_migration_state_test.sh`
+- Create: `ops/compare_migration_state.sh`, `ops/compare_migration_state_test.sh`
 
 **Interfaces:**
-- Produces: JSON `{schema_version, counts, constraints, sequences}`
-- Consumes: migration前後のJSON file
+- Consumes: `MTP_SNAPSHOT_NONCE_FILE`（1実行で生成する秘密nonceの0600 file）、`MTP_SNAPSHOT_OUTPUT`（0700一時directory内の0600 file）、検証対象DB
+- Produces: 非公開snapshot JSON `{schema_version, counts, constraints, sequences, table_digests}`。`table_digests` はDB内で計算した3表のaggregateだけで、raw値・row digest・nonceは含めない
+- Comparator: `bash ops/compare_migration_state.sh "$before" "$after"` は公開出力を `{"matches":true,"mismatched_tables":0}` の2項目に限定し、不一致/検査不能は非0。JSON file自体をCI artifact・Issue・通常ログへ出さない
 
 - [ ] **Step 1: 比較scriptの失敗テストを書く**
 
-同じuser/tag/recommend件数は成功、1件差は失敗。required FK/unique/check不足は失敗。各sequence `last_value < max_id` は失敗、password/tag名を含むkeyは失敗とする。
+同じuser/tag/recommendの内容・件数は成功、1件差・required FK/unique/check不足・各sequence `last_value < max_id` は失敗。合成DBで件数を維持したままuser_name/password/tag_name/match_intを1値だけ変える各case、user_ID/tag_IDの変更と関連キー更新、recommendの複合キーだけの変更をそれぞれ失敗させる。空3表同士、物理行順を変えた同じ内容は成功、空→1行は失敗。NULL/空文字、区切り文字、Unicodeを含む合成値の曖昧な連結も検出する。異なるnonceで作ったsnapshotは拒否し、同じnonceでbefore/after/cleanup比較まで実行する。stdout/stderr/artifact候補に合成password hash、名前、tag、nonce、row/table digestが現れないことも検査する。
 
 - [ ] **Step 2: snapshot SQLを書く**
 
-SQLは3表の `count(*)`、PK/FK/unique/check制約名と定義、`user_user_ID_seq` と `tag_tag_ID_seq` のlast_value、各IDのmaxだけを `jsonb_build_object` で1行出力する。行内容、利用者名、password、tag名、session hashは選択しない。
+SQLは3表の `count(*)`、PK/FK/unique/check制約名と定義、sequenceのlast_value/is_calledと各IDのmaxを取得する。内容比較は以下の列をDB内で順序付きJSON arrayへ正規化し、PostgreSQL 17組み込み `sha256(bytea)` と `convert_to(..., 'UTF8')` で計算する。追加extensionは使わない。role/auth_sessionの追加は既存内容の比較対象外で、別途追加スキーマとして検査する。
+
+| 表 | rowの正規化列順 | table集約時の数値キー順 |
+| --- | --- | --- |
+| user | user_ID, user_name, password | user_ID |
+| tag | tag_ID, tag_name | tag_ID |
+| recommend | user_ID, tag_ID, match_int | user_ID, tag_ID |
+
+SQLの計算核は次の形とし、3表とも同じ規則を使う。`snapshot_nonce` は一時表で1行だけ、`n` は秘密nonceである。
+
+```sql
+WITH rows AS (
+  SELECT u."user_ID" AS id,
+         encode(sha256(convert_to(n || ':row:user:' ||
+           jsonb_build_array(u."user_ID", u.user_name, u.password)::text,
+           'UTF8')), 'hex') AS row_digest
+  FROM public."user" AS u CROSS JOIN snapshot_nonce
+)
+SELECT encode(sha256(convert_to(n || ':table:user:' ||
+  coalesce((SELECT string_agg(row_digest, '' ORDER BY id) FROM rows), ''),
+  'UTF8')), 'hex') AS table_digest
+FROM snapshot_nonce;
+```
+
+tag/recommendもtable名をdomain separatorに含め、recommendは2キーで数値sortする。固定長hexの連結とJSONの型・NULL表現で区切りや並びの曖昧さをなくす。空tableは空連結を同じnonceでhashする。row digestはDB外へ返さず、table aggregateだけを非公開snapshotへ保存する。raw password hashや利用者名、tag名をSQL結果/JSON/logへ返さない。
 
 - [ ] **Step 3: comparatorを実装する**
 
-Nodeやjqを追加せず、PostgreSQLへ2 JSONを渡して `jsonb` 演算で比較するBash wrapperにする。migrationで意図的に増えるrole/auth_session制約はafter必須、3表件数は完全一致、auth_session件数は比較対象外とする。
+Nodeやjqを追加せず、PostgreSQLへ2 JSONを標準入力のCOPYで渡し、`jsonb` 演算で比較するBash wrapperにする。migrationで意図的に増えるrole/auth_session制約はafter必須、3表の件数・既存制約・sequence状態・table digestは完全一致、auth_session件数は既存内容の比較対象外とする。制約・sequence異常も当該表の不一致として数え、比較結果は一致可否と不一致table数だけを出す。
+
+snapshot wrapperは `umask 077` の一時directoryに `/dev/urandom` 由来32byteのnonceをhexで生成し、before/after/cleanupで同じfileを再利用する。nonce識別用の秘密でない実行IDをwrapperの状態に持ち、他実行snapshotの混在を拒否する。nonceは引数・SQL文字列・環境変数・shell traceへ展開せず、標準入力のCOPYで一時表へ渡す。`psql -X -q` を使い、SQL/parameter/statement errorのログにCOPYデータが出ない設定を前提検査し、満たせなければ停止する。DB接続失敗等のstderrは保護された一時fileで受け、公開するのは固定の失敗コードだけとする。snapshot/digestは機密扱いでartifact登録しない。処理終了時はこの実行で作成したnonce/snapshot/一時error fileだけを消し、再試行時は新nonceでbeforeからやり直す。
 
 - [ ] **Step 4: 合成fixtureで検証してコミットする**
 
 ```bash
 bash -n ops/compare_migration_state.sh ops/compare_migration_state_test.sh
 bash ops/compare_migration_state_test.sh
-git add ops/sql/snapshot_migration_state.sql ops/compare_migration_state.sh ops/compare_migration_state_test.sh
+bash ops/snapshot_migration_state_test.sh
+git add ops/sql/snapshot_migration_state.sql ops/snapshot_migration_state.sh ops/snapshot_migration_state_test.sh ops/compare_migration_state.sh ops/compare_migration_state_test.sh
 git commit -m "test(migration): DB前後状態の比較を追加" -m "Refs #126"
 ```
 
@@ -69,8 +99,8 @@ git commit -m "test(migration): DB前後状態の比較を追加" -m "Refs #126"
 - Create: `docker-compose.rehearsal.yml`
 
 **Interfaces:**
-- Consumes: `MTP_REHEARSAL_IMAGE`、`MTP_REHEARSAL_DUMP`、合成password
-- Produces: project `mytechpulse-rehearsal`、loopback ports 18001/15432
+- Consumes: 検証済みmanifest由来の `MTP_REHEARSAL_IMAGE`、frontend展開directory、ops release directory、`MTP_REHEARSAL_DUMP`、合成password
+- Produces: project `mytechpulse-rehearsal`、loopback ports 18001/15432、frontend配信と隔離API routing
 
 - [ ] **Step 1: Compose設定testを書く**
 
@@ -84,11 +114,11 @@ docker compose -p mytechpulse-rehearsal -f docker-compose.rehearsal.yml config
 
 - [ ] **Step 2: 隔離構成を書く**
 
-DBはnamed volume `mytechpulse_rehearsal_db`、host bind `127.0.0.1:15432`。APIは `MTP_REHEARSAL_IMAGE` 必須、host bind `127.0.0.1:18001`、APP_ENV test、Swagger有効。migrationは同じdigestのimageで `/migrate` entrypointを一度実行する。
+DBはnamed volume `mytechpulse_rehearsal_db`、host bind `127.0.0.1:15432`。APIは `MTP_REHEARSAL_IMAGE` 必須、host bind `127.0.0.1:18001`、APP_ENV test、Swagger有効。migrationは同じdigestのimageで `/migrate` entrypointを一度実行する。manifestのfrontend archiveをhash照合して展開し、同じops bundle内のCaddy/composeで配信する。releaseのAPI URLは変更せず、隔離環境だけの名前解決/TLS経路を検証APIへ向ける。本番host/DBへ到達しないことを先に検査する。production Cookie/Origin設定での検査もこの限定経路で実施する。
 
 - [ ] **Step 3: image値をdigest限定にする**
 
-Compose実行前のscriptで `^ghcr\.io/h4aruki/mytechpulse-api-go@sha256:[0-9a-f]{64}$` を検証する。latestやcommit tagだけでは起動しない。
+Compose実行前に #125 の `ops/verify_release.sh` でmanifest SHA256、run ID/attempt、frontend/ops archive hashを照合する。APIはmanifestの完全digestを使い、latestやcommit tagだけでは起動しない。composeと運用scriptは検証済みops directoryから使い、checkoutの同名fileへ切り替えない。
 
 - [ ] **Step 4: config検証してコミットする**
 
@@ -101,7 +131,7 @@ git commit -m "feat(migration): 隔離リハーサル環境を追加" -m "Refs #
 ### Task 3: 認証・feed・clickのsmoke testを作る
 
 **Files:**
-- Create: `ops/rehearsal_smoke.sh`, `rehearsal_smoke_test.sh`
+- Create: `ops/rehearsal_smoke.sh`, `ops/rehearsal_smoke_test.sh`
 
 **Interfaces:**
 - Consumes: `MTP_REHEARSAL_BASE_URL`、合成username/password
@@ -131,11 +161,11 @@ git commit -m "test(migration): Go APIの移行smokeを追加" -m "Refs #126"
 
 - [ ] **Step 1: 前提・失敗停止testを書く**
 
-dump不存在、checksum不一致、image digest不正は起動前に失敗。restore/migrate/smoke/comparisonのどれかが失敗したら後続切り替えをせず非0。Python旧APIのhealthへ戻すrollback模擬が成功したときだけrollback passとする。
+dump不存在、checksum不一致、manifest SHA256/run不一致、3成果物の欠損/hash不一致、APIだけの差替えは起動前に失敗。restore/migrate/smoke/comparisonのどれかが失敗したら後続切り替えをせず非0。previous release recordに対応する旧API・frontend・opsの組合せへ戻し、healthとブラウザflowを確認したときだけrollback passとする。
 
 - [ ] **Step 2: 工程を実装する**
 
-開始epochを記録し、backup検証→隔離DB起動→新規DBへrestore→before snapshot→migration→after snapshot→比較→Go起動→smoke→旧Python imageへroutingを戻す模擬→health→Goへ再切替→healthの順にする。各工程は名前・秒数・pass/failだけを出す。
+指定run/attemptからmanifestと同じfrontend/ops artifactをdownloadし、入力manifest SHA256と両archive hashを検証する。APIを完全digestでpullした後、開始epochを記録し、backup検証→隔離DB起動→新規DBへrestore→before snapshot→migration→after snapshot→内容比較→Go起動→そのfrontend/ops/APIの組合せでsmoke→旧release組合せへ戻す模擬→health/画面→Go release組合せへ再切替→healthの順にする。各工程は名前・秒数・pass/failだけを出す。一般利用者の書込みを遮断したまま内容比較する #127 の順序を再現し、合成writeによる期待差分と承認済みcleanup後の3表内容一致も検証する。cleanupは合成利用者とその関連行だけを対象にし、既存tagを削除しない。
 
 - [ ] **Step 3: 終了処理を安全にする**
 
@@ -146,7 +176,7 @@ dump不存在、checksum不一致、image digest不正は起動前に失敗。re
 ```bash
 bash -n ops/rehearsal.sh ops/rehearsal_test.sh
 bash ops/rehearsal_test.sh
-MTP_REHEARSAL_IMAGE="$MTP_RELEASE_IMAGE" MTP_REHEARSAL_DUMP="$MTP_SYNTHETIC_DUMP" MTP_REHEARSAL_DB_PASSWORD="$MTP_SYNTHETIC_DB_PASSWORD" bash ops/rehearsal.sh
+MTP_MANIFEST_SHA256="$MTP_APPROVED_MANIFEST_SHA256" MTP_RELEASE_RUN_ID="$MTP_APPROVED_RUN_ID" MTP_RELEASE_RUN_ATTEMPT="$MTP_APPROVED_RUN_ATTEMPT" MTP_REHEARSAL_DUMP="$MTP_SYNTHETIC_DUMP" MTP_REHEARSAL_DB_PASSWORD="$MTP_SYNTHETIC_DB_PASSWORD" bash ops/rehearsal.sh
 ```
 
 Expected: 各工程pass、30分未満、既存project/volumeは未変更。
@@ -169,11 +199,11 @@ git commit -m "feat(migration): 移行リハーサルを自動化" -m "Refs #126
 
 - [ ] **Step 2: runbookを完成させる**
 
-digest、dump checksum、開始/終了時刻、migration前後件数、constraint、sequence、smoke、ブラウザ操作、API p95、rollback所要時間、判定者を記録する表を作る。値欄はIssue実行コメントへ記録し、機密値は書かない。
+manifest SHA256、commit SHA、release元workflow run URL/ID/attempt、rehearsal workflow run URL/ID、API完全digest、frontend/ops artifact名とSHA256、dump checksum、開始/終了時刻、件数/constraint/sequenceの検査可否、data digest一致可否と不一致table数、合成write期待差分/cleanup結果、承認範囲、smoke、ブラウザ操作、API p95、rollback所要時間、判定者を記録する。nonce、data digest自体、raw data、secretをIssueへ記録しない。#127が入力する合格証跡はmanifest SHA256、release元run ID/attempt、rehearsal run URL/IDを一組として示す。
 
 - [ ] **Step 3: 人間が本番相当リハーサルを実行する**
 
-ブラウザで既存利用者login、記事表示、クリック、再読込、logout、新規登録を確認する。Swagger UIはtest環境で表示、本番相当production設定で404を確認する。停止相当工程とrollbackを各1回以上実測する。
+manifestのfrontend artifactを配信したブラウザで既存利用者login/記事表示を確認し、データ比較後に合成利用者で新規登録、クリック、再読込、logoutを確認する。既存利用者の興味度を変える操作はしない。Swagger UIはtest環境で表示、本番相当production設定で404を確認する。停止相当工程と3成果物の組合せrollbackを各1回以上実測する。
 
 - [ ] **Step 4: 合格判定をIssueへ記録する**
 
