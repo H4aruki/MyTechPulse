@@ -29,7 +29,7 @@
 
 - Modify: `frontend/package.json`, `package-lock.json` — 型生成toolとscripts
 - Create: `frontend/src/api/generated.ts` — OpenAPIからの生成物
-- Create: `frontend/src/api/generated.test.ts` — 主要経路の型存在確認
+- Create: `frontend/src/api/generated-contract.ts` — TypeScriptビルドによる主要経路の型存在確認（手書き、Vitest対象外）
 - Modify: `frontend/src/api/client.ts` — Cookie、CSRF、Problem Details
 - Modify: `frontend/src/api/endpoints.ts` — `/api/v1` wrapper
 - Modify: `frontend/src/api/types.ts` — 生成型の読みやすいaliasだけ
@@ -44,7 +44,7 @@
 
 **Files:**
 - Modify: `frontend/package.json`, `frontend/package-lock.json`
-- Create: `frontend/src/api/generated.ts`, `generated.test.ts`
+- Create: `frontend/src/api/generated.ts`, `generated-contract.ts`
 
 **Interfaces:**
 - Consumes: `server/openapi/openapi.json`
@@ -70,9 +70,11 @@ Expected: packageとlockの版がどちらも `7.13.0`。
 }
 ```
 
-既存のdev/build/lint/test/previewは残す。
+既存のdev/build/lint/test/previewは残す。型確認のための追加依存やtest scriptの変更は行わない。
 
-- [ ] **Step 3: 型生成と主要経路のcompile-time testを書く**
+- [ ] **Step 3: 主要経路のcompile-time型確認を書く**
+
+次を手書きの `frontend/src/api/generated-contract.ts` に置く。通常の `.ts` ファイル名によりVitestのtest/spec収集対象から外す。`tsconfig.app.json` の `include: ["src"]` に含まれるので、既存の `npm run build`（`tsc -b && vite build`）または `npx tsc -b` が型検査し、経路・methodが生成型から失われると失敗する。画面コードからimportする必要はない。型生成の出力先は `generated.ts` のままとする。
 
 ```ts
 import type { paths } from './generated'
@@ -91,7 +93,7 @@ cd frontend
 npm run api:generate
 npm run build
 npm run api:check
-git add package.json package-lock.json src/api/generated.ts src/api/generated.test.ts
+git add package.json package-lock.json src/api/generated.ts src/api/generated-contract.ts
 git commit -m "chore(frontend): OpenAPI型生成を追加" -m "Refs #124"
 ```
 
@@ -186,7 +188,7 @@ mock fetchでlogin、signup、me、logout、feed、clickの正確な `/api/v1` p
 
 ```bash
 cd frontend
-npm run test -- src/api/endpoints.test.ts src/api/generated.test.ts
+npm run test -- src/api/endpoints.test.ts
 npm run build
 git add src/api/endpoints.ts src/api/types.ts src/api/endpoints.test.ts
 git commit -m "feat(frontend): Go APIの生成型へ接続" -m "Refs #124"
