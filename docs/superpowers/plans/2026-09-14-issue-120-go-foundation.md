@@ -459,7 +459,7 @@ func New(cfg config.Config, deps Dependencies) (http.Handler, *huma.OpenAPI) {
     hc := huma.DefaultConfig("MyTechPulse API", "1.0.0")
     hc.DocsRenderer = huma.DocsRendererSwaggerUI
     hc.DocsPath = "/docs"
-    hc.OpenAPIPath = "/openapi"
+    hc.OpenAPIPath = "/openapi" // Humaが.jsonと.yamlを付けて公開する基底パス
     if !cfg.SwaggerEnabled {
         hc.DocsPath, hc.OpenAPIPath, hc.SchemasPath = "", "", ""
     }
@@ -483,7 +483,7 @@ go run ./cmd/openapi
 git diff --exit-code -- openapi/openapi.json
 ```
 
-Expected: local設定では `/docs` 200、`/openapi.json` 200、登録済みschemaの `/schemas/ReadyOutputBody.json` 200。production相当ではdocs、OpenAPI JSON/YAML、schema経路がすべて404。liveは常に200、DB失敗readyは503。
+Expected: local/test設定では `/docs`、`/openapi.json`、`/openapi.yaml`、登録済みschemaの `/schemas/ReadyOutputBody.json` がすべて200。production相当ではこれら各経路がすべて404。liveは常に200、DB失敗readyは503。
 
 - [ ] **Step 5: API仕様基盤をコミットする**
 
