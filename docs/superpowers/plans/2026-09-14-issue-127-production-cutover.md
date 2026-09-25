@@ -166,7 +166,7 @@ manifest/3成果物、backup、snapshot、migration、内容比較、Go ready、
 
 合成dataのcleanup対象は「このrunで作成した合成利用者1件、同利用者に属するrecommend行、残存する同利用者のauth_session」に限定し、既存user、既存tag、他利用者のrecommendを削除しない。対象・役割・理由・影響をTask 6のcutover承認へ含め、`MTP_SYNTHETIC_CLEANUP_APPROVED` が明示承認済みの固定値 `DELETE_CUTOVER_SYNTHETIC_DATA` と完全一致する場合だけ削除する。cleanup後に同じnonceでsnapshotを取り、migration直後のafter snapshotと既存3表の内容・件数・制約・sequenceが完全一致してから `prepare` を成功にする。cleanupを承認できない、または一致しない場合はmaintenanceを維持して公開せずrollbackへ進む。
 
-GitHub runnerは `prepare` 成功後もpublic Caddyを503のまま維持し、hash照合済みfrontend archiveを再buildせずCloudflare Pages productionへ送る。deployment成功と対象artifact hashを確認した後だけ `activate` を呼ぶ。`activate` は候補ops bundleのCaddy設定で `API_UPSTREAM=api-go:8001` へ切り替え、public live/readyと `/docs`、`/openapi.json`、`/openapi.yaml`、`/schemas/` の404を確認する。public経路ではsignup/clickを再実行しない。
+GitHub runnerは `prepare` 成功後もpublic Caddyを503のまま維持し、hash照合済みfrontend archiveを再buildせずCloudflare Pages productionへ送る。deployment成功と対象artifact hashを確認した後だけ `activate` を呼ぶ。`activate` は候補ops bundleのCaddy設定で `API_UPSTREAM=api-go:8001` へ切り替え、public live/readyと `/docs`、`/openapi.json`、`/openapi.yaml`、`/openapi-3.0.json`、`/openapi-3.0.yaml`、`/schemas/` の404を確認する。public経路ではsignup/clickを再実行しない。
 
 各工程名・経過秒・結果だけを出す。成功時もprevious releaseのAPI container/image、frontend deployment、ops directory、backupを保持する。nonce/snapshot/error fileは非公開一時directoryだけに置き、このrunで作成したものだけを終了時に削除する。
 
@@ -237,7 +237,7 @@ Task 1〜5のcutover、rollback、snapshot、検証scriptを含むmainの同一c
 
 - [ ] **Step 3: data・機能・非公開経路を確認する**
 
-Issueへbefore/afterの既存3表内容一致、Go内部ready、通常公開前の限定経路での既存利用者login/記事表示（clickなし）、合成利用者signup/click/logoutの期待差分、承認済みcleanup、cleanup後とafter snapshotの内容一致、Cloudflareへ同じfrontend artifactを送った結果、public live/ready、`/docs` 404、`/openapi.json` 404、`/openapi.yaml` 404、`/schemas/` 配下404、所要時間を記録する。比較結果は一致可否と不一致table数だけとし、実利用者名、合成値、password hash、tag、nonce、row/table digest、snapshot、レスポンスbodyは記録しない。
+Issueへbefore/afterの既存3表内容一致、Go内部ready、通常公開前の限定経路での既存利用者login/記事表示（clickなし）、合成利用者signup/click/logoutの期待差分、承認済みcleanup、cleanup後とafter snapshotの内容一致、Cloudflareへ同じfrontend artifactを送った結果、public live/ready、`/docs` 404、`/openapi.json` 404、`/openapi.yaml` 404、`/openapi-3.0.json` 404、`/openapi-3.0.yaml` 404、`/schemas/` 配下404、所要時間を記録する。比較結果は一致可否と不一致table数だけとし、実利用者名、合成値、password hash、tag、nonce、row/table digest、snapshot、レスポンスbodyは記録しない。
 
 - [ ] **Step 4: 成否を確定する**
 

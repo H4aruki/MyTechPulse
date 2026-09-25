@@ -483,7 +483,7 @@ go run ./cmd/openapi
 git diff --exit-code -- openapi/openapi.json
 ```
 
-Expected: local/test設定では `/docs`、`/openapi.json`、`/openapi.yaml`、登録済みschemaの `/schemas/ReadyOutputBody.json` がすべて200。production相当ではこれら各経路がすべて404。liveは常に200、DB失敗readyは503。
+Expected: local/test設定では `/docs`、`/openapi.json`、`/openapi.yaml`、`/openapi-3.0.json`、`/openapi-3.0.yaml`、登録済みschemaの `/schemas/ReadyOutputBody.json` がすべて200。production相当ではこれら各経路がすべて404。liveは常に200、DB失敗readyは503。
 
 - [ ] **Step 5: API仕様基盤をコミットする**
 
