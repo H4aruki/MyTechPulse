@@ -37,9 +37,7 @@ def test_unknown_user_and_wrong_password_share_response(monkeypatch) -> None:
     monkeypatch.setattr(
         auth_service.crud.user,
         "get_user_by_username",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            user_ID=1, user_name="nobody", password=hashed
-        ),
+        lambda *_args, **_kwargs: SimpleNamespace(user_ID=1, user_name="nobody", password=hashed),
     )
     wrong = auth_service.login_check_service(object(), request)
 

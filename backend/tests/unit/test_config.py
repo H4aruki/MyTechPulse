@@ -1,5 +1,6 @@
 from pathlib import Path
 
+
 def test_settings_can_skip_dotenv_file(monkeypatch, tmp_path: Path) -> None:
     from backend.app.settings import load_settings
 

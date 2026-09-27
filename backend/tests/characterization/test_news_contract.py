@@ -85,7 +85,9 @@ def test_provider_period_boundaries_and_zenn_fallback(monkeypatch) -> None:
 
     configure_provider_mocks(monkeypatch, recommends, qiita, zenn)
 
-    result = asyncio.run(news_service.get_personalized_articles(object(), SimpleNamespace(user_ID=1)))
+    result = asyncio.run(
+        news_service.get_personalized_articles(object(), SimpleNamespace(user_ID=1))
+    )
 
     assert [item.url for item in result["qiita"]] == ["https://qiita.com/example/items/included"]
     assert [item.url for item in result["zenn"]] == ["https://zenn.dev/example/articles/old"]
@@ -111,11 +113,11 @@ def test_period_results_prevent_zenn_fallback(monkeypatch) -> None:
 
     configure_provider_mocks(monkeypatch, recommends, qiita, zenn)
 
-    result = asyncio.run(news_service.get_personalized_articles(object(), SimpleNamespace(user_ID=1)))
+    result = asyncio.run(
+        news_service.get_personalized_articles(object(), SimpleNamespace(user_ID=1))
+    )
 
-    assert [item.url for item in result["qiita"]] == [
-        "https://qiita.com/example/items/go-postgres"
-    ]
+    assert [item.url for item in result["qiita"]] == ["https://qiita.com/example/items/go-postgres"]
     assert [item.url for item in result["zenn"]] == ["https://zenn.dev/example/articles/go-api"]
 
 
@@ -179,7 +181,9 @@ def test_provider_specific_scoring_and_top_five_tags(monkeypatch) -> None:
 
     configure_provider_mocks(monkeypatch, recommends, qiita, zenn)
 
-    result = asyncio.run(news_service.get_personalized_articles(object(), SimpleNamespace(user_ID=1)))
+    result = asyncio.run(
+        news_service.get_personalized_articles(object(), SimpleNamespace(user_ID=1))
+    )
 
     assert fetched_qiita_tags == ["Go", "PostgreSQL", "Python", "Rust", "Java"]
     assert fetched_zenn_tags == ["Go", "PostgreSQL", "Python", "Rust", "Java"]

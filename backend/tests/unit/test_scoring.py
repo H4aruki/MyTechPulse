@@ -35,9 +35,7 @@ def test_input_weights_are_not_modified() -> None:
     ("stored", "python_decay", "integer_decay"),
     [(875, 699, 700), (1725, 1379, 1380), (10000, 8000, 8000)],
 )
-def test_python_rounding_is_recorded(
-    stored: int, python_decay: int, integer_decay: int
-) -> None:
+def test_python_rounding_is_recorded(stored: int, python_decay: int, integer_decay: int) -> None:
     result = calculate_new_weights({"Go": stored / 10000}, [])
 
     assert int(result["Go"] * 10000) == python_decay
