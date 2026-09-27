@@ -1,26 +1,12 @@
 from pathlib import Path
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+import os
 
-# backend/.env を常に指す絶対パス（config.py は backend/app/ にある）。
-# これでリポジトリルートから uvicorn を起動しても .env を読める。
-# Docker では OS 環境変数が .env より優先されるため、このパスは無害。
+from .settings import load_settings
+
+# backend/.env を指す絶対パス（config.py は backend/app/ にある）。
+# 通常起動では従来どおりこのファイルを読み、テスト時だけ読み込みを止める。
 ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 
-class Settings(BaseSettings):
-    # .envファイルからDATABASE_URLを読み込む
-    DATABASE_URL: str
-    QIITA_ACCESS_TOKEN: str
-    # SQLAlchemyのSQLログ出力。デフォルトOFF、開発時のみ.envで true にする
-    DB_ECHO: bool = False
-    # JWT署名鍵。.envで必須指定（未設定時は起動失敗させて設定漏れに気付けるようにする）
-    SECRET_KEY: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
-    # CORS追加許可オリジン（カンマ区切り）。本番ドメインはコードを変えずここで足す
-    CORS_ALLOWED_ORIGINS: str = ""
-
-    # .envファイルのパスを指定
-    model_config = SettingsConfigDict(env_file=str(ENV_PATH))
-
-# 設定クラスのインスタンスを作成
-settings = Settings()
+dotenv_path = None if os.environ.get("MTP_DISABLE_DOTENV") == "1" else ENV_PATH
+settings = load_settings(dotenv_path=dotenv_path)

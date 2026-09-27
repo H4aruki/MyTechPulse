@@ -1,0 +1,21 @@
+{
+  "weight_scale": 10000,
+  "alpha_numerator": 8,
+  "alpha_denominator": 10,
+  "click_boost": 2000,
+  "signup_interest_initial": 1,
+  "top_tag_count": 5,
+  "qiita_days": 5,
+  "zenn_days": 14,
+  "qiita_per_tag_count": 20,
+  "zenn_per_tag_count": 5,
+  "provider_article_limit": 10,
+  "username_max_characters": 50,
+  "password_max_utf8_bytes": 72,
+  "signup_tag_min_count": 1,
+  "signup_tag_max_count": 128,
+  "click_tag_min_count": 1,
+  "click_tag_max_count": 50,
+  "tag_max_characters": 50,
+  "zenn_endpoint": "https://zenn.dev/api/articles"
+}
