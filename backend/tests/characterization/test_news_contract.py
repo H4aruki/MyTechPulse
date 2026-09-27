@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from backend.app.services import news_service
@@ -22,8 +22,29 @@ class DummyAsyncClient:
         return False
 
 
+class RecordingResponse:
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict[str, list]:
+        return {"articles": []}
+
+
+class RecordingAsyncClient:
+    def __init__(self) -> None:
+        self.requests = []
+
+    async def get(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        return RecordingResponse()
+
+
 def load_fixture(name: str):
     return json.loads(fixture_path(name).read_text(encoding="utf-8"))
+
+
+def load_compatibility_cases() -> dict[str, int | str]:
+    return load_fixture("compatibility_cases.json")
 
 
 def test_zenn_duplicate_url_merges_search_topics() -> None:
@@ -40,6 +61,21 @@ def test_zenn_duplicate_url_merges_search_topics() -> None:
     assert article.likes == 7
 
 
+def test_provider_request_shapes_match_shared_compatibility_cases() -> None:
+    cases = load_compatibility_cases()
+    client = RecordingAsyncClient()
+
+    asyncio.run(news_service.fetch_qiita_articles_for_tag(client, "Go"))
+    asyncio.run(news_service.fetch_zenn_articles_for_tag(client, "Go"))
+
+    assert client.requests[0][0].endswith("/tags/Go/items")
+    assert client.requests[0][1]["params"] == {"page": 1, "per_page": cases["qiita_per_tag_count"]}
+    assert client.requests[1] == (
+        cases["zenn_endpoint"],
+        {"params": {"topicname": "go", "count": cases["zenn_per_tag_count"]}},
+    )
+
+
 def configure_provider_mocks(monkeypatch, recommends, qiita, zenn) -> None:
     monkeypatch.setattr(
         news_service.crud.recommend,
@@ -53,7 +89,11 @@ def configure_provider_mocks(monkeypatch, recommends, qiita, zenn) -> None:
 
 
 def test_provider_period_boundaries_and_zenn_fallback(monkeypatch) -> None:
+    cases = load_compatibility_cases()
     recommends = [SimpleNamespace(tag=SimpleNamespace(tag_name="Go"), match_int=5000)]
+    qiita_boundary = datetime(2026, 9, 14, tzinfo=timezone.utc) - timedelta(
+        days=cases["qiita_days"]
+    )
 
     async def qiita(_client, _tag):
         return [
@@ -61,14 +101,14 @@ def test_provider_period_boundaries_and_zenn_fallback(monkeypatch) -> None:
                 "title": "excluded",
                 "url": "https://qiita.com/example/items/excluded",
                 "likes_count": 1,
-                "created_at": "2026-09-09T00:00:00+00:00",
+                "created_at": qiita_boundary.isoformat(),
                 "tags": [{"name": "Go"}],
             },
             {
                 "title": "included",
                 "url": "https://qiita.com/example/items/included",
                 "likes_count": 1,
-                "created_at": "2026-09-09T00:00:01+00:00",
+                "created_at": (qiita_boundary + timedelta(seconds=1)).isoformat(),
                 "tags": [{"name": "Go"}],
             },
         ]
@@ -94,6 +134,7 @@ def test_provider_period_boundaries_and_zenn_fallback(monkeypatch) -> None:
 
 
 def test_period_results_prevent_zenn_fallback(monkeypatch) -> None:
+    cases = load_compatibility_cases()
     recommends = [SimpleNamespace(tag=SimpleNamespace(tag_name="Go"), match_int=5000)]
     qiita_articles = load_fixture("qiita_articles.json")
     zenn_articles = load_fixture("zenn_articles.json")["articles"]
@@ -107,7 +148,12 @@ def test_period_results_prevent_zenn_fallback(monkeypatch) -> None:
                 "title": "old fallback",
                 "path": "/example/articles/old",
                 "liked_count": 1,
-                "published_at": "2026-08-01T00:00:00.000Z",
+                "published_at": (
+                    datetime(2026, 9, 14, tzinfo=timezone.utc)
+                    - timedelta(days=cases["zenn_days"] + 1)
+                )
+                .isoformat()
+                .replace("+00:00", "Z"),
             }
         ]
 
@@ -122,6 +168,7 @@ def test_period_results_prevent_zenn_fallback(monkeypatch) -> None:
 
 
 def test_provider_specific_scoring_and_top_five_tags(monkeypatch) -> None:
+    cases = load_compatibility_cases()
     recommends = [
         SimpleNamespace(tag=SimpleNamespace(tag_name="Go"), match_int=5000),
         SimpleNamespace(tag=SimpleNamespace(tag_name="PostgreSQL"), match_int=2500),
@@ -185,8 +232,9 @@ def test_provider_specific_scoring_and_top_five_tags(monkeypatch) -> None:
         news_service.get_personalized_articles(object(), SimpleNamespace(user_ID=1))
     )
 
-    assert fetched_qiita_tags == ["Go", "PostgreSQL", "Python", "Rust", "Java"]
-    assert fetched_zenn_tags == ["Go", "PostgreSQL", "Python", "Rust", "Java"]
+    expected_tags = ["Go", "PostgreSQL", "Python", "Rust", "Java"]
+    assert fetched_qiita_tags == expected_tags[: cases["top_tag_count"]]
+    assert fetched_zenn_tags == expected_tags[: cases["top_tag_count"]]
     assert [item.url for item in result["qiita"]] == [
         "https://qiita.com/example/items/go",
         "https://qiita.com/example/items/sql",
@@ -195,3 +243,41 @@ def test_provider_specific_scoring_and_top_five_tags(monkeypatch) -> None:
         "https://zenn.dev/example/articles/go",
         "https://zenn.dev/example/articles/sql",
     ]
+
+
+def test_provider_results_are_limited_by_shared_case(monkeypatch) -> None:
+    cases = load_compatibility_cases()
+    recommends = [SimpleNamespace(tag=SimpleNamespace(tag_name="Go"), match_int=5000)]
+    articles = range(cases["provider_article_limit"] + 1)
+
+    async def qiita(_client, _tag):
+        return [
+            {
+                "title": f"Qiita {number}",
+                "url": f"https://qiita.com/example/items/{number}",
+                "likes_count": 0,
+                "created_at": "2026-09-13T00:00:00+00:00",
+                "tags": [{"name": "Go"}],
+            }
+            for number in articles
+        ]
+
+    async def zenn(_client, _tag):
+        return [
+            {
+                "title": f"Zenn {number}",
+                "path": f"/example/articles/{number}",
+                "liked_count": 0,
+                "published_at": "2026-09-13T00:00:00.000Z",
+            }
+            for number in articles
+        ]
+
+    configure_provider_mocks(monkeypatch, recommends, qiita, zenn)
+
+    result = asyncio.run(
+        news_service.get_personalized_articles(object(), SimpleNamespace(user_ID=1))
+    )
+
+    assert len(result["qiita"]) == cases["provider_article_limit"]
+    assert len(result["zenn"]) == cases["provider_article_limit"]

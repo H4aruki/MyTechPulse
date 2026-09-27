@@ -1,3 +1,5 @@
+import importlib
+import sys
 from pathlib import Path
 
 
@@ -43,3 +45,22 @@ def test_settings_read_explicit_dotenv_file_when_environment_is_absent(
     assert settings.DATABASE_URL == "postgresql+psycopg://sentinel-file-value/must-not-be-read"
     assert settings.QIITA_ACCESS_TOKEN == "sentinel-file-token"
     assert settings.SECRET_KEY == "sentinel-file-secret"
+
+
+def test_config_passes_none_when_dotenv_is_disabled(monkeypatch) -> None:
+    from backend.app import settings as app_settings
+
+    calls = []
+    original_load_settings = app_settings.load_settings
+
+    def capture_load_settings(*, dotenv_path):
+        calls.append(dotenv_path)
+        return original_load_settings(dotenv_path=dotenv_path)
+
+    monkeypatch.setattr(app_settings, "load_settings", capture_load_settings)
+    monkeypatch.setenv("MTP_DISABLE_DOTENV", "1")
+    monkeypatch.delitem(sys.modules, "backend.app.config", raising=False)
+
+    importlib.import_module("backend.app.config")
+
+    assert calls == [None]
