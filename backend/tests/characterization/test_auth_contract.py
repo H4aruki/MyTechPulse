@@ -2,7 +2,7 @@ import json
 from types import SimpleNamespace
 
 from backend.app.crud.recommend import create_recommendation
-from backend.app.schemas.auth import LoginRequest
+from backend.app.schemas.auth import LoginRequest, UserCreateRequest
 from backend.app.services import auth_service
 from backend.app.utils.hashing import Hasher
 from backend.tests.conftest import fixture_path
@@ -56,3 +56,28 @@ def test_signup_interest_starts_at_stored_value_one() -> None:
 
     assert len(db.added) == 1
     assert db.added[0].match_int == cases["signup_interest_initial"]
+
+
+def test_legacy_auth_schemas_accept_values_beyond_go_input_limits() -> None:
+    cases = json.loads(fixture_path("compatibility_cases.json").read_text(encoding="utf-8"))
+    username = "u" * (cases["username_max_characters"] + 1)
+    password = "p" * (cases["password_max_utf8_bytes"] + 1)
+    oversized_tags = ["x"] * (cases["signup_tag_max_count"] + 1)
+    oversized_tag = "x" * (cases["tag_max_characters"] + 1)
+
+    login = LoginRequest(username=username, password=password)
+    empty_signup = UserCreateRequest(
+        newusername=username,
+        newpassword=password,
+        favoritetags=[],
+    )
+    oversized_signup = UserCreateRequest(
+        newusername=username,
+        newpassword=password,
+        favoritetags=oversized_tags + [oversized_tag],
+    )
+
+    assert login.username == username
+    assert empty_signup.favoritetags == []
+    assert len(empty_signup.favoritetags) == cases["signup_tag_min_count"] - 1
+    assert len(oversized_signup.favoritetags) == cases["signup_tag_max_count"] + 2
