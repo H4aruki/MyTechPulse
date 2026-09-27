@@ -29,3 +29,22 @@ def test_input_weights_are_not_modified() -> None:
     calculate_new_weights(current, ["Python"])
 
     assert current == {"Python": 0.5}
+
+
+@pytest.mark.parametrize(
+    ("stored", "python_decay", "integer_decay"),
+    [(875, 699, 700), (1725, 1379, 1380), (10000, 8000, 8000)],
+)
+def test_python_rounding_is_recorded(
+    stored: int, python_decay: int, integer_decay: int
+) -> None:
+    result = calculate_new_weights({"Go": stored / 10000}, [])
+
+    assert int(result["Go"] * 10000) == python_decay
+    assert stored * 8 // 10 == integer_decay
+
+
+def test_duplicate_and_case_variant_tags_are_distinct_in_python() -> None:
+    result = calculate_new_weights({"Go": 0.5}, ["Go", "go", "Go"])
+
+    assert result == {"Go": pytest.approx(0.8), "go": pytest.approx(0.2)}
