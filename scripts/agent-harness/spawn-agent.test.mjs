@@ -8,8 +8,10 @@ import test from "node:test";
 import {
   assertOrchestratorRole,
   buildWorkerPrompt,
+  defaultRun,
   executeWorker,
   parseArguments,
+  resolveWindowsNpmShim,
   runCheck,
   validateWorktreeName,
 } from "./spawn-agent.mjs";
@@ -106,6 +108,77 @@ test("checkはバージョン確認だけを実行する", () => {
     ["codex.cmd", ["--version"]],
     ["claude.cmd", ["--version"]],
   ]);
+});
+
+test("Windowsのnpm cmd shimはshellを使わず実体を直接起動する", () => {
+  const npmDirectory = "C:/Users/test/AppData/Roaming/npm";
+  const codexScript = join(
+    npmDirectory,
+    "node_modules",
+    "@openai",
+    "codex",
+    "bin",
+    "codex.js",
+  );
+  const claudeBinary = join(
+    npmDirectory,
+    "node_modules",
+    "@anthropic-ai",
+    "claude-code",
+    "bin",
+    "claude.exe",
+  );
+  const existingPaths = new Set([
+    join(npmDirectory, "codex.cmd"),
+    join(npmDirectory, "claude.cmd"),
+    codexScript,
+    claudeBinary,
+  ]);
+  const runtime = {
+    platform: "win32",
+    pathValue: npmDirectory,
+    fileExists: (filePath) => existingPaths.has(filePath),
+    nodeExecutable: "C:/node/node.exe",
+  };
+
+  assert.deepEqual(resolveWindowsNpmShim("codex.cmd", runtime), {
+    executable: "C:/node/node.exe",
+    prefixArgs: [codexScript],
+  });
+  assert.deepEqual(resolveWindowsNpmShim("claude.cmd", runtime), {
+    executable: claudeBinary,
+    prefixArgs: [],
+  });
+});
+
+test("WindowsのCodex shimはpromptをshellへ渡さない", () => {
+  const npmDirectory = "C:/Users/test/AppData/Roaming/npm";
+  const codexScript = join(
+    npmDirectory,
+    "node_modules",
+    "@openai",
+    "codex",
+    "bin",
+    "codex.js",
+  );
+  const calls = [];
+
+  defaultRun("codex.cmd", ["exec", "task & unexpected"], { cwd: "C:/repo" }, {
+    spawn(executable, args, options) {
+      calls.push({ executable, args, options });
+      return { status: 0, stdout: "", stderr: "" };
+    },
+    platform: "win32",
+    pathValue: npmDirectory,
+    fileExists: (filePath) => filePath === join(npmDirectory, "codex.cmd") || filePath === codexScript,
+    nodeExecutable: "C:/node/node.exe",
+  });
+
+  assert.deepEqual(calls, [{
+    executable: "C:/node/node.exe",
+    args: [codexScript, "exec", "task & unexpected"],
+    options: { cwd: "C:/repo", encoding: "utf8", shell: false },
+  }]);
 });
 
 test("runnerは隔離worktree、worker環境、Codex結果を使う", async () => {

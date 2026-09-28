@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { basename, dirname, join } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -106,8 +106,60 @@ export function runCheck(run, platform = process.platform) {
   };
 }
 
-function defaultRun(executable, args, options = {}) {
-  return spawnSync(executable, args, {
+export function resolveWindowsNpmShim(executable, {
+  platform = process.platform,
+  pathValue = process.env.PATH ?? "",
+  fileExists = existsSync,
+  nodeExecutable = process.execPath,
+} = {}) {
+  if (platform !== "win32" || !executable.toLowerCase().endsWith(".cmd")) {
+    return null;
+  }
+
+  const executablePath = isAbsolute(executable)
+    ? executable
+    : pathValue.split(delimiter).map((directory) => join(directory, executable))
+      .find((candidate) => fileExists(candidate));
+  if (!executablePath) {
+    return null;
+  }
+
+  const npmDirectory = dirname(executablePath);
+  if (basename(executablePath).toLowerCase() === "codex.cmd") {
+    const scriptPath = join(
+      npmDirectory,
+      "node_modules",
+      "@openai",
+      "codex",
+      "bin",
+      "codex.js",
+    );
+    return fileExists(scriptPath)
+      ? { executable: nodeExecutable, prefixArgs: [scriptPath] }
+      : null;
+  }
+
+  if (basename(executablePath).toLowerCase() === "claude.cmd") {
+    const binaryPath = join(
+      npmDirectory,
+      "node_modules",
+      "@anthropic-ai",
+      "claude-code",
+      "bin",
+      "claude.exe",
+    );
+    return fileExists(binaryPath)
+      ? { executable: binaryPath, prefixArgs: [] }
+      : null;
+  }
+
+  return null;
+}
+
+export function defaultRun(executable, args, options = {}, runtime = {}) {
+  const spawn = runtime.spawn ?? spawnSync;
+  const npmShim = resolveWindowsNpmShim(executable, runtime);
+  return spawn(npmShim?.executable ?? executable, [...(npmShim?.prefixArgs ?? []), ...args], {
     ...options,
     encoding: "utf8",
     shell: false,
