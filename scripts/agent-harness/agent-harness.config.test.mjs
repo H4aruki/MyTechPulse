@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -14,6 +16,12 @@ const outputLastMessagePath = "C:/workspace/last-message.txt";
 const prompt = "Implement the assigned task.";
 
 test("worker settings pin the approved model and high reasoning effort", () => {
+  assert.equal(AGENT_HARNESS.worktreeDirectorySuffix, "-worktrees");
+  assert.equal(AGENT_HARNESS.branchPrefix, "agent/");
+  assert.equal(
+    AGENT_HARNESS.resultSchemaPath,
+    "scripts/agent-harness/worker-result.schema.json",
+  );
   assert.deepEqual(AGENT_HARNESS.codex, {
     executable: "codex",
     model: "gpt-5.6-terra",
@@ -70,37 +78,43 @@ test("Codex command pins the safe workspace execution contract", () => {
 });
 
 test("Claude Code command uses non-interactive safe JSON output", async () => {
-  const command = buildAgentCommand({
-    worker: "claude",
-    platform: "linux",
-    worktreePath,
-    schemaPath,
-    outputLastMessagePath,
-    prompt,
-  });
-  const schema = JSON.parse(
-    await readFile(new URL("./worker-result.schema.json", import.meta.url)),
-  );
+  const customSchema = { type: "object", title: "caller supplied schema" };
+  const schemaDirectory = await mkdtemp(join(tmpdir(), "agent-harness-"));
+  const customSchemaPath = join(schemaDirectory, "custom.schema.json");
+  await writeFile(customSchemaPath, JSON.stringify(customSchema));
 
-  assert.equal(command.executable, "claude");
-  assert.deepEqual(command.args.slice(0, 14), [
-    "--print",
-    "--permission-mode",
-    "dontAsk",
-    "--permission-prompts",
-    "none",
-    "--no-session-persistence",
-    "--output-format",
-    "json",
-    "--json-schema",
-    JSON.stringify(schema),
-    "--model",
-    "sonnet",
-    "--effort",
-    "high",
-  ]);
-  assert.deepEqual(command.args.slice(14), [prompt]);
-  assert.equal(command.args.includes("--dangerously-skip-permissions"), false);
+  try {
+    const command = buildAgentCommand({
+      worker: "claude",
+      platform: "linux",
+      worktreePath,
+      schemaPath: customSchemaPath,
+      outputLastMessagePath,
+      prompt,
+    });
+
+    assert.equal(command.executable, "claude");
+    assert.deepEqual(command.args.slice(0, 14), [
+      "--print",
+      "--permission-mode",
+      "dontAsk",
+      "--permission-prompts",
+      "none",
+      "--no-session-persistence",
+      "--output-format",
+      "json",
+      "--json-schema",
+      JSON.stringify(customSchema),
+      "--model",
+      "sonnet",
+      "--effort",
+      "high",
+    ]);
+    assert.deepEqual(command.args.slice(14), [prompt]);
+    assert.equal(command.args.includes("--dangerously-skip-permissions"), false);
+  } finally {
+    await rm(schemaDirectory, { force: true, recursive: true });
+  }
 });
 
 test("worker result schema rejects undeclared fields and constrains status", async () => {
@@ -124,4 +138,5 @@ test("worker result schema rejects undeclared fields and constrains status", asy
     "blocked",
     "failed",
   ]);
+  assert.equal(schema.properties.commit.type, "string");
 });

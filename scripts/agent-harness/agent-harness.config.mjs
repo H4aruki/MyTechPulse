@@ -1,10 +1,9 @@
 import { readFileSync } from "node:fs";
 
-const workerResultSchema = JSON.parse(
-  readFileSync(new URL("./worker-result.schema.json", import.meta.url), "utf8"),
-);
-
 export const AGENT_HARNESS = Object.freeze({
+  worktreeDirectorySuffix: "-worktrees",
+  branchPrefix: "agent/",
+  resultSchemaPath: "scripts/agent-harness/worker-result.schema.json",
   codex: Object.freeze({
     executable: "codex",
     model: "gpt-5.6-terra",
@@ -60,6 +59,7 @@ export function buildAgentCommand({
 
   if (worker === "claude") {
     const { executable, model, effort } = AGENT_HARNESS.claude;
+    const workerResultSchema = JSON.parse(readFileSync(schemaPath, "utf8"));
 
     return {
       executable: executableForPlatform(executable, platform),

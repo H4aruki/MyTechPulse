@@ -37,7 +37,7 @@
       }
     },
     "commit": {
-      "type": ["string", "null"]
+      "type": "string"
     }
   }
 }
