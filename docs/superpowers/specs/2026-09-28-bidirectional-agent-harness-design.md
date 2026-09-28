@@ -68,6 +68,7 @@ Codex は `codex exec --output-schema`、Claude Code は `claude -p --output-for
 ```text
 node scripts/agent-harness/spawn-agent.mjs \
   --activate multi \
+  --parent codex \
   --agent claude \
   --worktree ui-login \
   --task "ログイン画面だけを担当してください。..."
@@ -75,7 +76,7 @@ node scripts/agent-harness/spawn-agent.mjs \
 
 起動処理は次の順で行う。
 
-1. 引数を検証し、`--activate multi`、対応エージェント、非空のタスク、worktree名を要求する。
+1. 引数を検証し、`--activate multi`、親エージェント、対応エージェント、非空のタスク、worktree名を要求する。
 2. `AGENT_HARNESS_ROLE=worker` のときは、再帰委譲として拒否する。
 3. Git リポジトリと対象 CLI の存在を確認する。
 4. `<リポジトリ親>/<リポジトリ名>-worktrees/<worktree名>` を作業場所として決める。
