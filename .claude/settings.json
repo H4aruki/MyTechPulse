@@ -21,6 +21,8 @@
       "Bash(git log*)",
       "Bash(git branch*)",
       "Bash(git switch*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
       "Bash(git fetch*)",
       "Bash(gh issue*)",
       "Bash(gh pr view*)",

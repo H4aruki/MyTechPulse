@@ -1,0 +1,242 @@
+import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import test from "node:test";
+
+import {
+  assertOrchestratorRole,
+  buildWorkerPrompt,
+  executeWorker,
+  parseArguments,
+  runCheck,
+  validateWorktreeName,
+} from "./spawn-agent.mjs";
+
+test("明示的なmulti有効化なしでは拒否する", () => {
+  assert.throws(
+    () =>
+      parseArguments([
+        "--parent",
+        "codex",
+        "--agent",
+        "claude",
+        "--worktree",
+        "ui",
+        "--task",
+        "画面を担当",
+      ]),
+    /--activate multi/,
+  );
+});
+
+test("未知の引数と同じ引数の重複を拒否する", () => {
+  assert.throws(() => parseArguments(["--unknown"]), /未知の引数/);
+  assert.throws(
+    () =>
+      parseArguments([
+        "--activate",
+        "multi",
+        "--parent",
+        "codex",
+        "--parent",
+        "claude",
+        "--agent",
+        "claude",
+        "--worktree",
+        "ui",
+        "--task",
+        "画面を担当",
+      ]),
+    /重複/,
+  );
+});
+
+test("checkは単独で解析でき、worker起動用引数との併用は拒否する", () => {
+  assert.deepEqual(parseArguments(["--check"]), { check: true });
+  assert.throws(
+    () => parseArguments(["--check", "--activate", "multi"]),
+    /単独/,
+  );
+});
+
+test("workerは別workerを起動できない", () => {
+  assert.throws(
+    () => assertOrchestratorRole({ AGENT_HARNESS_ROLE: "worker" }),
+    /worker.*起動できません/,
+  );
+});
+
+test("危険なworktree名を拒否する", () => {
+  assert.throws(() => validateWorktreeName("../main"), /英小文字/);
+  assert.throws(() => validateWorktreeName("main"), /main以外/);
+  assert.equal(validateWorktreeName("login-ui"), "login-ui");
+});
+
+test("worker promptは編集境界と返却契約を明示する", () => {
+  const prompt = buildWorkerPrompt({
+    parentAgent: "codex",
+    task: "ログイン画面を担当する",
+    worktreePath: "C:/workspace/mytechpulse-worktrees/login-ui",
+  });
+
+  assert.match(prompt, /ログイン画面を担当する/);
+  assert.match(prompt, /mytechpulse-worktrees[\\/]login-ui/);
+  assert.match(prompt, /別エージェントを起動せず/);
+  assert.match(prompt, /\.envや認証情報を読まず/);
+  assert.match(prompt, /通常コミット1つ/);
+  assert.match(prompt, /status、summary、filesChanged、tests、issues、commit/);
+});
+
+test("checkはバージョン確認だけを実行する", () => {
+  const calls = [];
+  const run = (executable, args) => {
+    calls.push([executable, args]);
+    return { status: 0, stdout: `${executable} ok`, stderr: "" };
+  };
+
+  assert.deepEqual(runCheck(run, "win32"), {
+    git: { status: 0, stdout: "git ok", stderr: "" },
+    codex: { status: 0, stdout: "codex.cmd ok", stderr: "" },
+    claude: { status: 0, stdout: "claude.cmd ok", stderr: "" },
+  });
+  assert.deepEqual(calls, [
+    ["git", ["--version"]],
+    ["codex.cmd", ["--version"]],
+    ["claude.cmd", ["--version"]],
+  ]);
+});
+
+test("runnerは隔離worktree、worker環境、Codex結果を使う", async () => {
+  const sandbox = await mkdtemp(join(tmpdir(), "spawn-agent-test-"));
+  const repoRoot = join(sandbox, "mytechpulse");
+  const calls = [];
+  const options = parseArguments([
+    "--activate",
+    "multi",
+    "--parent",
+    "claude",
+    "--agent",
+    "codex",
+    "--worktree",
+    "login-ui",
+    "--task",
+    "ログイン画面だけを担当する",
+  ]);
+
+  try {
+    const result = executeWorker(options, {
+      repoRoot,
+      platform: "linux",
+      pathExists: () => false,
+      run(executable, args, runOptions) {
+        calls.push({ executable, args, runOptions });
+        if (executable === "git" && args[0] === "show-ref") {
+          return { status: 1, stdout: "", stderr: "" };
+        }
+        if (executable === "codex") {
+          const resultPath = args[args.indexOf("--output-last-message") + 1];
+          mkdirSync(dirname(resultPath), { recursive: true });
+          writeFileSync(
+            resultPath,
+            JSON.stringify({
+              status: "completed",
+              summary: "完了",
+              filesChanged: ["frontend/src/Login.tsx"],
+              tests: ["npm test"],
+              issues: [],
+              commit: "abc1234",
+            }),
+          );
+        }
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    assert.deepEqual(result, {
+      status: "completed",
+      summary: "完了",
+      filesChanged: ["frontend/src/Login.tsx"],
+      tests: ["npm test"],
+      issues: [],
+      commit: "abc1234",
+    });
+    assert.deepEqual(calls[0], {
+      executable: "git",
+      args: ["show-ref", "--verify", "--quiet", "refs/heads/agent/login-ui"],
+      runOptions: { cwd: repoRoot },
+    });
+    assert.deepEqual(calls[1], {
+      executable: "git",
+      args: [
+        "worktree",
+        "add",
+        "-b",
+        "agent/login-ui",
+        join(sandbox, "mytechpulse-worktrees", "login-ui"),
+        "HEAD",
+      ],
+      runOptions: { cwd: repoRoot },
+    });
+    assert.equal(calls[2].executable, "codex");
+    assert.equal(calls[2].runOptions.env.AGENT_HARNESS_ROLE, "worker");
+    assert.equal(calls[2].runOptions.env.AGENT_HARNESS_PARENT, "claude");
+  } finally {
+    await rm(sandbox, { force: true, recursive: true });
+  }
+});
+
+test("worker実行失敗は同一の失敗結果へ正規化する", async () => {
+  const sandbox = await mkdtemp(join(tmpdir(), "spawn-agent-test-"));
+  const options = parseArguments([
+    "--activate",
+    "multi",
+    "--parent",
+    "codex",
+    "--agent",
+    "claude",
+    "--worktree",
+    "auth-api",
+    "--task",
+    "認証APIだけを担当する",
+  ]);
+
+  try {
+    const repoRoot = join(sandbox, "mytechpulse");
+    const schemaPath = join(
+      repoRoot,
+      "scripts",
+      "agent-harness",
+      "worker-result.schema.json",
+    );
+    await mkdir(dirname(schemaPath), { recursive: true });
+    await writeFile(schemaPath, '{"type":"object"}');
+
+    const result = executeWorker(options, {
+      repoRoot,
+      platform: "linux",
+      pathExists: () => false,
+      run(executable, args) {
+        if (executable === "git" && args[0] === "show-ref") {
+          return { status: 1, stdout: "", stderr: "" };
+        }
+        if (executable === "claude") {
+          return { status: 1, stdout: "", stderr: "worker failed" };
+        }
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    assert.deepEqual(result, {
+      status: "failed",
+      summary: "worker failed",
+      filesChanged: [],
+      tests: [],
+      issues: [],
+      commit: "",
+    });
+  } finally {
+    await rm(sandbox, { force: true, recursive: true });
+  }
+});
