@@ -1,5 +1,11 @@
 # ハーネス変更履歴
 
+## 2026-09-28
+
+- `/multi`、`/parallel`、または明確な並列委譲がある場合だけ、CodexとClaude Codeが共通ランナーからworkerを起動する運用を追加
+- Codex workerを `gpt-5.6-terra` / `high`、Claude Code workerを `sonnet` / `high` に固定し、親のモデル・推論量を変えない方針を明記
+- 専用worktree、構造化結果、親による差分レビューと、人が行う統合判断を共通文書へ追加
+
 ## 2026-09-09
 
 - `AGENTS.md` をClaude CodeとCodexの共通ルール正本として追加

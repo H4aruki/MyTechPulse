@@ -13,6 +13,12 @@
 - コード変更後、検証を行わず終了する操作を止める
 - Codexの主要フックイベントとWindows用コマンドが登録されている
 - `.agents/skills/` と `.claude/skills/` の全ファイルが一致する
+- `--activate multi` なしのworker起動を拒否する
+- worker環境からの再帰的なworker起動を拒否する
+- Codex workerが `gpt-5.6-terra` と `high` に固定される
+- Claude Code workerが `sonnet` と `high` に固定される
+- `node scripts/agent-harness/spawn-agent.mjs --check` はCLI状態だけを返し、worker・worktree・branchを作成しない
+- 対象workerのCLI確認に失敗した場合、worktree作成前に停止する
 
 ## 手動確認
 
@@ -21,6 +27,8 @@
 3. `codex.cmd mcp list` でExa、Context7、Playwrightの状態を確認する。
 4. `claude.cmd plugin list --json` で同等プラグインが有効なことを確認する。
 5. ローカル画面でPlaywrightの読み取り中心の操作を試し、`.playwright-mcp/` がGit管理外であることを確認する。
+6. `/multi`、`/parallel`、または明確な並列委譲がない依頼では、workerを起動しないことを確認する。
+7. `multi-agent.md` の親別コマンド例を、実在する `--check` と起動引数だけで案内していることを確認する。
 
 ## 合格条件
 
@@ -28,3 +36,4 @@
 - 禁止操作が実行前に止まる。
 - 通常の読み取り、編集、lint、buildが不必要に止まらない。
 - 認証情報とローカル作業ファイルがGit差分へ現れない。
+- workerは固定モデル・推論量、専用worktree、構造化結果を使い、親のモデル・推論量を変えない。

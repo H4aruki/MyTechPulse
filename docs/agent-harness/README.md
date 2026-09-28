@@ -61,6 +61,10 @@ codex.cmd execpolicy check --pretty --rules .codex/rules/default.rules -- git pu
 
 Skillを更新したら、必ず両方へ同じ変更を行います。CIは内容の差を検出します。
 
+## 双方向worker
+
+通常は現在のエージェントだけで作業します。`/multi`、`/parallel`、または明確な並列委譲がある場合だけ、共通ランナーで専用worktreeのworkerを起動できます。詳細は [multi-agent.md](multi-agent.md) を参照してください。
+
 ## 関連資料
 
 - `permissions.md`: 権限と認証の方針
@@ -68,4 +72,5 @@ Skillを更新したら、必ず両方へ同じ変更を行います。CIは内�
 - `threat-model.md`: 守る対象と残るリスク
 - `evaluation-cases.md`: 設定を変えたときの確認項目
 - `skills.md`: 外部Skillの出所と固定版
+- `multi-agent.md`: 明示起動するworkerの安全な運用手順
 - `changelog.md`: ハーネス変更履歴

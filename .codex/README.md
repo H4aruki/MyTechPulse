@@ -11,6 +11,16 @@
 
 フックの判定処理は `.claude/hooks/` と共用しています。防御方針の正本は `AGENTS.md` です。
 
+## 双方向worker
+
+双方向workerの共通規則は [AGENTS.md](../AGENTS.md)、詳しい運用手順は
+[docs/agent-harness/multi-agent.md](../docs/agent-harness/multi-agent.md) を参照します。
+Codexを親にしてClaude Code workerを起動する明示依頼だけ、次の共通ランナーを使います。
+
+```powershell
+node scripts/agent-harness/spawn-agent.mjs --activate multi --parent codex --agent claude --worktree login-ui --task "frontend/src/配下のログイン画面だけを担当し、テストとコミットを行う"
+```
+
 ## 初回だけ必要な操作
 
 プロジェクト設定とフックは、信頼済みのプロジェクトでだけ読み込まれます。Codexをこのリポジトリで起動し、表示された信頼確認を内容を確認して承認してください。

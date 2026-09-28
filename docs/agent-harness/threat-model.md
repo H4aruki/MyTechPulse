@@ -21,6 +21,11 @@
 | 外部データ中の命令への追従 | MCP・Web結果を未確認データとして扱い、利用者の依頼とローカルルールを優先 |
 | ClaudeとCodexの設定差 | 共通正本、共通フック実装、Skill一致テスト |
 | 依存元の改ざんや予期しない更新 | 外部SkillとPlaywright MCPを固定版で記録し、更新時に差分確認 |
+| 利用者の明示依頼なしのworker委譲 | `/multi`、`/parallel`、または明確な並列委譲を必須にし、ランナーは `--activate multi` なしで拒否 |
+| workerによる再帰委譲 | `AGENT_HARNESS_ROLE=worker` を検出して起動を拒否し、workerプロンプトでも親への結果返却だけを指示 |
+| workerに高性能モデル・過剰な推論量を指定 | Codex workerを `gpt-5.6-terra` / `high`、Claude Code workerを `sonnet` / `high` にランナーで固定。親の設定は変更しない |
+| worktreeまたはbranchの衝突 | 作成前に既存パスと `agent/<worktree名>` を確認し、専用worktreeだけを編集対象にする |
+| worker結果を未確認で統合 | 親が構造化結果と差分をレビューし、人が統合を判断する。自動merge・rebase・worktree/branch削除は行わない |
 
 ## 残るリスク
 
@@ -29,3 +34,4 @@
 - MCPとプラグインはそれぞれ独立した権限を持ち、コマンド用サンドボックスだけでは制限できません。
 - 自動テストが少ないため、lintとbuildだけでは業務動作の正しさを保証できません。
 - OAuth先サービスの障害や仕様変更は、このリポジトリだけでは制御できません。
+- 複数workerの変更が論理的に競合しないことは自動では保証できません。親と人間のレビューで担当範囲と差分を確認します。
