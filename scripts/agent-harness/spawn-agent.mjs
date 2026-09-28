@@ -116,9 +116,10 @@ export function resolveWindowsNpmShim(executable, {
     return null;
   }
 
+  const pathSeparator = platform === "win32" ? ";" : delimiter;
   const executablePath = isAbsolute(executable)
     ? executable
-    : pathValue.split(delimiter).map((directory) => join(directory, executable))
+    : pathValue.split(pathSeparator).map((directory) => join(directory, executable))
       .find((candidate) => fileExists(candidate));
   if (!executablePath) {
     return null;
