@@ -135,7 +135,7 @@ test("runnerは隔離worktree、worker環境、Codex結果を使う", async () =
         if (executable === "git" && args[0] === "show-ref") {
           return { status: 1, stdout: "", stderr: "" };
         }
-        if (executable === "codex") {
+        if (executable === "codex" && args[0] !== "--version") {
           const resultPath = args[args.indexOf("--output-last-message") + 1];
           mkdirSync(dirname(resultPath), { recursive: true });
           writeFileSync(
@@ -163,11 +163,16 @@ test("runnerは隔離worktree、worker環境、Codex結果を使う", async () =
       commit: "abc1234",
     });
     assert.deepEqual(calls[0], {
+      executable: "codex",
+      args: ["--version"],
+      runOptions: { cwd: repoRoot },
+    });
+    assert.deepEqual(calls[1], {
       executable: "git",
       args: ["show-ref", "--verify", "--quiet", "refs/heads/agent/login-ui"],
       runOptions: { cwd: repoRoot },
     });
-    assert.deepEqual(calls[1], {
+    assert.deepEqual(calls[2], {
       executable: "git",
       args: [
         "worktree",
@@ -179,9 +184,9 @@ test("runnerは隔離worktree、worker環境、Codex結果を使う", async () =
       ],
       runOptions: { cwd: repoRoot },
     });
-    assert.equal(calls[2].executable, "codex");
-    assert.equal(calls[2].runOptions.env.AGENT_HARNESS_ROLE, "worker");
-    assert.equal(calls[2].runOptions.env.AGENT_HARNESS_PARENT, "claude");
+    assert.equal(calls[3].executable, "codex");
+    assert.equal(calls[3].runOptions.env.AGENT_HARNESS_ROLE, "worker");
+    assert.equal(calls[3].runOptions.env.AGENT_HARNESS_PARENT, "claude");
   } finally {
     await rm(sandbox, { force: true, recursive: true });
   }
@@ -221,7 +226,7 @@ test("worker実行失敗は同一の失敗結果へ正規化する", async () =>
         if (executable === "git" && args[0] === "show-ref") {
           return { status: 1, stdout: "", stderr: "" };
         }
-        if (executable === "claude") {
+        if (executable === "claude" && args[0] !== "--version") {
           return { status: 1, stdout: "", stderr: "worker failed" };
         }
         return { status: 0, stdout: "", stderr: "" };
@@ -334,7 +339,7 @@ test("Codex失敗時も一時結果ファイルを削除する", async () => {
         if (executable === "git" && args[0] === "show-ref") {
           return { status: 1, stdout: "", stderr: "" };
         }
-        if (executable === "codex") {
+        if (executable === "codex" && args[0] !== "--version") {
           resultPath = args[args.indexOf("--output-last-message") + 1];
           mkdirSync(dirname(resultPath), { recursive: true });
           writeFileSync(resultPath, "stale result");
@@ -353,6 +358,51 @@ test("Codex失敗時も一時結果ファイルを削除する", async () => {
       commit: "",
     });
     assert.equal(existsSync(resultPath), false);
+  } finally {
+    await rm(sandbox, { force: true, recursive: true });
+  }
+});
+
+test("worker CLI確認に失敗するとworktree作成前に停止する", async () => {
+  const sandbox = await mkdtemp(join(tmpdir(), "spawn-agent-test-"));
+  const repoRoot = join(sandbox, "mytechpulse");
+  const worktreePath = join(sandbox, "mytechpulse-worktrees", "auth-api");
+  const calls = [];
+  const options = parseArguments([
+    "--activate",
+    "multi",
+    "--parent",
+    "codex",
+    "--agent",
+    "claude",
+    "--worktree",
+    "auth-api",
+    "--task",
+    "認証APIだけを担当する",
+  ]);
+
+  try {
+    assert.throws(
+      () =>
+        executeWorker(options, {
+          repoRoot,
+          platform: "win32",
+          pathExists: () => false,
+          run(executable, args, runOptions) {
+            calls.push({ executable, args, runOptions });
+            return { status: 1, stdout: "", stderr: "CLIが見つかりません" };
+          },
+        }),
+      /worker CLIの確認に失敗しました/,
+    );
+    assert.deepEqual(calls, [
+      {
+        executable: "claude.cmd",
+        args: ["--version"],
+        runOptions: { cwd: repoRoot },
+      },
+    ]);
+    assert.equal(existsSync(worktreePath), false);
   } finally {
     await rm(sandbox, { force: true, recursive: true });
   }

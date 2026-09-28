@@ -188,6 +188,15 @@ export function executeWorker(options, dependencies = {}) {
   const platform = dependencies.platform ?? process.platform;
 
   assertOrchestratorRole(env);
+  const workerExecutable = executableForPlatform(
+    AGENT_HARNESS[options.agent].executable,
+    platform,
+  );
+  const workerCheck = run(workerExecutable, ["--version"], { cwd: repoRoot });
+  if (commandFailed(workerCheck)) {
+    throw new Error(`worker CLIの確認に失敗しました: ${resultSummary(workerCheck)}`);
+  }
+
   const worktreePath = join(
     dirname(repoRoot),
     `${basename(repoRoot)}${AGENT_HARNESS.worktreeDirectorySuffix}`,
