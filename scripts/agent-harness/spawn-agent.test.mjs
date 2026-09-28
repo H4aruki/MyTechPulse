@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -236,6 +236,123 @@ test("worker実行失敗は同一の失敗結果へ正規化する", async () =>
       issues: [],
       commit: "",
     });
+  } finally {
+    await rm(sandbox, { force: true, recursive: true });
+  }
+});
+
+test("Claudeの成功stdoutは共通Schema結果へ正規化する", async () => {
+  const sandbox = await mkdtemp(join(tmpdir(), "spawn-agent-test-"));
+  const repoRoot = join(sandbox, "mytechpulse");
+  const options = parseArguments([
+    "--activate",
+    "multi",
+    "--parent",
+    "codex",
+    "--agent",
+    "claude",
+    "--worktree",
+    "auth-api",
+    "--task",
+    "認証APIだけを担当する",
+  ]);
+
+  try {
+    const schemaPath = join(
+      repoRoot,
+      "scripts",
+      "agent-harness",
+      "worker-result.schema.json",
+    );
+    await mkdir(dirname(schemaPath), { recursive: true });
+    await writeFile(schemaPath, '{"type":"object"}');
+
+    const result = executeWorker(options, {
+      repoRoot,
+      platform: "linux",
+      pathExists: () => false,
+      run(executable, args) {
+        if (executable === "git" && args[0] === "show-ref") {
+          return { status: 1, stdout: "", stderr: "" };
+        }
+        if (executable === "claude") {
+          return {
+            status: 0,
+            stdout: JSON.stringify({
+              result: JSON.stringify({
+                status: "completed",
+                summary: "Claudeが完了",
+                filesChanged: ["backend/app/routes/auth.py"],
+                tests: ["pytest backend/tests"],
+                issues: [],
+                commit: "def5678",
+              }),
+            }),
+            stderr: "",
+          };
+        }
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    assert.deepEqual(result, {
+      status: "completed",
+      summary: "Claudeが完了",
+      filesChanged: ["backend/app/routes/auth.py"],
+      tests: ["pytest backend/tests"],
+      issues: [],
+      commit: "def5678",
+    });
+  } finally {
+    await rm(sandbox, { force: true, recursive: true });
+  }
+});
+
+test("Codex失敗時も一時結果ファイルを削除する", async () => {
+  const sandbox = await mkdtemp(join(tmpdir(), "spawn-agent-test-"));
+  const repoRoot = join(sandbox, "mytechpulse");
+  const options = parseArguments([
+    "--activate",
+    "multi",
+    "--parent",
+    "claude",
+    "--agent",
+    "codex",
+    "--worktree",
+    "login-ui",
+    "--task",
+    "ログイン画面だけを担当する",
+  ]);
+  let resultPath;
+
+  try {
+    const result = executeWorker(options, {
+      repoRoot,
+      platform: "linux",
+      pathExists: () => false,
+      run(executable, args) {
+        if (executable === "git" && args[0] === "show-ref") {
+          return { status: 1, stdout: "", stderr: "" };
+        }
+        if (executable === "codex") {
+          resultPath = args[args.indexOf("--output-last-message") + 1];
+          mkdirSync(dirname(resultPath), { recursive: true });
+          writeFileSync(resultPath, "stale result");
+          return { status: 1, stdout: "", stderr: "worker failed" };
+        }
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    assert.deepEqual(result, {
+      status: "failed",
+      summary: "worker failed",
+      filesChanged: [],
+      tests: [],
+      issues: [],
+      commit: "",
+    });
+    assert.equal(existsSync(resultPath), false);
   } finally {
     await rm(sandbox, { force: true, recursive: true });
   }

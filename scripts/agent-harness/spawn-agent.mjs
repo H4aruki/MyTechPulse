@@ -159,11 +159,11 @@ function validateWorkerResult(value) {
 }
 
 function normalizeWorkerResult(agent, child, outputLastMessagePath) {
-  if (commandFailed(child)) {
-    return failedResult(resultSummary(child));
-  }
-
   try {
+    if (commandFailed(child)) {
+      return failedResult(resultSummary(child));
+    }
+
     if (agent === "codex") {
       const output = readFileSync(outputLastMessagePath, "utf8");
       return validateWorkerResult(JSON.parse(output));
