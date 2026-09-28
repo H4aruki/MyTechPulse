@@ -35,11 +35,14 @@ CLI だけでは、渡された依頼文が本当に利用者の発言かを検�
 `AGENT_HARNESS` を正本として定義する。
 
 - `codex` と `claude` の表示名、実行ファイル名、非対話コマンド組み立て
+- worker に固定するモデルと推論量（Codex: `gpt-5.6-terra` / `high`、Claude Code: `sonnet` / `high`）
 - worker の最終結果 JSON Schema の場所
 - worktree の親ディレクトリ名と、worker ブランチの `agent/` 接頭辞
 - Windows では `.cmd` を付け、macOS/Linux ではそのまま実行する変換
 
 CLIの呼び出しはこのファイル以外へ直接書かない。
+
+workerのモデルと推論量はランナー側で固定する。Codex worker は `gpt-5.6-terra` を上限とし、`model_reasoning_effort = "high"` を指定する。Claude Code worker は `--model sonnet --effort high` を指定する。ランナーはモデル・推論量を受け取る引数を持たず、利用者が親エージェントに指定したモデル・推論量を変更しない。
 
 ### `scripts/agent-harness/worker-result.schema.json`
 
@@ -122,7 +125,7 @@ Node.js標準の `node:test` で次を確認する。
 - `--activate multi` がなければ拒否される。
 - worker環境からの再帰起動が拒否される。
 - `--check` がエージェントを起動せずCLI検査だけを組み立てる。
-- Codex と Claude Code のコマンドが共通Schemaと対象worktreeを使う。
+- Codex と Claude Code のコマンドが共通Schema、対象worktree、固定されたモデル・推論量を使う。
 - 無効なworktree名、空タスク、未知のエージェントが拒否される。
 - workerプロンプトに担当範囲・編集制約・完了条件・テスト・結果形式が含まれる。
 
