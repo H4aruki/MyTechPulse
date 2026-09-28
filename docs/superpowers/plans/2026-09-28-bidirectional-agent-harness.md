@@ -53,7 +53,7 @@ test('Windowsだけcmd拡張子を付ける', () => {
 
 - [ ] **Step 2: テストが失敗することを確認する**
 
-Run: `node --test scripts/agent-harness/agent-harness.config.test.mjs`  
+Run: `node --test scripts/agent-harness/agent-harness.config.test.mjs`
 Expected: `ERR_MODULE_NOT_FOUND`。設定モジュールはまだ存在しない。
 
 - [ ] **Step 3: 最小の設定とSchemaを実装する**
@@ -90,7 +90,7 @@ Codexコマンドに `--full-auto` と危険なバイパス指定を加えない
 
 - [ ] **Step 5: テストを通してコミットする**
 
-Run: `node --test scripts/agent-harness/agent-harness.config.test.mjs`  
+Run: `node --test scripts/agent-harness/agent-harness.config.test.mjs`
 Expected: PASS。CodexにTerra/High、Claude CodeにSonnet/Highが含まれる。
 
 ```bash
@@ -128,7 +128,7 @@ test('危険なworktree名を拒否する', () => {
 
 - [ ] **Step 2: テストが失敗することを確認する**
 
-Run: `node --test scripts/agent-harness/spawn-agent.test.mjs`  
+Run: `node --test scripts/agent-harness/spawn-agent.test.mjs`
 Expected: `ERR_MODULE_NOT_FOUND`。ランナーはまだ存在しない。
 
 - [ ] **Step 3: 引数・role・worktree検証を実装する**
@@ -194,7 +194,7 @@ force push、mainへのpush、merge、reset、cleanを許可しない。
 
 - [ ] **Step 7: テストを通してコミットする**
 
-Run: `node --test scripts/agent-harness/spawn-agent.test.mjs`  
+Run: `node --test scripts/agent-harness/spawn-agent.test.mjs`
 Expected: PASS。テストは注入した偽の`run`関数を使い、実際の`git worktree add`、`codex exec`、`claude -p`を呼ばない。
 
 ```bash
@@ -217,7 +217,7 @@ git commit -m "feat(harness): 双方向workerランナーを追加" -m "明示�
 
 - [ ] **Step 1: 復元前の失敗を確認する**
 
-Run: `node --test .codex/hooks/config.test.mjs scripts/agent-harness/check-skill-parity.test.mjs`  
+Run: `node --test .codex/hooks/config.test.mjs scripts/agent-harness/check-skill-parity.test.mjs`
 Expected: FAIL。`hooks.json`不在とCodex側だけにある未追跡Skillsが検出される。
 
 - [ ] **Step 2: フックを復元し、未追跡外部Skillを削除する**
@@ -228,7 +228,7 @@ HEADの`.codex/hooks.json`を復元し、`guard-command.mjs`、`loop-guard.mjs`�
 
 - [ ] **Step 3: 整合テストを通してコミットする**
 
-Run: `node --test .codex/hooks/config.test.mjs scripts/agent-harness/check-skill-parity.test.mjs`  
+Run: `node --test .codex/hooks/config.test.mjs scripts/agent-harness/check-skill-parity.test.mjs`
 Expected: PASS。Codexフック設定を読み、Skillツリーに差がない。
 
 ```bash
@@ -275,7 +275,7 @@ node scripts/agent-harness/spawn-agent.mjs --activate multi --parent claude --ag
 
 - [ ] **Step 4: 文書導線を検査してコミットする**
 
-Run: `rg -n 'spawn-agent\.mjs|multi-agent\.md|/multi|/parallel' AGENTS.md CLAUDE.md .codex/README.md docs/agent-harness`  
+Run: `rg -n 'spawn-agent\.mjs|multi-agent\.md|/multi|/parallel' AGENTS.md CLAUDE.md .codex/README.md docs/agent-harness`
 Expected: 共通規則、Codex案内、Claude案内、詳細文書、評価ケースがすべて見つかる。
 
 ```bash
@@ -294,24 +294,24 @@ git commit -m "docs(harness): 双方向workerの運用を案内" -m "明示的�
 
 - [ ] **Step 1: 全ハーネステストを実行する**
 
-Run: `node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/agent-harness/**/*.test.mjs"`  
+Run: `node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/agent-harness/**/*.test.mjs"`
 Expected: PASS。既存フック、Skill同期、設定、ランナーの単体テストがすべて成功する。
 
 - [ ] **Step 2: Skill同期とCLI確認を実行する**
 
-Run: `node scripts/agent-harness/check-skill-parity.mjs`  
+Run: `node scripts/agent-harness/check-skill-parity.mjs`
 Expected: `CodexとClaude CodeのSkillsは一致しています。`
 
-Run: `node scripts/agent-harness/spawn-agent.mjs --check`  
+Run: `node scripts/agent-harness/spawn-agent.mjs --check`
 Expected: Git、Codex、Claude Codeの状態だけをJSONで返す。`git worktree add`、`codex exec`、`claude -p`は実行しない。
 
 - [ ] **Step 3: Codex規則と最終差分を確認する**
 
-Run: `codex execpolicy check --pretty --rules .codex/rules/default.rules -- git push origin main`  
+Run: `codex execpolicy check --pretty --rules .codex/rules/default.rules -- git push origin main`
 Expected: `forbidden`。
 
-Run: `git diff main...HEAD --check`  
+Run: `git diff main...HEAD --check`
 Expected: 出力なし。
 
-Run: `git status --short --branch`  
+Run: `git status --short --branch`
 Expected: 今回の変更がコミット済みで、依頼範囲外の差分を含まない。
