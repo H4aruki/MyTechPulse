@@ -18,7 +18,7 @@ export const AGENT_HARNESS = Object.freeze({
 });
 
 export function executableForPlatform(executable, platform = process.platform) {
-  if (platform === "win32" && !executable.endsWith(".cmd")) {
+  if (platform === "win32" && !/\.(?:cmd|exe)$/i.test(executable)) {
     return `${executable}.cmd`;
   }
 
@@ -67,6 +67,8 @@ export function buildAgentCommand({
         "--print",
         "--permission-mode",
         "dontAsk",
+        "--permission-prompts",
+        "none",
         "--no-session-persistence",
         "--output-format",
         "json",

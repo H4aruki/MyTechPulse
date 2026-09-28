@@ -30,6 +30,7 @@ test("bare worker executables receive a cmd suffix only on Windows", () => {
   assert.equal(executableForPlatform("codex", "win32"), "codex.cmd");
   assert.equal(executableForPlatform("claude", "win32"), "claude.cmd");
   assert.equal(executableForPlatform("codex.cmd", "win32"), "codex.cmd");
+  assert.equal(executableForPlatform("codex.exe", "win32"), "codex.exe");
   assert.equal(executableForPlatform("codex", "linux"), "codex");
   assert.equal(executableForPlatform("claude", "darwin"), "claude");
 });
@@ -82,10 +83,12 @@ test("Claude Code command uses non-interactive safe JSON output", async () => {
   );
 
   assert.equal(command.executable, "claude");
-  assert.deepEqual(command.args.slice(0, 12), [
+  assert.deepEqual(command.args.slice(0, 14), [
     "--print",
     "--permission-mode",
     "dontAsk",
+    "--permission-prompts",
+    "none",
     "--no-session-persistence",
     "--output-format",
     "json",
@@ -96,7 +99,7 @@ test("Claude Code command uses non-interactive safe JSON output", async () => {
     "--effort",
     "high",
   ]);
-  assert.deepEqual(command.args.slice(12), [prompt]);
+  assert.deepEqual(command.args.slice(14), [prompt]);
   assert.equal(command.args.includes("--dangerously-skip-permissions"), false);
 });
 
