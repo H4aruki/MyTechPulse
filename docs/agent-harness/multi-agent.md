@@ -30,12 +30,26 @@ node scripts/agent-harness/spawn-agent.mjs --activate multi --parent claude --ag
 
 ## workerの制約
 
-- Codex workerは `gpt-5.6-terra`、推論量 `high` 以下（ランナーでは `high`）に固定する。
+- Codex workerは `gpt-6-luna`、推論量 `high` 以下（ランナーでは `high`）に固定する。
 - Claude Code workerは `sonnet`、推論量 `high` 以下（ランナーでは `high`）に固定する。
 - 親エージェントのモデルと推論量は変更しない。
 - workerは別のworkerを起動しない。
 - workerは `agent/<worktree名>` の専用branchと専用worktree内で、割り当てられた範囲だけを変更・検証し、通常コミットを1つ作成する。
 - `.env`、認証情報、既存の安全規則、Skills同期方針は通常作業と同じく守る。
+
+## 同じツールを内部サブエージェントとして呼ぶ場合
+
+`/multi` のランナーを使わず、Claude CodeがClaude Codeを、CodexがCodexを内部のサブエージェントとして呼ぶ場合の既定です。
+
+| 親と子 | モデル | 考える深さ | 設定場所 |
+|---|---|---|---|
+| Claude Code → Claude Code | `sonnet` | `high` | `.claude/settings.json` の `env`（モデル）、`.claude/agents/standard-subagent.md`（モデルと深さ） |
+| Codex → Codex | `gpt-6-luna` | `high` | `.codex/config.toml` の `[agents]` |
+
+- Claude Codeは版なしの別名（`sonnet`）で指定する。モデルの更新に自動で追従する。
+- Codexの設定にはモデルの版を含む名前しか書けない（版なしの別名は無い）。モデルが更新されたら `.codex/config.toml` の値を手で直す。
+- どちらも「指定した段階で固定して呼ぶ」仕組みで、状況に応じて自動で下げる仕組みはない。それより下の段階を使いたいときは、呼ぶ側が個別に指定する。
+- Claude Codeの考える深さは、`standard-subagent` を呼んだときだけ固定される。深さだけを指定する環境変数は無い。
 
 ## 結果と親の確認
 

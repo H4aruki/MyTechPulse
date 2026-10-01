@@ -41,6 +41,7 @@ MyTechPulse は、Qiita と Zenn から利用者の興味タグに合う記事�
 - `/multi`、`/parallel`、または明確な並列委譲の依頼がある場合だけ、親は共通ランナーを使える。
 - workerは別エージェントを起動せず、専用worktree内で担当範囲だけを変更・検証・通常コミットし、構造化結果を親へ返す。
 - 親は担当重複を避け、結果と差分をレビューする。worker結果の自動統合、マージ、worktree削除は行わない。
+- 同じツールを内部のサブエージェントとして呼ぶ場合は、Claude Codeは `sonnet` / `high`、Codexは `luna` / `high` を既定にする。上限として自動で下げる仕組みはなく、指定した段階で固定して呼ぶ。設定は `.claude/settings.json`、`.claude/agents/`、`.codex/config.toml`。
 
 ## 変更前と完了時の報告
 

@@ -4,5 +4,9 @@ sandbox_mode = "workspace-write"
 [sandbox_workspace_write]
 network_access = false
 
+[agents]
+default_subagent_model = "gpt-6-luna"
+default_subagent_reasoning_effort = "high"
+
 [features]
 hooks = true

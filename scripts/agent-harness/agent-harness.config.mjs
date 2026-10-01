@@ -6,7 +6,7 @@ export const AGENT_HARNESS = Object.freeze({
   resultSchemaPath: "scripts/agent-harness/worker-result.schema.json",
   codex: Object.freeze({
     executable: "codex",
-    model: "gpt-5.6-terra",
+    model: "gpt-6-luna",
     reasoningEffort: "high",
   }),
   claude: Object.freeze({

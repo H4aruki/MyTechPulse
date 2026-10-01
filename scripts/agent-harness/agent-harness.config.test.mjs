@@ -24,7 +24,7 @@ test("worker settings pin the approved model and high reasoning effort", () => {
   );
   assert.deepEqual(AGENT_HARNESS.codex, {
     executable: "codex",
-    model: "gpt-5.6-terra",
+    model: "gpt-6-luna",
     reasoningEffort: "high",
   });
   assert.deepEqual(AGENT_HARNESS.claude, {
@@ -57,7 +57,7 @@ test("Codex command pins the safe workspace execution contract", () => {
   assert.deepEqual(command.args, [
     "exec",
     "--model",
-    "gpt-5.6-terra",
+    "gpt-6-luna",
     "--config",
     'model_reasoning_effort="high"',
     "--sandbox",

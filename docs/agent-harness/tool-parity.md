@@ -16,7 +16,7 @@
 | ブラウザ検証 | Playwrightプラグイン | Playwright MCPと組み込みブラウザ |
 | 安全性確認 | Claude Security | Codex Security |
 | 双方向worker起動 | `spawn-agent.mjs --activate multi --parent claude --agent codex` | `spawn-agent.mjs --activate multi --parent codex --agent claude` |
-| workerの固定制約 | `sonnet`、`high`、専用worktree、再帰起動なし | `gpt-5.6-terra`、`high`、専用worktree、再帰起動なし |
+| workerの固定制約 | `sonnet`、`high`、専用worktree、再帰起動なし | `gpt-6-luna`、`high`、専用worktree、再帰起動なし |
 | worker結果 | 共通JSON Schemaの `status`、`summary`、変更ファイル、テスト、課題、commit | 共通JSON Schemaの `status`、`summary`、変更ファイル、テスト、課題、commit |
 | 起動前確認 | `spawn-agent.mjs --check` | `spawn-agent.mjs --check` |
 
