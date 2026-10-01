@@ -12,6 +12,15 @@
 docs/
 ├── DocumentMap.md                        … このファイル
 ├── RequirementsSpecification.md          … 要件定義書
+├── superpowers/specs/                    … 変更前にレビューする詳細設計
+│   └── 2026-09-14-go-backend-migration-design.md
+│                                           … Goバックエンド移行設計
+├── superpowers/plans/                    … 承認済み設計を実行する手順
+│   ├── 2026-09-14-go-migration-index.md  … #118〜#129の順序・承認・網羅表
+│   └── 2026-09-14-issue-*.md             … IssueごとのTDD実装計画
+├── adr/                                  … 変更しにくい設計判断と理由
+│   ├── 0001-use-go-modular-monolith.md   … Goモジュラーモノリスの採用
+│   └── 0002-use-server-side-sessions.md  … サーバー側認証セッションの採用
 ├── BasicDesignSpecifications/            … 基本設計書
 │   ├── FeaturesList.md                   … 機能一覧
 │   ├── SystemArchitectureDiagram.md      … システム構成図
@@ -38,6 +47,22 @@ docs/
 ```
 
 ## ドキュメント一覧
+
+### リポジトリ直下のCONTEXT.md
+
+MyTechPulseで使う用語の正本。利用者、興味プロファイル、推薦スコア、推薦フィード、クリックフィードバックなど、似ているが役割の異なる概念を定義している。
+
+### superpowers/specs/2026-09-14-go-backend-migration-design.md
+
+PythonバックエンドをGo製モジュラーモノリスへ移行するための設計書。目的、構成、API、認証、DB変更、記事取得、テスト、CI、本番切り替えと切り戻し、Issueの実行順をまとめている。
+
+### superpowers/plans/2026-09-14-go-migration-index.md
+
+Go移行Issue #118〜#129の実装計画への入口。依存順、設計書の網羅表、削除・外部保存・本番公開など実行時に改めて必要な承認をまとめ、各Issueの詳細計画へリンクしている。
+
+### adr/
+
+後から変更しにくく、採用理由をコードだけでは判断しづらい設計判断を短く記録する。現在はGoモジュラーモノリスとサーバー側認証セッションの採用理由を収録している。
 
 ### RequirementsSpecification.md
 
