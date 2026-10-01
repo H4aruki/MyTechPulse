@@ -15,7 +15,7 @@
 - `.agents/skills/` と `.claude/skills/` の全ファイルが一致する
 - `--activate multi` なしのworker起動を拒否する
 - worker環境からの再帰的なworker起動を拒否する
-- Codex workerが `gpt-5.6-terra` と `high` に固定される
+- Codex workerが `gpt-6-luna` と `high` に固定される
 - Claude Code workerが `sonnet` と `high` に固定される
 - `node scripts/agent-harness/spawn-agent.mjs --check` はCLI状態だけを返し、worker・worktree・branchを作成しない
 - 対象workerのCLI確認に失敗した場合、worktree作成前に停止する

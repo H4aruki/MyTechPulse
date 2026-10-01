@@ -3,6 +3,7 @@
 ## 2026-10-01
 
 - 同じツールを内部サブエージェントとして呼ぶときの既定を追加。Claude Codeは `sonnet` / `high`、Codexは `gpt-6-luna` / `high`（指定した段階で固定。自動で下げる仕組みはない）
+- `/multi` のランナーが起動するCodex workerも `gpt-6-luna` / `high` に変更（Claude Code workerは `sonnet` / `high` のまま）
 
 ## 2026-09-28
 

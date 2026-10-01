@@ -30,7 +30,7 @@ node scripts/agent-harness/spawn-agent.mjs --activate multi --parent claude --ag
 
 ## workerの制約
 
-- Codex workerは `gpt-5.6-terra`、推論量 `high` 以下（ランナーでは `high`）に固定する。
+- Codex workerは `gpt-6-luna`、推論量 `high` 以下（ランナーでは `high`）に固定する。
 - Claude Code workerは `sonnet`、推論量 `high` 以下（ランナーでは `high`）に固定する。
 - 親エージェントのモデルと推論量は変更しない。
 - workerは別のworkerを起動しない。
