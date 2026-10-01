@@ -38,6 +38,26 @@ services:
       db:
         condition: service_healthy
 
+  # ---- Go版API（移行中の並行起動）。既定では起動しない ----
+  # 起動: docker compose --env-file server/.env --profile go-preview up -d api-go
+  # 既存の api（Python版, 8000番）とは別ポート(8001)で併存する。Caddyの接続先はまだ切り替えない
+  api-go:
+    profiles: ["go-preview"]
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/mytechpulse
+      QIITA_ACCESS_TOKEN: ${QIITA_ACCESS_TOKEN:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+    ports:
+      - "127.0.0.1:8001:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+
   # ---- HTTPS終端（本番のみ）。ローカル開発では起動しない ----
   # 起動: docker compose --profile prod up -d
   caddy:
