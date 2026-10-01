@@ -330,6 +330,26 @@ func TestSearchRedirectIsRejectedWithoutForwardingToken(t *testing.T) {
 	}
 }
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// 本番の接続先で組み立てたURLを、実際には通信せずに確認する。
+func TestSearchProductionURLWithoutNetwork(t *testing.T) {
+	var gotURL string
+	f := provider.NewJSONFetcher(time.Second, 1<<20)
+	f.Client.(*http.Client).Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		gotURL = r.URL.String()
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("[]")), ContentLength: 2, Request: r}, nil
+	})
+	if _, err := New(f, testToken).Search(context.Background(), "Sass/SCSS"); err != nil {
+		t.Fatal(err)
+	}
+	if want := "https://qiita.com/api/v2/tags/Sass%2FSCSS/items?page=1&per_page=20"; gotURL != want {
+		t.Fatalf("url = %q, want %q", gotURL, want)
+	}
+}
+
 func TestNewDefaults(t *testing.T) {
 	c := New(provider.JSONFetcher{}, "t")
 	if c.BaseURL != "https://qiita.com" || c.PerPage != 20 || c.Token != "t" {

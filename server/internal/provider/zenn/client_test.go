@@ -84,6 +84,27 @@ func TestCurrentAPIContract(t *testing.T) {
 	}
 }
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// 本番の接続先で組み立てたURLを、実際には通信せずに確認する。
+func TestCurrentAPIContractProductionURLWithoutNetwork(t *testing.T) {
+	var gotURL string
+	f := provider.NewJSONFetcher(time.Second, 1<<20)
+	f.Client.(*http.Client).Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		gotURL = r.URL.String()
+		body := `{"articles":[]}`
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body)), ContentLength: int64(len(body)), Request: r}, nil
+	})
+	if _, err := New(f).Search(context.Background(), "Go"); err != nil {
+		t.Fatal(err)
+	}
+	if want := "https://zenn.dev/api/articles?count=5&topicname=go"; gotURL != want {
+		t.Fatalf("url = %q, want %q", gotURL, want)
+	}
+}
+
 func TestCurrentAPIContractDefaultEndpoint(t *testing.T) {
 	c := New(provider.JSONFetcher{})
 	if c.Endpoint != "https://zenn.dev/api/articles" || c.Count != 5 {

@@ -49,6 +49,19 @@ func NewHTTPClient(timeout time.Duration) *http.Client {
 	}
 }
 
+// NewJSONFetcher は、起動設定のタイムアウトと応答上限を使い、
+// 接続先を qiita.com と zenn.dev の完全一致だけに固定した取得部品を返す。
+func NewJSONFetcher(timeout time.Duration, maxBytes int64) JSONFetcher {
+	return JSONFetcher{
+		Client:   NewHTTPClient(timeout),
+		MaxBytes: maxBytes,
+		AllowedHosts: map[string]struct{}{
+			"qiita.com": {},
+			"zenn.dev":  {},
+		},
+	}
+}
+
 // GetJSON は rawURL へGETし、200応答の本文を out へ復号する。
 // 返すエラーは *Error で、URL・ヘッダー・本文は含まない。
 func (f JSONFetcher) GetJSON(ctx context.Context, rawURL string, headers http.Header, out any) error {
