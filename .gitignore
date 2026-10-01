@@ -57,3 +57,10 @@ desktop.ini
 
 # Playwright MCP のブラウザ操作ログ（動作確認のたびに自動生成される一時ファイル）
 .playwright-mcp/
+
+# ===== Go (server/) =====
+/server/bin/
+/server/*.exe
+/server/*.out
+/server/api
+/server/migrate
