@@ -1,22 +1,22 @@
-import { afterEach, describe, expect, test } from 'vitest'
-import { tokenStorage } from './auth'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { renderHook, waitFor } from '@testing-library/react'
+import { createElement, type ReactNode } from 'react'
+import { describe, expect, test, vi } from 'vitest'
+import { authQueryKey, useCurrentUser } from './auth'
 
-describe('tokenStorage', () => {
-  afterEach(() => {
-    localStorage.clear()
-  })
+vi.mock('@/api/endpoints', () => ({
+  currentUser: vi.fn().mockResolvedValue({ id: 1, username: 'u', role: 'member' }),
+}))
 
-  test('トークンを保存して取得できる', () => {
-    tokenStorage.set('test-token')
+describe('useCurrentUser', () => {
+  test('/auth/meの結果をauthQueryKeyで保持する', async () => {
+    const client = new QueryClient()
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client }, children)
 
-    expect(tokenStorage.get()).toBe('test-token')
-  })
+    const { result } = renderHook(() => useCurrentUser(), { wrapper })
 
-  test('トークンを削除できる', () => {
-    tokenStorage.set('test-token')
-
-    tokenStorage.clear()
-
-    expect(tokenStorage.get()).toBeNull()
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(client.getQueryData(authQueryKey)).toEqual({ id: 1, username: 'u', role: 'member' })
   })
 })
