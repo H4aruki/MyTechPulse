@@ -422,9 +422,10 @@ test("Codex失敗時も一時結果ファイルを削除する", async () => {
       },
     });
 
-    assert.deepEqual(result, {
+    assert.match(result.summary, /^worker failed\n\(ログ全文: .*codex\.log\)$/);
+    assert.deepEqual({ ...result, summary: "" }, {
       status: "failed",
-      summary: "worker failed",
+      summary: "",
       filesChanged: [],
       tests: [],
       issues: [],
@@ -476,6 +477,53 @@ test("worker CLI確認に失敗するとworktree作成前に停止する", async
       },
     ]);
     assert.equal(existsSync(worktreePath), false);
+  } finally {
+    await rm(sandbox, { force: true, recursive: true });
+  }
+});
+
+test("Codexの出力はログファイルへ流し、失敗時は末尾だけを返す", async () => {
+  const sandbox = await mkdtemp(join(tmpdir(), "spawn-agent-test-"));
+  const repoRoot = join(sandbox, "mytechpulse");
+  const options = parseArguments([
+    "--activate",
+    "multi",
+    "--parent",
+    "claude",
+    "--agent",
+    "codex",
+    "--worktree",
+    "login-ui",
+    "--task",
+    "ログイン画面だけを担当する",
+  ]);
+  let workerStdio;
+
+  try {
+    const result = executeWorker(options, {
+      repoRoot,
+      platform: "linux",
+      pathExists: () => false,
+      run(executable, args, runOptions) {
+        if (executable === "git" && args[0] === "show-ref") {
+          return { status: 1, stdout: "", stderr: "" };
+        }
+        if (executable === "codex" && args[0] !== "--version") {
+          workerStdio = runOptions.stdio;
+          const lines = Array.from({ length: 100 }, (_, index) => `行${index + 1}`);
+          writeFileSync(workerStdio[1], `${lines.join("\n")}\n`);
+          return { status: null, error: { code: "ENOBUFS" } };
+        }
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    assert.equal(workerStdio[0], "ignore");
+    assert.equal(workerStdio[1], workerStdio[2]);
+    assert.equal(result.status, "failed");
+    assert.match(result.summary, /行100/);
+    assert.doesNotMatch(result.summary, /行50\b/);
+    assert.match(result.summary, /login-ui\.codex\.log/);
   } finally {
     await rm(sandbox, { force: true, recursive: true });
   }

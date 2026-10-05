@@ -55,6 +55,14 @@ node scripts/agent-harness/spawn-agent.mjs --activate multi --parent claude --ag
 
 workerは共通JSON Schemaに従い、`status`、`summary`、`filesChanged`、`tests`、`issues`、`commit` を親へ返します。親は担当範囲が重複しないよう事前に分け、結果JSONを確認します。
 
+## Codex workerのログ
+
+Codex workerの作業中の出力は多いため、親へ送らず、worktreeの隣にある `<worktree名>.codex.log` へ書き出します。出力を受け取る領域には約1MBの上限があり、超えるとworkerが途中で強制終了されるためです。
+
+- 親は通常、ログを読まない。結果JSONだけを確認する。
+- 失敗した場合だけ、結果の `summary` に載るログ末尾の数行を読む。足りないときも、ログ全文ではなく末尾や該当箇所だけを読む。
+- ログは成功・失敗にかかわらず削除しない。
+
 結果を受け取った後は、親が次を確認してから統合の要否を人へ提案します。
 
 1. `git worktree list` でworkerの専用worktreeを確認する。
