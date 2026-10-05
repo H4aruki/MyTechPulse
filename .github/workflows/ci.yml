@@ -79,16 +79,9 @@ jobs:
       - name: 依存の導入
         run: npm ci
 
-      # Go側のAPI仕様から作る型が古くなっていないかを確かめる。
-      # この命令（api:check）はフロントのGo対応Issueで追加される。
-      # package.json にまだ無い間は飛ばし、追加された時点で自動的に必須になる
+      # Go側のAPI仕様（server/openapi/openapi.json）から作る型が古くなっていないかを確かめる
       - name: API型の生成差分を確認
-        run: |
-          if node -e "process.exit(require('./package.json').scripts?.['api:check'] ? 0 : 1)"; then
-            npm run api:check
-          else
-            echo "api:check がまだ無いため飛ばします"
-          fi
+        run: npm run api:check
 
       - name: 書き方チェック
         run: npm run lint

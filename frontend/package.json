@@ -9,7 +9,9 @@
     "lint": "oxlint",
     "test": "vitest run --maxWorkers=1 --no-file-parallelism",
     "test:coverage": "vitest run --maxWorkers=1 --no-file-parallelism --coverage",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "api:generate": "openapi-typescript ../server/openapi/openapi.json -o src/api/generated.ts",
+    "api:check": "npm run api:generate && git diff --exit-code -- src/api/generated.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -30,10 +32,16 @@
     "@vitejs/plugin-react": "^6.0.3",
     "@vitest/coverage-v8": "5.0.0",
     "jsdom": "29.0.0",
+    "openapi-typescript": "7.13.0",
     "oxlint": "^1.71.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
     "vitest": "5.0.0"
+  },
+  "overrides": {
+    "openapi-typescript": {
+      "typescript": "$typescript"
+    }
   }
 }

@@ -1,25 +1,22 @@
-import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import { UnauthorizedError } from './api/client'
 import './index.css'
-import { tokenStorage } from './lib/auth'
+import { authQueryKey } from './lib/auth'
 
-/**
- * トークン切れ・不正時の後始末を1箇所に集約する。
- * ルーター外からも呼ばれうるため、遷移は location による全体リロードで行う。
- */
-function handleApiError(error: unknown) {
-  if (error instanceof UnauthorizedError) {
-    tokenStorage.clear()
-    window.location.assign('/app/login')
-  }
-}
-
-const queryClient = new QueryClient({
-  queryCache: new QueryCache({ onError: handleApiError }),
-  mutationCache: new MutationCache({ onError: handleApiError }),
+const queryClient: QueryClient = new QueryClient({
+  queryCache: new QueryCache({
+    // 記事取得などの途中でセッション切れになったら、ログイン状態を確認し直す。
+    // 確認結果が401なら ProtectedRoute がログイン画面へ戻す。
+    // 確認自体の失敗では再確認しない（無限ループ防止）。
+    onError: (error, query) => {
+      if (error instanceof UnauthorizedError && query.queryKey[0] !== authQueryKey[0]) {
+        void queryClient.invalidateQueries({ queryKey: authQueryKey })
+      }
+    },
+  }),
 })
 
 createRoot(document.getElementById('root')!).render(

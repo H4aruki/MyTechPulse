@@ -1,4 +1,4 @@
-import { tokenStorage } from '@/lib/auth'
+import type { components } from './generated'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
@@ -8,7 +8,12 @@ if (!API_BASE_URL) {
   )
 }
 
-/** トークン欠如・不正・期限切れ。呼び出し側でログイン画面へ戻す判断に使う */
+/** Go版APIが返す標準のエラー形式（RFC 9457 Problem Details） */
+export type ProblemDetails = components['schemas']['ErrorModel']
+
+type PartialProblem = Pick<ProblemDetails, 'status'> & Partial<ProblemDetails>
+
+/** ログインしていない、またはセッションが切れている（HTTP 401） */
 export class UnauthorizedError extends Error {
   constructor() {
     super('認証の有効期限が切れました。再度ログインしてください。')
@@ -16,59 +21,69 @@ export class UnauthorizedError extends Error {
   }
 }
 
-/** ネットワーク障害や5xxなど、status規約以前の失敗 */
+/** 401以外の失敗。403/409/422/5xxや通信障害の区別を problem に保つ */
 export class ApiError extends Error {
-  constructor(message: string) {
-    super(message)
+  readonly problem: PartialProblem
+
+  constructor(problem: PartialProblem, message?: string) {
+    super(message ?? problem.detail ?? `サーバーエラーが発生しました（HTTP ${problem.status}）。`)
     this.name = 'ApiError'
+    this.problem = problem
   }
 }
 
-interface RequestOptions {
-  /** Authorization ヘッダーを付与するか（保護対象エンドポイント用） */
-  auth?: boolean
-  body?: unknown
+function isProblem(response: Response): boolean {
+  return (response.headers.get('Content-Type') ?? '').includes('application/problem+json')
 }
 
 /**
  * 全API呼び出しの共通処理。
- * 401は既存のstatus規約の例外としてHTTPステータスで返るため、ここでUnauthorizedErrorに変換する。
+ * 認証はHttpOnly Cookieなので、JavaScriptからは値に触れず credentials: 'include' だけ指定する。
+ * 状態を変える要求にはCSRF対策のヘッダーを付ける。
  */
-async function post<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { auth = false, body } = options
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-
-  if (auth) {
-    const token = tokenStorage.get()
-    if (!token) throw new UnauthorizedError()
-    headers.Authorization = `Bearer ${token}`
-  }
-
+export async function request<T>(
+  method: 'GET' | 'POST',
+  path: string,
+  body?: unknown,
+): Promise<T> {
   let response: Response
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
-      method: 'POST',
-      headers,
+      method,
+      credentials: 'include',
+      headers:
+        method === 'GET'
+          ? { Accept: 'application/json' }
+          : {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+              'X-MTP-CSRF': '1',
+            },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
-    throw new ApiError('サーバーに接続できませんでした。通信環境を確認してください。')
+    throw new ApiError({ status: 0 }, 'サーバーに接続できませんでした。通信環境を確認してください。')
   }
 
   if (response.status === 401) throw new UnauthorizedError()
 
   if (!response.ok) {
-    throw new ApiError(`サーバーエラーが発生しました（HTTP ${response.status}）。`)
+    let problem: PartialProblem = { status: response.status }
+    if (isProblem(response)) {
+      try {
+        problem = (await response.json()) as ProblemDetails
+      } catch {
+        // 本文が壊れていてもステータスだけで失敗を表す
+      }
+    }
+    throw new ApiError(problem)
   }
+
+  if (response.status === 204) return undefined as T
 
   try {
     return (await response.json()) as T
   } catch {
-    throw new ApiError('サーバーの応答を解釈できませんでした。')
+    throw new ApiError({ status: response.status }, 'サーバーの応答を解釈できませんでした。')
   }
 }
-
-export const apiClient = { post }

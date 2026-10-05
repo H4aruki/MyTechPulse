@@ -1,13 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
+import { UnauthorizedError } from '@/api/client'
 import { login } from '@/api/endpoints'
-import { ApiStatus } from '@/api/types'
 import { AppLayout } from '@/components/AppLayout'
-import { tokenStorage } from '@/lib/auth'
+import { authQueryKey } from '@/lib/auth'
 
 const loginSchema = z.object({
   username: z.string().min(1, 'ユーザー名を入力してください'),
@@ -18,6 +18,7 @@ type LoginFormValues = z.infer<typeof loginSchema>
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [formError, setFormError] = useState('')
 
   const {
@@ -28,17 +29,21 @@ export function LoginPage() {
 
   const mutation = useMutation({
     mutationFn: login,
+    // 認証失敗を自動で繰り返すと、試行回数制限に余計にかかるため再送しない
+    retry: false,
     onSuccess: (data) => {
-      // ユーザー名列挙攻撃を防ぐため、バックエンドはユーザー不存在と
-      // パスワード不一致を区別せず同じ status(2) を返す。表示も1種類に統一する。
-      if (data.status === ApiStatus.SUCCESS && data.access_token) {
-        tokenStorage.set(data.access_token)
-        navigate('/articles', { replace: true })
+      queryClient.setQueryData(authQueryKey, data.user)
+      navigate('/articles', { replace: true })
+    },
+    onError: (error: Error) => {
+      // ユーザー名列挙攻撃を防ぐため、利用者不存在とパスワード不一致は
+      // 同じ401で返る。表示も1種類に統一する。
+      if (error instanceof UnauthorizedError) {
+        setFormError('ユーザー名またはパスワードが間違っています。')
         return
       }
-      setFormError('ユーザー名またはパスワードが間違っています。')
+      setFormError(error.message)
     },
-    onError: (error: Error) => setFormError(error.message),
   })
 
   const onSubmit = (values: LoginFormValues) => {
