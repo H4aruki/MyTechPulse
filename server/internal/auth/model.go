@@ -18,11 +18,12 @@ const (
 // Valid は定義済みの役割かどうかを返す。
 func (r Role) Valid() bool { return r == RoleMember || r == RoleAdmin }
 
-// User は公開してよい利用者情報。
+// User は公開してよい利用者情報。APIの応答にもそのまま使うため、項目はこの3つだけにする
+// (OpenAPIのスキーマ名 User になる。パスワード関連の項目を足さないこと)。
 type User struct {
-	ID       int64
-	Username string
-	Role     Role
+	ID       int64  `json:"id" example:"1" doc:"利用者ID"`
+	Username string `json:"username" example:"synthetic-user" doc:"利用者名"`
+	Role     Role   `json:"role" enum:"member,admin" example:"member" doc:"役割。登録時は常にmember"`
 }
 
 // UserWithPassword はログイン照合に使う。パスワードハッシュは応答やログへ出さない。
