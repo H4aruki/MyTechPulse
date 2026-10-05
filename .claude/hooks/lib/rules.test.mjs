@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { splitSegments, checkCommand } from './rules.mjs';
+import { splitSegments, checkCommand, checkWorkerLogRead } from './rules.mjs';
 
 test('つなぎ記号でコマンドを分解する', () => {
   assert.deepEqual(splitSegments('ls && cat .env'), ['ls', 'cat .env']);
@@ -95,4 +95,35 @@ test('止める理由の文章が付く', () => {
 test('空や未定義でも壊れない', () => {
   assert.equal(checkCommand('').blocked, false);
   assert.equal(checkCommand(undefined).blocked, false);
+});
+
+test('Codex workerのログは、範囲を決めずに読む操作だけを止める', () => {
+  const log = 'C:/work/mytechpulse-worktrees/login-ui.codex.log';
+  assert.equal(checkWorkerLogRead({ file_path: log }).blocked, true);
+  assert.equal(checkWorkerLogRead({ file_path: log, limit: 5000 }).blocked, true);
+  assert.equal(checkWorkerLogRead({ file_path: log, limit: 50 }).blocked, false);
+  assert.equal(checkWorkerLogRead({ file_path: 'backend/app/main.py' }).blocked, false);
+});
+
+test('Codex workerのログを丸ごと表示するコマンドを止める', () => {
+  for (const cmd of [
+    'cat ../mytechpulse-worktrees/a.codex.log',
+    'type C:\work\a.codex.log',
+    'Get-Content a.codex.log',
+    'ls && cat a.codex.log',
+  ]) {
+    assert.equal(checkCommand(cmd).blocked, true, cmd);
+  }
+});
+
+test('Codex workerのログでも、範囲を絞る読み方は止めない', () => {
+  for (const cmd of [
+    'tail -n 50 a.codex.log',
+    'grep -n FAIL a.codex.log',
+    'Get-Content a.codex.log -Tail 50',
+    'ls a.codex.log',
+    'cat README.md',
+  ]) {
+    assert.equal(checkCommand(cmd).blocked, false, cmd);
+  }
 });

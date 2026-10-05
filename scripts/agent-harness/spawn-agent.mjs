@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -177,6 +177,22 @@ function resultSummary(result) {
     .slice(0, 1000);
 }
 
+const LOG_TAIL_LINES = 20;
+const LOG_TAIL_MAX_CHARS = 1000;
+
+// 親が全文を読まずに済むよう、失敗時だけ末尾数行とログの場所を返す。
+function logTailSummary(logPath, fallback) {
+  let tail = "";
+  try {
+    tail = readFileSync(logPath, "utf8").trim().split(/\r?\n/).slice(-LOG_TAIL_LINES).join("\n");
+  } catch {
+    // ログが読めない場合はfallbackだけ返す。
+  }
+  const body = (tail || fallback).slice(-LOG_TAIL_MAX_CHARS);
+  return `${body}
+(ログ全文: ${logPath})`;
+}
+
 function failedResult(summary) {
   return {
     status: "failed",
@@ -211,10 +227,10 @@ function validateWorkerResult(value) {
   return value;
 }
 
-function normalizeWorkerResult(agent, child, outputLastMessagePath) {
+function normalizeWorkerResult(agent, child, outputLastMessagePath, logPath) {
   try {
     if (commandFailed(child)) {
-      return failedResult(resultSummary(child));
+      return failedResult(logPath ? logTailSummary(logPath, resultSummary(child)) : resultSummary(child));
     }
 
     if (agent === "codex") {
@@ -225,7 +241,8 @@ function normalizeWorkerResult(agent, child, outputLastMessagePath) {
     const output = JSON.parse(String(child.stdout));
     return validateWorkerResult(JSON.parse(output.result));
   } catch (error) {
-    return failedResult(error instanceof Error ? error.message : "worker結果を読み取れませんでした。");
+    const message = error instanceof Error ? error.message : "worker結果を読み取れませんでした。";
+    return failedResult(logPath ? logTailSummary(logPath, message) : message);
   } finally {
     if (agent === "codex" && existsSync(outputLastMessagePath)) {
       unlinkSync(outputLastMessagePath);
@@ -295,16 +312,29 @@ export function executeWorker(options, dependencies = {}) {
       worktreePath,
     }),
   });
-  const child = run(command.executable, command.args, {
-    cwd: worktreePath,
-    env: {
-      ...env,
-      AGENT_HARNESS_ROLE: "worker",
-      AGENT_HARNESS_PARENT: options.parentAgent,
-    },
-  });
+  // Codexは作業中の出力が多く、受け取り用の領域(約1MB)を超えると強制終了されるため、ファイルへ流す。
+  const logPath = options.agent === "codex"
+    ? join(dirname(worktreePath), `${options.worktree}.codex.log`)
+    : null;
+  const logFd = logPath ? openSync(logPath, "w") : null;
+  let child;
+  try {
+    child = run(command.executable, command.args, {
+      cwd: worktreePath,
+      env: {
+        ...env,
+        AGENT_HARNESS_ROLE: "worker",
+        AGENT_HARNESS_PARENT: options.parentAgent,
+      },
+      ...(logFd === null ? {} : { stdio: ["ignore", logFd, logFd] }),
+    });
+  } finally {
+    if (logFd !== null) {
+      closeSync(logFd);
+    }
+  }
 
-  return normalizeWorkerResult(options.agent, child, outputLastMessagePath);
+  return normalizeWorkerResult(options.agent, child, outputLastMessagePath, logPath);
 }
 
 function findRepositoryRoot(run) {

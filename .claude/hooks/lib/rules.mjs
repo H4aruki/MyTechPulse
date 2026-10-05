@@ -40,7 +40,25 @@ function stripWrappers(segment) {
   }
 }
 
+// Codex workerのログを丸ごと表示するコマンド。head・tail・grep のように
+// 範囲が絞れるものは止めない。
+const WORKER_LOG_TOKEN = /\.codex\.log$/i;
+const DUMPING_READERS = /^(cat|type|more|less|bat|nl|Get-Content|gc)$/i;
+const PS_RANGE_OPTION = /(^|\s)-(Tail|TotalCount|First|Last)/i;
+
+const WORKER_LOG_MESSAGE =
+  'Codex workerのログは大きいので、全文は読まないでください。失敗時は結果の末尾の数行を見て、足りなければ tail や grep など範囲を絞って読みます。';
+
 const RULES = [
+  {
+    id: 'worker-log-full-read',
+    test: (s) => {
+      if (!tokens(s).some((t) => WORKER_LOG_TOKEN.test(t))) return false;
+      const command = stripWrappers(s).split(/\s+/)[0] ?? '';
+      return DUMPING_READERS.test(command) && !PS_RANGE_OPTION.test(s);
+    },
+    message: WORKER_LOG_MESSAGE,
+  },
   {
     id: 'secret-file',
     // 接続情報ファイルを指す単語が1つでもあれば止める。読む・写す・記録に加える
@@ -104,4 +122,21 @@ export function checkCommand(command) {
     }
   }
   return { blocked: false };
+}
+
+// Codex workerのログは大きいので、範囲を決めずに丸ごと読むのを止める。
+const WORKER_LOG_MAX_LINES = 100;
+
+export function checkWorkerLogRead(toolInput) {
+  const path = String(toolInput?.file_path ?? '');
+  if (!WORKER_LOG_TOKEN.test(path)) return { blocked: false };
+  const limit = Number(toolInput?.limit);
+  if (Number.isFinite(limit) && limit > 0 && limit <= WORKER_LOG_MAX_LINES) {
+    return { blocked: false };
+  }
+  return {
+    blocked: true,
+    id: 'worker-log-full-read',
+    message: `${WORKER_LOG_MESSAGE}（Readなら limit を${WORKER_LOG_MAX_LINES}以下にする、またはGrepで検索する）`,
+  };
 }

@@ -56,6 +56,18 @@
         ]
       },
       {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-worker-log.mjs"],
+            "timeout": 10,
+            "statusMessage": "workerのログを丸ごと読まないか確認しています"
+          }
+        ]
+      },
+      {
         "matcher": "Bash|Edit|Write",
         "hooks": [
           {
