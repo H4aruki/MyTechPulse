@@ -26,9 +26,9 @@ jobs:
     name: バックエンドの書き方チェック
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           # 本番コンテナ（backend/Dockerfile）と同じ 3.12 に合わせる
           python-version: "3.12"
@@ -63,9 +63,9 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: npm
@@ -74,6 +74,17 @@ jobs:
       # npm ci は package-lock.json のとおりに入れる（npm install と違い勝手に更新しない）
       - name: 依存の導入
         run: npm ci
+
+      # Go側のAPI仕様から作る型が古くなっていないかを確かめる。
+      # この命令（api:check）はフロントのGo対応Issueで追加される。
+      # package.json にまだ無い間は飛ばし、追加された時点で自動的に必須になる
+      - name: API型の生成差分を確認
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.['api:check'] ? 0 : 1)"; then
+            npm run api:check
+          else
+            echo "api:check がまだ無いため飛ばします"
+          fi
 
       - name: 書き方チェック
         run: npm run lint
@@ -94,9 +105,9 @@ jobs:
     name: 設定まわりの仕掛けの確認
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
 
@@ -110,19 +121,128 @@ jobs:
       - name: 仕掛けの確認
         run: node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/agent-harness/**/*.test.mjs"
 
+      # 外部actionが40桁のcommit SHAで固定されているか、
+      # 旧公開の凍結条件が外れていないかを確かめる（どちらもNode標準機能だけで動く）
+      - name: 外部actionの固定と旧公開の凍結を確認
+        run: |
+          node --test scripts/verify-actions-pinned.test.mjs scripts/verify-legacy-deploy-frozen.test.mjs
+          node scripts/verify-actions-pinned.mjs
+
+  go-check:
+    name: Goバックエンドの検査
+    runs-on: ubuntu-latest
+    # この検査は読み取り権限だけで動く。本番の値やsecretは渡さない
+    permissions:
+      contents: read
+    services:
+      # DB結合テスト用の使い捨てDB。接続先は検査専用の合成値で、本番とは無関係
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26"
+          cache-dependency-path: server/go.sum
+
+      - name: 形式・静的解析・テスト・build
+        working-directory: server
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test ./... -race
+          go build ./cmd/api ./cmd/migrate ./cmd/openapi
+
+  go-generated:
+    name: sqlcとOpenAPIの生成差分
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26"
+          cache-dependency-path: server/go.sum
+
+      # 生成物を作り直して、コミット済みの内容と違えば失敗にする。
+      # 新規ファイルも見つけるため、git diff ではなく git status で比べる。
+      #
+      # server/db/queries（sqlcの入力）はDB問い合わせを実装するIssueで追加される。
+      # まだ無い間はsqlcを飛ばしてOpenAPIだけ確かめ、追加された時点で自動的に検査対象になる
+      - name: sqlcとOpenAPI生成差分
+        working-directory: server
+        run: |
+          if [ -d db/queries ]; then
+            go tool sqlc generate
+          else
+            echo "server/db/queries がまだ無いため、sqlcの確認は飛ばします"
+          fi
+          go run ./cmd/openapi
+          changes="$(git status --porcelain -- internal/store/dbgen openapi/openapi.json)"
+          if [ -n "$changes" ]; then
+            echo "生成物がコミット内容と一致しません。再生成してコミットしてください。" >&2
+            echo "$changes" >&2
+            git --no-pager diff --stat -- internal/store/dbgen openapi/openapi.json >&2
+            exit 1
+          fi
+
+  go-image:
+    name: Go APIのimage検査
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      # push せず、このjobの中へ読み込むだけ。キャッシュは使わず毎回作り直す
+      - name: imageをbuild
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: server/Dockerfile
+          push: false
+          load: true
+          no-cache: true
+          tags: mytechpulse-api-go:ci
+
+      # 作った最終imageそのものを動かして確かめる（中身は scripts/check-go-image.sh）
+      - name: 最終imageの起動・疎通・非root確認
+        run: bash scripts/check-go-image.sh mytechpulse-api-go:ci
+
   deploy-frontend:
     name: 画面の公開
     # 上の2つの書き方チェックが両方とも成功したときだけ動く。
     # どちらかが赤ければこの工程は実行されず、公開もされない
     needs: [backend-lint, frontend-lint]
     # main へ取り込まれたときだけ公開する。
-    # 作業用の枝への push やプルリクエストでは動かさない
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # 作業用の枝への push やプルリクエストでは動かさない。
+    #
+    # Go版への移行中は、旧画面・旧サーバーの自動公開を凍結している。
+    # リポジトリ変数 LEGACY_DEPLOY_ENABLED が 'true' のときだけ動く（未設定なら動かない）。
+    # この変数は作っていない。移行の本番切替が終わるまで作らないこと
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.LEGACY_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: npm
@@ -144,7 +264,7 @@ jobs:
       # 出来上がった一式（frontend/dist）を Cloudflare Pages へ送る。
       # --branch=main を付けることで、本番の公開先として扱われる
       - name: Cloudflare Pages へ公開
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -153,9 +273,10 @@ jobs:
 
   deploy-backend:
     name: サーバーの反映
-    # 画面の公開と同じ条件。書き方チェックが両方とも緑のときだけ動く
+    # 画面の公開と同じ条件（凍結の理由は上の「画面の公開」を参照）。
+    # 書き方チェックが両方とも緑のときだけ動く
     needs: [backend-lint, frontend-lint]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.LEGACY_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     # 建て直しが詰まったまま待ち続けないよう上限を置く（通常は2〜3分で終わる）
     timeout-minutes: 15
