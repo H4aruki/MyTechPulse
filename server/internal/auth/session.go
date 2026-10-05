@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"time"
 )
 
 const tokenBytes = 32
@@ -20,6 +21,12 @@ func (RandomTokenGenerator) New() (string, [32]byte, error) {
 	plain := base64.RawURLEncoding.EncodeToString(raw)
 	return plain, HashToken(plain), nil
 }
+
+// SystemClock は実際の現在時刻を返す。
+type SystemClock struct{}
+
+// Now は現在時刻を返す。
+func (SystemClock) Now() time.Time { return time.Now() }
 
 // HashToken はCookieの値からDBの検索キーを作る。
 func HashToken(plain string) [32]byte {

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/H4aruki/MyTechPulse/server/internal/app"
+	"github.com/H4aruki/MyTechPulse/server/internal/auth"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/config"
 )
 
@@ -26,9 +27,11 @@ func main() {
 }
 
 func run(path string) error {
-	_, spec := app.New(config.Config{Environment: "local", SwaggerEnabled: true}, app.Dependencies{
+	// 仕様の生成だけなので、認証Serviceの依存は空でよい(経路は呼ばれない)。
+	_, spec := app.New(config.Config{Environment: "local", SwaggerEnabled: true, CookieName: "mtp_session"}, app.Dependencies{
 		Logger: slog.New(slog.NewJSONHandler(io.Discard, nil)),
 		Ready:  noopChecker{},
+		Auth:   &auth.Service{},
 	})
 	data, err := json.MarshalIndent(spec, "", "  ")
 	if err != nil {

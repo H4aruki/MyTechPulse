@@ -86,6 +86,20 @@ func TestBcryptRejectsInvalidPasswords(t *testing.T) {
 	}
 }
 
+func TestNewDummyHashUsesRandomUnknownPassword(t *testing.T) {
+	a, err := NewDummyHash(&fakePasswords{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := NewDummyHash(&fakePasswords{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == b || a == "" {
+		t.Fatal("dummy hash must come from a fresh random password each time")
+	}
+}
+
 func TestBcryptCompareRejectsMalformedHash(t *testing.T) {
 	if err := (BcryptPasswords{}).Compare("not-a-hash", "password"); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("malformed hash must fail as invalid credentials: %v", err)

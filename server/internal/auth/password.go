@@ -20,6 +20,16 @@ func ValidPassword(password string) bool {
 	return password != "" && len(password) <= MaxPasswordBytes && utf8.ValidString(password)
 }
 
+// NewDummyHash は、存在しない利用者のログインでも照合を行うための固定ハッシュを作る。
+// 元のパスワードは乱数で、どこにも保存しないため、誰もこのハッシュに一致できない。
+func NewDummyHash(p Passwords) (string, error) {
+	plain, _, err := (RandomTokenGenerator{}).New()
+	if err != nil {
+		return "", err
+	}
+	return p.Hash(plain)
+}
+
 // BcryptPasswords は既存の$2b$ハッシュをそのまま照合できるbcrypt実装。
 type BcryptPasswords struct{}
 
