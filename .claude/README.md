@@ -12,6 +12,7 @@
 └── hooks/
     ├── guard-command.mjs  … 危険な操作を止める（コマンド実行の直前）
     ├── loop-guard.mjs     … 同じ操作の繰り返しを止める（同上）
+    ├── guard-worker-log.mjs … Codex workerのログを丸ごと読む操作を止める（ファイル読み込みの直前）
     ├── format-edit.mjs    … 書き方を確認する（ファイル編集の直後）
     ├── mark-verified.mjs  … 編集と検査の実行を記録する（同上）
     ├── session-start.mjs  … 今の状況を読み込む（作業開始時）
