@@ -25,8 +25,12 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     restart: unless-stopped
+    # release bundleや検査環境には秘密の設定ファイルを入れないため、無くても
+    # composeの読み込み自体は通す（api-goのpullや構文確認が止まらないように）。
+    # ファイルがある環境では、これまでと同じ内容が渡る
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env
+        required: false
     environment:
       # DATABASE_URL は host を db に上書き（backend/.env の localhost 版より優先される）
       DATABASE_URL: "postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/mytechpulse"
@@ -43,6 +47,9 @@ services:
   # 既存の api（Python版, 8000番）とは別ポート(8001)で併存する。Caddyの接続先はまだ切り替えない
   api-go:
     profiles: ["go-preview"]
+    # ローカルでは未指定のままbuildして使う。本番は ops/deploy_release.sh が
+    # manifestのdigest（ghcr.io/...@sha256:...）を GO_API_IMAGE へ入れ、再buildせずpullして使う
+    image: ${GO_API_IMAGE:-mytechpulse-api-go:local}
     build:
       context: .
       dockerfile: server/Dockerfile
