@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
+type CaughtError = { problem: { status: number; code?: string }; message: string }
+
 const BASE = 'http://api.test'
 
 async function loadClient() {
@@ -75,7 +77,7 @@ describe('request', () => {
     const { request, ApiError } = await loadClient()
     fetchMock.mockResolvedValue(problem(409, 'username_taken', { detail: '使用済み' }))
 
-    const error = await request('POST', '/api/v1/auth/signup', {}).catch((e) => e)
+    const error = await request('POST', '/api/v1/auth/signup', {}).catch((e: unknown) => e) as CaughtError
 
     expect(error).toBeInstanceOf(ApiError)
     expect(error.problem.status).toBe(409)
@@ -87,7 +89,7 @@ describe('request', () => {
     const { request, ApiError } = await loadClient()
     fetchMock.mockResolvedValue(new Response('<html>secret</html>', { status: 502 }))
 
-    const error = await request('GET', '/api/v1/feed').catch((e) => e)
+    const error = await request('GET', '/api/v1/feed').catch((e: unknown) => e) as CaughtError
 
     expect(error).toBeInstanceOf(ApiError)
     expect(error.problem.status).toBe(502)

@@ -1,6 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
-import { tokenStorage } from '@/lib/auth'
 import { ArticlesPage } from '@/pages/ArticlesPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { SignupPage } from '@/pages/SignupPage'
@@ -12,7 +11,7 @@ export default function App() {
       <Routes>
         <Route
           index
-          element={<Navigate to={tokenStorage.get() ? '/articles' : '/login'} replace />}
+          element={<Navigate to="/articles" replace />}
         />
         <Route path="login" element={<LoginPage />} />
         <Route path="signup" element={<SignupPage />} />

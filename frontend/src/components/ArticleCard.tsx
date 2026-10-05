@@ -16,6 +16,9 @@ function formatPublishedAt(value: string): string {
  * 手動のXSS対策が必要だったが、Reactが既定でエスケープするため不要になった。
  */
 export function ArticleCard({ article, onOpen }: ArticleCardProps) {
+  // Go版APIはタグの無い記事を null で返すことがある
+  const tags = article.tags ?? []
+
   return (
     <li>
       <button
@@ -31,9 +34,9 @@ export function ArticleCard({ article, onOpen }: ArticleCardProps) {
           <span>{formatPublishedAt(article.published_at)}</span>
         </div>
 
-        {article.tags.length > 0 && (
+        {tags.length > 0 && (
           <ul className="mt-auto flex flex-wrap gap-1.5">
-            {article.tags.map((tag) => (
+            {tags.map((tag) => (
               <li
                 key={tag}
                 className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-bold text-brand-700"
