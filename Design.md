@@ -2,6 +2,7 @@
 
 このファイルは、MyTechPulse の見た目と動きの規則をまとめた正本です。
 最初の適用先は公開ページ（LP, `frontend/index.html` と `frontend/src/lp.css`）です。
+ただし、このファイルを追加した時点では規則だけを定めており、LP本体はまだ旧デザインのままです。LPへの適用は別のPRで行います。
 ログイン後の画面（`/app/` 配下）は、別Issue（#83）で同じ規則に揃えます。
 
 - 参考にしたサイト: Linear / Attio / Raycast / Wispr Flow / Resend / Vercel / Framer / Craft / Stripe / Ramp
@@ -134,7 +135,7 @@ LPに書く内容は、実際の仕様と一致させます。誇張しません
 
 ## 3. デザイントークン
 
-実装は `frontend/src/lp.css` の `:root` にある。名前は同じものを使う。
+LPに適用するときは、`frontend/src/lp.css` の `:root` に同じ名前で定義する。
 
 ### 3.1 色
 
