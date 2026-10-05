@@ -64,3 +64,8 @@ desktop.ini
 /server/*.out
 /server/api
 /server/migrate
+
+# ===== カバレッジ計測の出力 =====
+coverage/
+coverage-comment.md
+go-test.log

@@ -17,5 +17,12 @@ export default defineConfig({
       },
     },
     setupFiles: ['./src/test/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      // 実行画面には表、PRコメント用には JSON の要約を出す
+      reporter: ['text', 'json-summary'],
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/test/**', 'src/**/*.test.{ts,tsx}', 'src/**/*.d.ts'],
+    },
   },
 })

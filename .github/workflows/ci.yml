@@ -59,6 +59,10 @@ jobs:
   frontend-lint:
     name: フロントエンドの書き方チェック
     runs-on: ubuntu-latest
+    # カバレッジの表をPRへコメントするためだけに、PRへの書き込みを許す
+    permissions:
+      contents: read
+      pull-requests: write
     defaults:
       run:
         working-directory: frontend
@@ -89,8 +93,27 @@ jobs:
       - name: 書き方チェック
         run: npm run lint
 
-      - name: 認証状態の画面動作を確認
-        run: npm run test
+      # テストと同時にカバレッジも計測する（結果は frontend/coverage/ に出る）
+      - name: 認証状態の画面動作を確認（カバレッジ計測つき）
+        run: npm run test:coverage
+
+      # 数値を実行画面の要約に出し、PRのときはコメントにも載せる。
+      # 数値を見せるだけで、基準を下回っても落とさない。
+      # コメント投稿に必要な書き込み権限はこの工程の前提として job に与えてある
+      - name: カバレッジの表を作ってPRへ載せる
+        if: always()
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          test -f frontend/coverage/coverage-summary.json || exit 0
+          node scripts/coverage-report.mjs frontend frontend/coverage/coverage-summary.json "画面" > coverage-comment.md
+          cat coverage-comment.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$PR_NUMBER" ]; then
+            # フォークからのPRは書き込み権限が無いので、失敗しても検査は止めない
+            bash scripts/post-pr-comment.sh coverage-comment.md || echo "コメント投稿は飛ばしました"
+          fi
 
       # 組み立てが通るところまで確かめる。この命令は中で
       # 「型チェック → 組み立て」の順に走るので、型の検査も兼ねている。
@@ -125,15 +148,17 @@ jobs:
       # 旧公開の凍結条件が外れていないかを確かめる（どちらもNode標準機能だけで動く）
       - name: 外部actionの固定と旧公開の凍結を確認
         run: |
-          node --test scripts/verify-actions-pinned.test.mjs scripts/verify-legacy-deploy-frozen.test.mjs
+          node --test scripts/verify-actions-pinned.test.mjs scripts/verify-legacy-deploy-frozen.test.mjs scripts/coverage-report.test.mjs
           node scripts/verify-actions-pinned.mjs
 
   go-check:
     name: Goバックエンドの検査
     runs-on: ubuntu-latest
-    # この検査は読み取り権限だけで動く。本番の値やsecretは渡さない
+    # 本番の値やsecretは渡さない。pull-requests の書き込みは、
+    # カバレッジの表をPRへコメントするためだけに使う
     permissions:
       contents: read
+      pull-requests: write
     services:
       # DB結合テスト用の使い捨てDB。接続先は検査専用の合成値で、本番とは無関係
       postgres:
@@ -163,8 +188,20 @@ jobs:
         run: |
           test -z "$(gofmt -l .)"
           go vet ./...
-          go test ./... -race
+          go test ./... -race -cover | tee ../go-test.log
           go build ./cmd/api ./cmd/migrate ./cmd/openapi
+
+      # 数値を見せるだけで、基準を下回っても落とさない
+      - name: カバレッジの表を作ってPRへ載せる
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          node scripts/coverage-report.mjs go go-test.log "Goサーバー" > coverage-comment.md
+          cat coverage-comment.md >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$PR_NUMBER" ]; then
+            bash scripts/post-pr-comment.sh coverage-comment.md || echo "コメント投稿は飛ばしました"
+          fi
 
   go-generated:
     name: sqlcとOpenAPIの生成差分

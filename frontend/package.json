@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run --maxWorkers=1 --no-file-parallelism",
+    "test:coverage": "vitest run --maxWorkers=1 --no-file-parallelism --coverage",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "@vitest/coverage-v8": "5.0.0",
     "jsdom": "29.0.0",
     "oxlint": "^1.71.0",
     "tailwindcss": "^4.3.3",
