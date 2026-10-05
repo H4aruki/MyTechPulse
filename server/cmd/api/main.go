@@ -15,10 +15,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/H4aruki/MyTechPulse/server/internal/app"
+	"github.com/H4aruki/MyTechPulse/server/internal/auth"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/config"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/logging"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/postgres"
+	"github.com/H4aruki/MyTechPulse/server/internal/store"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -43,7 +47,11 @@ func run(ctx context.Context, lookup func(string) (string, bool), stdout, stderr
 		return err
 	}
 	defer pool.Close()
-	handler, _ := app.New(cfg, app.Dependencies{Logger: logger, Ready: pool})
+	authService, err := newAuthService(cfg, pool, logger)
+	if err != nil {
+		return err
+	}
+	handler, _ := app.New(cfg, app.Dependencies{Logger: logger, Ready: pool, Auth: authService})
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)
 	if err != nil {
 		return fmt.Errorf("%sで待ち受けできません", cfg.HTTPAddr)
@@ -51,6 +59,27 @@ func run(ctx context.Context, lookup func(string) (string, bool), stdout, stderr
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	logger.Info("server started", "addr", ln.Addr().String(), "env", cfg.Environment)
 	return serveUntilCanceled(ctx, server, ln, shutdownTimeout)
+}
+
+// newAuthService は認証の実依存を組み立てる。
+// 存在しない利用者のログインでも同じ照合処理を行うための固定ハッシュは、起動時に1度だけ作る。
+func newAuthService(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) (*auth.Service, error) {
+	passwords := auth.BcryptPasswords{}
+	dummy, err := auth.NewDummyHash(passwords)
+	if err != nil {
+		return nil, err
+	}
+	repo := store.NewAuth(pool)
+	return &auth.Service{
+		Users:      repo,
+		Sessions:   repo,
+		Passwords:  passwords,
+		Tokens:     auth.RandomTokenGenerator{},
+		Clock:      auth.SystemClock{},
+		SessionTTL: cfg.SessionTTL,
+		DummyHash:  dummy,
+		Logger:     logger,
+	}, nil
 }
 
 // serveUntilCanceled は ctx がキャンセルされるまで配信し、timeout以内に正常終了させる。
