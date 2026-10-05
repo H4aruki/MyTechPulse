@@ -1,19 +1,48 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
+import { ApiError } from '@/api/client'
 import { signup } from '@/api/endpoints'
-import { ApiStatus } from '@/api/types'
 import { AppLayout } from '@/components/AppLayout'
 import { TAG_CATEGORIES } from '@/constants/tags'
-import { tokenStorage } from '@/lib/auth'
+import { authQueryKey } from '@/lib/auth'
+
+// サーバー側の入力規則（利用者名は前後の空白を除いて1〜50文字、パスワードはUTF-8で1〜72バイト、
+// タグは1〜128件で各1〜50文字）と同じ範囲を画面でも先に確認する。
+const USERNAME_MAX_LENGTH = 50
+const PASSWORD_MAX_BYTES = 72
+const TAGS_MAX_COUNT = 128
+const TAG_MAX_LENGTH = 50
 
 const accountSchema = z.object({
-  newusername: z.string().min(1, 'ユーザー名を入力してください'),
-  newpassword: z.string().min(1, 'パスワードを入力してください'),
+  username: z
+    .string()
+    .refine((value) => value.trim().length >= 1, 'ユーザー名を入力してください')
+    .refine(
+      (value) => Array.from(value.trim()).length <= USERNAME_MAX_LENGTH,
+      `ユーザー名は${USERNAME_MAX_LENGTH}文字以内で入力してください`,
+    ),
+  password: z
+    .string()
+    .min(1, 'パスワードを入力してください')
+    .refine(
+      (value) => new TextEncoder().encode(value).length <= PASSWORD_MAX_BYTES,
+      `パスワードは${PASSWORD_MAX_BYTES}バイト以内で入力してください`,
+    ),
 })
+
+function validateTags(tags: string[]): string | null {
+  if (tags.length < 1) return 'タグを1つ以上選択してください。'
+  if (tags.length > TAGS_MAX_COUNT) return `タグは${TAGS_MAX_COUNT}件までです。`
+  const invalid = tags.some((tag) => {
+    const length = Array.from(tag.trim()).length
+    return length < 1 || length > TAG_MAX_LENGTH
+  })
+  return invalid ? `タグは1〜${TAG_MAX_LENGTH}文字で指定してください。` : null
+}
 
 type AccountFormValues = z.infer<typeof accountSchema>
 
@@ -23,6 +52,7 @@ type AccountFormValues = z.infer<typeof accountSchema>
  */
 export function SignupPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [step, setStep] = useState<1 | 2>(1)
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
   const [formError, setFormError] = useState('')
@@ -36,21 +66,23 @@ export function SignupPage() {
 
   const mutation = useMutation({
     mutationFn: signup,
+    // 登録は繰り返し送ると二重登録の疑いが出るため、失敗しても自動で再送しない
+    retry: false,
     onSuccess: (data) => {
-      if (data.status === ApiStatus.SUCCESS && data.access_token) {
-        tokenStorage.set(data.access_token)
-        navigate('/articles', { replace: true })
-        return
-      }
-      if (data.status === ApiStatus.FAILURE) {
-        setFormError('このユーザー名は既に使用されています。別のユーザー名でお試しください。')
-      } else {
-        setFormError('登録中にエラーが発生しました。しばらくしてから再度お試しください。')
-      }
-      setStep(1)
+      queryClient.setQueryData(authQueryKey, data.user)
+      navigate('/articles', { replace: true })
     },
     onError: (error: Error) => {
-      setFormError(error.message)
+      const status = error instanceof ApiError ? error.problem.status : undefined
+      if (status === 409) {
+        setFormError('このユーザー名は既に使用されています。別のユーザー名でお試しください。')
+      } else if (status === 422) {
+        setFormError(
+          '入力内容に誤りがあります。ユーザー名・パスワード・タグを確認して、もう一度お試しください。',
+        )
+      } else {
+        setFormError(error.message)
+      }
       setStep(1)
     },
   })
@@ -81,12 +113,15 @@ export function SignupPage() {
   }
 
   const handleRegister = () => {
-    const { newusername, newpassword } = getValues()
-    mutation.mutate({
-      newusername,
-      newpassword,
-      favoritetags: [...selectedTags],
-    })
+    const tags = [...selectedTags]
+    const tagError = validateTags(tags)
+    if (tagError) {
+      setFormError(tagError)
+      return
+    }
+    setFormError('')
+    const { username, password } = getValues()
+    mutation.mutate({ username: username.trim(), password, favorite_tags: tags })
   }
 
   return (
@@ -101,34 +136,34 @@ export function SignupPage() {
               className="mx-auto max-w-md space-y-5 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
             >
               <div>
-                <label htmlFor="newusername" className="mb-1.5 block text-sm font-bold text-ink">
+                <label htmlFor="username" className="mb-1.5 block text-sm font-bold text-ink">
                   ユーザー名
                 </label>
                 <input
-                  id="newusername"
+                  id="username"
                   type="text"
                   autoComplete="username"
-                  {...register('newusername')}
+                  {...register('username')}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
                 />
-                {errors.newusername && (
-                  <p className="mt-1 text-sm text-red-600">{errors.newusername.message}</p>
+                {errors.username && (
+                  <p className="mt-1 text-sm text-red-600">{errors.username.message}</p>
                 )}
               </div>
 
               <div>
-                <label htmlFor="newpassword" className="mb-1.5 block text-sm font-bold text-ink">
+                <label htmlFor="password" className="mb-1.5 block text-sm font-bold text-ink">
                   パスワード
                 </label>
                 <input
-                  id="newpassword"
+                  id="password"
                   type="password"
                   autoComplete="new-password"
-                  {...register('newpassword')}
+                  {...register('password')}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
                 />
-                {errors.newpassword && (
-                  <p className="mt-1 text-sm text-red-600">{errors.newpassword.message}</p>
+                {errors.password && (
+                  <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
                 )}
               </div>
 
