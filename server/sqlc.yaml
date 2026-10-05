@@ -1,7 +1,9 @@
 version: "2"
 sql:
   - engine: postgresql
-    schema: db/migrations
+    schema:
+      - db/sqlc/legacy_schema.sql # 既存3表(00001はDO文のためsqlcが読めない)
+      - db/migrations
     queries: db/queries
     gen:
       go:
