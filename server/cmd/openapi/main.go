@@ -13,6 +13,7 @@ import (
 	"github.com/H4aruki/MyTechPulse/server/internal/app"
 	"github.com/H4aruki/MyTechPulse/server/internal/auth"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/config"
+	"github.com/H4aruki/MyTechPulse/server/internal/recommendation"
 )
 
 type noopChecker struct{}
@@ -29,9 +30,10 @@ func main() {
 func run(path string) error {
 	// 仕様の生成だけなので、認証Serviceの依存は空でよい(経路は呼ばれない)。
 	_, spec := app.New(config.Config{Environment: "local", SwaggerEnabled: true, CookieName: "mtp_session"}, app.Dependencies{
-		Logger: slog.New(slog.NewJSONHandler(io.Discard, nil)),
-		Ready:  noopChecker{},
-		Auth:   &auth.Service{},
+		Logger:         slog.New(slog.NewJSONHandler(io.Discard, nil)),
+		Ready:          noopChecker{},
+		Auth:           &auth.Service{},
+		Recommendation: &recommendation.Service{},
 	})
 	data, err := json.MarshalIndent(spec, "", "  ")
 	if err != nil {

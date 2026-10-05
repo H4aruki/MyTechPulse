@@ -20,9 +20,12 @@ type Querier interface {
 	FindSessionUser(ctx context.Context, arg FindSessionUserParams) (FindSessionUserRow, error)
 	FindTagByNormalizedName(ctx context.Context, dollar_1 string) (Tag, error)
 	FindUserByUsername(ctx context.Context, userName string) (User, error)
+	ListRecommendations(ctx context.Context, userID int32) ([]ListRecommendationsRow, error)
 	// 表記違い(大文字小文字・前後空白)のタグをGo書き込み同士で重複作成しないよう、
 	// 正規化したタグ名ごとにトランザクション内の排他ロックを取ってから再検索する。
 	LockNormalizedTag(ctx context.Context, dollar_1 string) error
+	LockUserForRecommendation(ctx context.Context, userID int32) (int32, error)
+	UpsertRecommendation(ctx context.Context, arg UpsertRecommendationParams) error
 }
 
 var _ Querier = (*Queries)(nil)

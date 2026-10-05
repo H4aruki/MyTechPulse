@@ -22,6 +22,10 @@ import (
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/config"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/logging"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/postgres"
+	"github.com/H4aruki/MyTechPulse/server/internal/provider"
+	"github.com/H4aruki/MyTechPulse/server/internal/provider/qiita"
+	"github.com/H4aruki/MyTechPulse/server/internal/provider/zenn"
+	"github.com/H4aruki/MyTechPulse/server/internal/recommendation"
 	"github.com/H4aruki/MyTechPulse/server/internal/store"
 )
 
@@ -51,7 +55,13 @@ func run(ctx context.Context, lookup func(string) (string, bool), stdout, stderr
 	if err != nil {
 		return err
 	}
-	handler, _ := app.New(cfg, app.Dependencies{Logger: logger, Ready: pool, Auth: authService})
+	fetcher := provider.NewJSONFetcher(cfg.ProviderTimeout, cfg.ProviderMaxBytes)
+	recommendService := &recommendation.Service{
+		Interests:   store.NewInterest(pool),
+		Providers:   recommendation.ProviderSet{Qiita: qiita.New(fetcher, cfg.QiitaToken), Zenn: zenn.New(fetcher)},
+		FeedTimeout: cfg.FeedTimeout,
+	}
+	handler, _ := app.New(cfg, app.Dependencies{Logger: logger, Ready: pool, Auth: authService, Recommendation: recommendService})
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)
 	if err != nil {
 		return fmt.Errorf("%sで待ち受けできません", cfg.HTTPAddr)

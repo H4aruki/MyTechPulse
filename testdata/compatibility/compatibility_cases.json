@@ -17,5 +17,10 @@
   "click_tag_min_count": 1,
   "click_tag_max_count": 50,
   "tag_max_characters": 50,
-  "zenn_endpoint": "https://zenn.dev/api/articles"
+  "zenn_endpoint": "https://zenn.dev/api/articles",
+  "integer_rounding_cases": [
+    {"stored": 875, "python_decay": 699, "go_decay": 700},
+    {"stored": 1725, "python_decay": 1379, "go_decay": 1380},
+    {"stored": 10000, "python_decay": 8000, "go_decay": 8000}
+  ]
 }

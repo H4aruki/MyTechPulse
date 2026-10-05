@@ -14,6 +14,27 @@
         ],
         "type": "object"
       },
+      "ClickRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "tags": {
+            "description": "クリックした記事タグ。1〜50件、各1〜50文字",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "tags"
+        ],
+        "type": "object"
+      },
       "ErrorModel": {
         "additionalProperties": false,
         "properties": {
@@ -70,6 +91,94 @@
           "title",
           "status",
           "code"
+        ],
+        "type": "object"
+      },
+      "FeedArticle": {
+        "additionalProperties": false,
+        "properties": {
+          "likes": {
+            "description": "いいね数",
+            "format": "int64",
+            "type": "integer"
+          },
+          "published_at": {
+            "description": "公開日時",
+            "format": "date-time",
+            "type": "string"
+          },
+          "source": {
+            "description": "記事提供元",
+            "enum": [
+              "Qiita",
+              "Zenn"
+            ],
+            "type": "string"
+          },
+          "tags": {
+            "description": "記事タグ",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "title": {
+            "description": "記事タイトル",
+            "type": "string"
+          },
+          "url": {
+            "description": "記事URL",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "url",
+          "source",
+          "tags",
+          "likes",
+          "published_at"
+        ],
+        "type": "object"
+      },
+      "FeedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "qiita_articles": {
+            "items": {
+              "$ref": "#/components/schemas/FeedArticle"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "zenn_articles": {
+            "items": {
+              "$ref": "#/components/schemas/FeedArticle"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "qiita_articles",
+          "zenn_articles",
+          "warnings"
         ],
         "type": "object"
       },
@@ -226,6 +335,30 @@
           "id",
           "username",
           "role"
+        ],
+        "type": "object"
+      },
+      "Warning": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "安定した失敗コード",
+            "examples": [
+              "provider_unavailable"
+            ],
+            "type": "string"
+          },
+          "provider": {
+            "description": "記事提供元",
+            "examples": [
+              "qiita"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "code"
         ],
         "type": "object"
       }
@@ -461,6 +594,121 @@
         "summary": "会員登録",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/api/v1/feed": {
+      "get": {
+        "operationId": "recommendation-feed",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "推薦記事を取得",
+        "tags": [
+          "recommendation"
+        ]
+      }
+    },
+    "/api/v1/feedback/article-clicks": {
+      "post": {
+        "operationId": "recommendation-clicks",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClickRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "記事クリックを記録",
+        "tags": [
+          "recommendation"
         ]
       }
     },
