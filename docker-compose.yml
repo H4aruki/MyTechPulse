@@ -67,6 +67,20 @@ services:
       db:
         condition: service_healthy
 
+  # ---- Go版のDBマイグレーション（切り替えの当日に1回だけ実行。常駐しない）----
+  # 実行: docker compose --profile go-migrate run --rm migrate-go
+  # api-go と同じ箱（GO_API_IMAGE）の /migrate を使う。追加するだけの変更で、既存の3表には触れない
+  migrate-go:
+    profiles: ["go-migrate"]
+    image: ${GO_API_IMAGE:-mytechpulse-api-go:local}
+    entrypoint: ["/migrate"]
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/mytechpulse
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   # ---- HTTPS終端（本番のみ）。ローカル開発では起動しない ----
   # 起動: docker compose --profile prod up -d
   caddy:
