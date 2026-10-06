@@ -258,6 +258,11 @@ case_full_flow_with_encrypted_dump() {
   grep -qE '^rehearsal: stop-equivalent [0-9]+s \(limit 1800s\), rollback [0-9]+s, total [0-9]+s$' "$FX_TMP/out" ||
     fail "所要時間の行が無い"
   [ "$(tail -1 "$FX_TMP/out")" = 'rehearsal: ok' ] || fail "最後の行が rehearsal: ok でない"
+  # 復元先のDB名は、後のブラウザ確認で使うため最後に表示する。実際に使った名前と同じであること
+  local shown_db
+  shown_db="$(grep -Eo '^rehearsal: database mtp_rehearsal_[0-9]{14}_[0-9a-f]{6}$' "$FX_TMP/out" | sed 's/rehearsal: database //')"
+  [ -n "$shown_db" ] || fail "復元先のDB名が表示されていない"
+  expect_calls_has "db=${shown_db}\] "
 
   expect_order 'up -d --wait db' 'pg_restore --list' 'pg_restore -U' \
     'snapshot script=.* out=before ' 'run --rm migrate' 'snapshot script=.* out=after ' \

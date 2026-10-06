@@ -22,7 +22,7 @@
 #   → 合成writeの差分確認 → 合成データの後始末と再比較 → 旧release（Python版API）へ戻す模擬 → Go版へ再切替
 # 「停止相当」は、移行前snapshotからsmokeの終わりまで。30分（1800秒）を超えたら失敗にする。
 #
-# 公開する出力は、工程名・秒数・成功/失敗だけ。dumpの中身・利用者名・password・snapshot・
+# 公開する出力は、工程名・秒数・成功/失敗と、最後に表示する復元先のDB名（合成の名前）だけ。dumpの中身・利用者名・password・snapshot・
 # nonceは出さない。工程の下で動くdockerやpg_restoreの出力は捨てる。
 # 終了時はcontainerを止めるだけで（down -v はしない）、入力dump・復元したDB・volumeは残す。
 # 消すのは、この実行で作った一時directory（復号したdump・snapshot・nonce）だけ。
@@ -332,7 +332,7 @@ step_switch_back() {
   wait_http https://localhost:18443/health/ready -k --resolve localhost:18443:127.0.0.1
 }
 
-# 利用者名と復元先DB名は、この実行だけの合成の名前
+# 利用者名と復元先DB名は、この実行だけの合成の名前。DB名は後のブラウザ確認で使うため、最後に表示する
 state_set smoke_user "rehearsal-smoke-$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 state_set db_name "mtp_rehearsal_$(date -u +%Y%m%d%H%M%S)_$(head -c 3 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 
@@ -373,4 +373,5 @@ if [ "$window_seconds" -gt "$window_limit_seconds" ]; then
   echo "rehearsal: failed (停止相当の工程が30分を超えた)" >&2
   exit 1
 fi
+printf 'rehearsal: database %s\n' "$(state_get db_name)"
 printf 'rehearsal: ok\n'
