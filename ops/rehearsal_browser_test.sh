@@ -48,6 +48,10 @@ printf 'docker [env=%s swagger=%s site=%s origin=%s db=%s image=%s] %s\n' "${MTP
   "${MTP_REHEARSAL_DB_NAME:-}" "${MTP_REHEARSAL_IMAGE:-}" "$*" >>"$FAKE_CALLS"
 case "$*" in
   *pg_database*) [ "${FAKE_NO_DB:-}" = 1 ] || echo 1 ;;
+  *'-U postgres -d postgres'*)
+    # passwordの設定はパイプで渡される。入力を読み、値は記録せず、設定したことだけ記録する
+    grep -q 'ALTER ROLE postgres PASSWORD' && echo role-password-set >>"$FAKE_CALLS"
+    ;;
 esac
 exit 0
 FAKE
@@ -100,6 +104,7 @@ case_up_test_mode() {
   [ -n "$db_line" ] && [ -n "$serve_line" ] && [ "$db_line" -lt "$serve_line" ] || fail "起動の順序が違う"
   # 本番と同じホスト名で、隔離Caddy（18443）へ届くこと
   expect_has 'curl .*--resolve api.mytechpulse.net:18443:127.0.0.1 https://api.mytechpulse.net:18443/health/ready'
+  expect_has 'role-password-set'
   expect_lacks ' down( |$)'
 }
 
