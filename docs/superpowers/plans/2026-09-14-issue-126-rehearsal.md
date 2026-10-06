@@ -15,7 +15,11 @@
 - 本番サーバー・本番DBへ接続しない
 - rehearsalは既存Compose project、DB volume、portと別名を使う
 - 本番由来dumpをrepositoryへ追加せず、内容・利用者名・password hashをログへ出さない
-- 入力dumpと既存backupを削除・上書きしない
+- scriptは入力dumpと既存backupを削除・上書きしない。暗号化copyとrehearsal用DB volumeの最終削除はscriptへ入れず、下記の承認後に人間が行う
+- 本番由来backupは、オーナーのPC内の隔離環境だけで扱う。`gpg` のパスワード方式で暗号化したfile（`.gpg`）として保存し、保存先はrepository・自動同期folder（OneDrive・iCloud等）・Obsidian Vaultの外にする。外部の保存先へは出さない（2026-10-06 オーナー決定）
+- 暗号化パスワードはパスワード管理ツールで保管し、repository・chat・Issue・log・引数・環境変数へ書かない。入力は `gpg` のプロンプトで人間が行う
+- 復元のために復号した平文fileは0700の一時directoryだけに置き、復元の直後に同じscriptが必ず削除する（失敗時もtrapで削除）
+- 暗号化copyとrehearsal用DB volume `mytechpulse_rehearsal_db` は、#127の安定確認が終わってIssueをcloseするまで保持する。切り戻しで再度必要になるため。削除は、対象・役割・理由・影響を示してオーナーの承認を得てから人間が行う
 - migration後の件数、FK、unique、sequenceに加え、既存user/tag/recommendのキーと値をmigration前と比較する
 - #125の1つのmanifest SHA256・workflow run ID/attemptを入力し、指定された3成果物を使う。APIだけの差替えとsource/frontend再buildは禁止
 - 合格条件は停止相当工程30分以内、主要flow全成功、rollback全成功、重大なdata差分0
@@ -161,7 +165,7 @@ git commit -m "test(migration): Go APIの移行smokeを追加" -m "Refs #126"
 
 - [ ] **Step 1: 前提・失敗停止testを書く**
 
-dump不存在、checksum不一致、manifest SHA256/run不一致、3成果物の欠損/hash不一致、APIだけの差替えは起動前に失敗。restore/migrate/smoke/comparisonのどれかが失敗したら後続切り替えをせず非0。previous release recordに対応する旧API・frontend・opsの組合せへ戻し、healthとブラウザflowを確認したときだけrollback passとする。
+dump不存在、checksum不一致、manifest SHA256/run不一致、3成果物の欠損/hash不一致、APIだけの差替えは起動前に失敗。本番由来のdumpは暗号化file（`.gpg`）だけを受け付け、平文dumpは合成dumpのときだけ許可する。復号に失敗したら後続へ進まず非0とし、成功・失敗どちらの場合も復号した一時fileが残らないことを検査する。restore/migrate/smoke/comparisonのどれかが失敗したら後続切り替えをせず非0。previous release recordに対応する旧API・frontend・opsの組合せへ戻し、healthとブラウザflowを確認したときだけrollback passとする。
 
 - [ ] **Step 2: 工程を実装する**
 
@@ -169,7 +173,7 @@ dump不存在、checksum不一致、manifest SHA256/run不一致、3成果物の
 
 - [ ] **Step 3: 終了処理を安全にする**
 
-自動終了はcontainer stopだけを行い、input dumpとnamed volumeは保持する。実行時に作った一時Cookie/snapshot fileだけをtrapで削除する。volumeを削除する `down -v` はscriptへ入れない。
+自動終了はcontainer stopだけを行い、input dumpとnamed volumeは保持する。実行時に作った一時Cookie/snapshot file、および暗号化dumpを復号した一時fileだけをtrapで削除する。volumeを削除する `down -v` はscriptへ入れない。暗号化dumpとrehearsal用volumeの削除は、Task 5 Step 6の承認後に人間が行う。
 
 - [ ] **Step 4: 合成dumpで全工程を実行する**
 
@@ -195,11 +199,11 @@ git commit -m "feat(migration): 移行リハーサルを自動化" -m "Refs #126
 
 - [ ] **Step 1: 機密data利用の承認を得る**
 
-使用場所、閲覧者、暗号化・保管、ログに内容を出さないこと、既存backupを削除しないことを示し、オーナー承認後に人間が最新本番backupを隔離環境へ配置する。Codexは本番へ接続しない。
+使用場所（オーナーのPC内の隔離環境だけ）、閲覧者、暗号化・保管、ログに内容を出さないこと、既存backupを削除しないことを示し、オーナー承認後に人間が最新本番backupを隔離環境へ配置する。配置前に、`gpg` のパスワード方式で暗号化し、repository・自動同期folder・Obsidian Vaultの外へ置くことを確認する。パスワードの保管場所もここで確認する。Codexは本番へ接続しない。
 
 - [ ] **Step 2: runbookを完成させる**
 
-manifest SHA256、commit SHA、release元workflow run URL/ID/attempt、rehearsal workflow run URL/ID、API完全digest、frontend/ops artifact名とSHA256、dump checksum、開始/終了時刻、件数/constraint/sequenceの検査可否、data digest一致可否と不一致table数、合成write期待差分/cleanup結果、承認範囲、smoke、ブラウザ操作、API p95、rollback所要時間、判定者を記録する。nonce、data digest自体、raw data、secretをIssueへ記録しない。#127が入力する合格証跡はmanifest SHA256、release元run ID/attempt、rehearsal run URL/IDを一組として示す。
+manifest SHA256、commit SHA、release元workflow run URL/ID/attempt、rehearsal workflow run URL/ID、API完全digest、frontend/ops artifact名とSHA256、dump checksum、開始/終了時刻、件数/constraint/sequenceの検査可否、data digest一致可否と不一致table数、合成write期待差分/cleanup結果、承認範囲、smoke、ブラウザ操作、API p95、rollback所要時間、判定者を記録する。暗号化済みdumpを使ったこと、復号した一時fileが残っていないことも記録する。nonce、data digest自体、raw data、secret、暗号化パスワードをIssueへ記録しない。#127が入力する合格証跡はmanifest SHA256、release元run ID/attempt、rehearsal run URL/IDを一組として示す。
 
 - [ ] **Step 3: 人間が本番相当リハーサルを実行する**
 
@@ -217,3 +221,14 @@ git commit -m "docs(migration): Go移行リハーサル手順を記録" -m "Refs
 ```
 
 PRタイトルは `test(migration): Go移行と切り戻しを本番相当でリハーサルする`。合格証跡へのIssue linkと `Closes #126` を付け、人間がレビュー・マージする。
+
+- [ ] **Step 6: 暗号化dumpとrehearsal用volumeを片付ける（#127の安定確認後）**
+
+#126は合格しても、この片付けは #127のcloseまで行わない。切り戻しで同じbackupが再び必要になるためである。#127をcloseした後、次を示してオーナーの承認を得てから人間が実施する。
+
+| 対象 | 役割 | 影響 |
+| --- | --- | --- |
+| 暗号化dump（`.gpg`） | リハーサル用の本番相当data | 削除後は再リハーサルに新しいbackupが必要。サーバー上の `backups/` は消さない |
+| `mytechpulse_rehearsal_db` volume | 復元済みの検証DB（平文） | 削除後は検証DBを復元し直す必要がある。本番のvolumeとは別名で、本番へ影響しない |
+
+削除後に、PC内へ本番由来のdataが残っていないこと（暗号化dump、検証DB volume、復号用の一時directory）を確認し、結果だけをIssueへ記録する。
