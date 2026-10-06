@@ -116,10 +116,16 @@ setup_fakes() {
 args="$*"
 printf 'docker [image=%s legacy=%s db=%s] %s\n' "${MTP_REHEARSAL_IMAGE:-}" "${MTP_REHEARSAL_LEGACY_IMAGE:-}" \
   "${MTP_REHEARSAL_DB_NAME:-}" "$args" >>"$FAKE_CALLS"
-# 標準入力を読むのは、dumpをファイルから流し込む呼び出しだけ（他は入力が閉じていないため読まない）
+# 標準入力を読むのは、dumpの流し込みと、passwordの設定（パイプで渡される）だけ。他は入力が閉じていないため読まない
 case "$args" in
   *'pg_restore -U'*)
     echo "restore-stdin=$(head -c 24)" >>"$FAKE_CALLS"
+    ;;
+  *'-U postgres -d postgres'*)
+    case "$args" in
+      *' -c '*) ;;
+      *) grep -q "ALTER ROLE postgres PASSWORD" && echo "role-password-set" >>"$FAKE_CALLS" ;;
+    esac
     ;;
 esac
 if [ -n "${FAKE_FAIL:-}" ] && [[ "$args" == *"$FAKE_FAIL"* ]]; then
@@ -264,7 +270,7 @@ case_full_flow_with_encrypted_dump() {
   [ -n "$shown_db" ] || fail "復元先のDB名が表示されていない"
   expect_calls_has "db=${shown_db}\] "
 
-  expect_order 'up -d --wait db' 'pg_restore --list' 'pg_restore -U' \
+  expect_order 'up -d --wait db' 'role-password-set' 'pg_restore --list' 'pg_restore -U' \
     'snapshot script=.* out=before ' 'run --rm migrate' 'snapshot script=.* out=after ' \
     'compare script=.* before.json after.json  status=0' 'up -d --wait api caddy' 'smoke script' \
     'snapshot script=.* out=after-write ' 'compare script=.* before.json after-write.json  status=1' \

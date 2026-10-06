@@ -230,6 +230,11 @@ step_decrypt() {
 step_db_start() {
   load_environment
   quiet dc up -d --wait db
+  # volumeは最初に作ったときのpasswordを覚えている。今回の使い捨てpasswordへ設定し直す
+  # （migrationとAPIはTCPでこのpasswordを使う）。値は標準入力で渡し、引数には載せない
+  printf "ALTER ROLE postgres PASSWORD '%s';
+" "$db_password" |
+    quiet dc exec -T db psql -X -q -v ON_ERROR_STOP=1 -U postgres -d postgres
 }
 
 step_backup_verify() {

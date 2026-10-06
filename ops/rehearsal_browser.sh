@@ -8,7 +8,7 @@
 #   入力（環境変数）
 #     MTP_REHEARSAL_RELEASE_DIR  rehearsal.sh が使った検証済みのrelease directory（release.env と frontend-site がある所）
 #     MTP_REHEARSAL_DB_NAME      rehearsal.sh が最後に表示した復元先のDB名
-#     MTP_REHEARSAL_DB_PASSWORD  rehearsal.sh と同じ隔離DB用のpassword
+#     MTP_REHEARSAL_DB_PASSWORD  隔離DB用のpassword。rehearsal.sh と同じでなくてもよい（起動時にこの値へ設定し直す）
 #   up test        : APP_ENV=test。Swagger UI（/docs）が表示される
 #   up production  : APP_ENV=production。Swagger UIは404になる。Cookieは本番と同じ __Host- 付きのSecure
 #   stop           : containerを止めるだけ。DB・volumeは残す
@@ -98,6 +98,10 @@ fail() {
 }
 
 dc up -d --wait db >/dev/null 2>&1 || fail "db"
+# volumeは最初に作ったときのpasswordを覚えている。今回指定したpasswordへ設定し直す（値は標準入力で渡す）
+printf "ALTER ROLE postgres PASSWORD '%s';
+" "$db_password" |
+  dc exec -T db psql -X -q -v ON_ERROR_STOP=1 -U postgres -d postgres >/dev/null 2>&1 || fail "db"
 exists="$(dc exec -T db psql -X -q -At -U postgres -d postgres \
   -c "SELECT 1 FROM pg_database WHERE datname = '$db_name'" 2>/dev/null)" || fail "db"
 [ "$exists" = "1" ] || fail "指定したDBが無い"

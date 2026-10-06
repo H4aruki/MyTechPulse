@@ -158,7 +158,7 @@ bash ops/rehearsal.sh /c/work/mtp-rehearsal/archives
 ```bash
 export MTP_REHEARSAL_RELEASE_DIR=/c/work/mtp-rehearsal/releases/<SHA>-<RUN_ID>-<ATTEMPT>
 export MTP_REHEARSAL_DB_NAME=<§3 の最後に出た DB名>
-# MTP_REHEARSAL_DB_PASSWORD は §3 と同じシェルならそのまま使えます
+# MTP_REHEARSAL_DB_PASSWORD は §3 と同じ値でなくても構いません（起動時に設定し直します）。未設定なら新しく作ってください
 bash ops/rehearsal_browser.sh up production
 ```
 
