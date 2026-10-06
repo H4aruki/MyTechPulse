@@ -59,6 +59,8 @@ services:
       QIITA_ACCESS_TOKEN: ${QIITA_ACCESS_TOKEN:-}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+    # サーバー再起動後に自動で復帰させる（Python版の api と同じ）。止めたときは止まったままになる
+    restart: unless-stopped
     ports:
       - "127.0.0.1:8001:8001"
     depends_on:
@@ -83,7 +85,10 @@ services:
       # HTTP/3。UDPを開けないと対応ブラウザで無駄な待ちが入ることがある
       - "443:443/udp"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 向け先の設定は MTP_CADDYFILE（このfileから見た相対path）で選ぶ。既定は Python版向けの Caddyfile。
+      # Go版への切り替えでは ops/caddy/Caddyfile.maintenance や ops/caddy/Caddyfile.go を指定する（#127）。
+      # 先頭に ./ を付けるのは、./ や / が無いと、composeがfileでなく名前付きvolumeと解釈するため
+      - ./${MTP_CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
       # 取得済み証明書の保存先。消すと再取得になりレート制限に近づくので消さない
       - caddy_data:/data
       - caddy_config:/config
