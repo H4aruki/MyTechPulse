@@ -45,34 +45,33 @@ Go版へ切り替える前に、本番相当のデータを使って「移行」
 
 1. GitHub の Actions で `Release artifacts` を手動実行します（`main` を選びます）。またはコマンドで `gh workflow run release.yml --ref main`。
    - これで API の箱（Docker イメージ）が GHCR に送られます。外部への送信にあたるので、オーナーの了解を得てから実行します。
-2. 終わったら、GHCR のパッケージ `mytechpulse-api-go` の公開範囲が「非公開（private）」であることを確認します（GitHub のリポジトリの Packages 画面、または `gh api /user/packages/container/mytechpulse-api-go --jq .visibility`）。公開になっていたら、ここで止めてオーナーに知らせます。公開範囲の変更は Web 画面の操作です。
+2. GHCR のパッケージ `mytechpulse-api-go` は**公開**で運用します（2026-10-06 オーナー決定。初回の配布で公開として作られました）。公開なので、一度送った箱の中身は取り消せません。次の §2-2 の確認を、配布のたびに行います。取り出しにログインやトークンは要りません。
 3. 実行結果のページ（Summary）に出る次の値を控えます。Issue へは、値そのものでなく「照合できたか」だけを書きます。
    - 実行回の ID と attempt（番号）
    - コミットの SHA
    - Manifest SHA256
 
-### 2-2. 箱の中身を確認する（初回と、Dockerfile を変えたとき）
+### 2-2. 箱の中身を確認する（配布のたび）
 
-秘密の値が入っていないことを、送った箱そのものから確かめます。読み取り用トークンでの `docker login`（2-3）の後に行います。
+箱は公開のため、秘密の値が入っていないことを、送った箱そのものから確かめます。
 
 ```bash
+docker pull "ghcr.io/h4aruki/mytechpulse-api-go@sha256:<manifestのdigest>"
 docker create --name mtp-inspect "ghcr.io/h4aruki/mytechpulse-api-go@sha256:<manifestのdigest>"
 docker export mtp-inspect | tar -t | grep -v '/$'
 docker image inspect "ghcr.io/h4aruki/mytechpulse-api-go@sha256:<manifestのdigest>" --format '{{json .Config.Env}}'
 docker rm mtp-inspect
 ```
 
-期待する中身: ファイルは `api`・`migrate`・`etc/ssl/certs/ca-certificates.crt` と、Docker が付ける空の項目（`.dockerenv`、`etc/hosts` など）だけ。環境変数は `PATH` だけ。これ以外が出たら中止します。
+期待する中身: ファイルは `api`・`migrate`・`etc/ssl/certs/ca-certificates.crt` と、Docker が付ける空の項目（`.dockerenv`、`dev/console`、`etc/hostname`、`etc/hosts`、`etc/mtab`、`etc/resolv.conf`）だけ。環境変数は `PATH` だけ。これ以外が出たら中止して、オーナーに知らせます。公開済みの箱に秘密が入っていた場合は、パッケージのその版の削除と、秘密の無効化（作り直し）が必要です。
 
-### 2-3. GHCR から取り出せるようにする（人間）
+あわせて、ビルドの履歴に秘密らしき語が無いことも確かめます。
 
-箱は非公開のため、取り出しにログインが要ります。
+```bash
+docker history --no-trunc "ghcr.io/h4aruki/mytechpulse-api-go@sha256:<manifestのdigest>" --format '{{.CreatedBy}}' | grep -iE "token|secret|password|key" || echo なし
+```
 
-1. GitHub で、`read:packages` だけを許可した読み取り専用のトークンを発行します（オーナーの操作。新しい登録にあたります）。
-2. トークンはパスワード管理ツールに保管します。リポジトリ・チャット・Issue・ログへは書きません。
-3. Git Bash で `docker login ghcr.io -u <GitHubのユーザー名>` を実行し、パスワードの入力欄にトークンを貼ります。
-
-### 2-4. 配布物を手元へ取り出す
+### 2-3. 配布物を手元へ取り出す
 
 作業フォルダは、リポジトリ・自動同期フォルダ・Vault の外に作ります（例: `/c/work/mtp-rehearsal`）。パスは英数字と `.` `_` `/` `-` だけにします。
 
@@ -90,7 +89,7 @@ ls
 
 `frontend-<SHA>.tar.gz`、`ops-<SHA>.tar.gz`、`release-manifest.json` の3つが、このフォルダの直下にあることを確認します（サブフォルダに入っていたら、直下へ移します）。この3つは同じ実行回のものだけを使います。APIだけ別の版に替えたり、画面を作り直したりしません。
 
-### 2-5. 旧版（Python版）を用意する
+### 2-4. 旧版（Python版）を用意する
 
 切り戻しの模擬では、直前のリリース（いま本番で動いている Python 版 API）を同じ隔離環境で起動します。
 
@@ -113,7 +112,7 @@ ls
    }
    ```
 
-### 2-6. バックアップを置く（承認後・人間）
+### 2-5. バックアップを置く（承認後・人間）
 
 §1 の承認を得てから行います。Codex などの AI は本番へ接続しません。
 
