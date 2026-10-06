@@ -1,0 +1,17 @@
+# メンテナンス中の応答（#127）。書き込みを止めている間、APIの全ての窓口がこの応答になる。
+#
+# どの窓口へのアクセスにも、中身を返さず、503（一時的に使えない）と日本語の案内を返す。
+# APIの本体（Python版・Go版）へは繋がない。したがって、この設定の間は、本体が止まっていても
+# 起動していても、利用者の書き込みはデータベースへ届かない。
+# 証明書は caddy_data ボリュームに保存済みのものを引き続き使う。
+# ドメインは環境変数 API_DOMAIN で指定する。
+
+{$API_DOMAIN} {
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	# 利用者の画面や監視が「少し待てばよい」と判断できるように、再試行の目安を付ける（秒）
+	header Retry-After "1800"
+	header Cache-Control "no-store"
+	header Content-Type "application/json; charset=utf-8"
+
+	respond `{"code":"maintenance","message":"ただいまメンテナンス中です。しばらくしてからもう一度お試しください。"}` 503
+}
