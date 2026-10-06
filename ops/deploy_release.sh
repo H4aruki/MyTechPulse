@@ -38,30 +38,9 @@ releases_root="${MTP_RELEASES_ROOT:-}"
 
 # ---- 1. 直前のreleaseの記録 ----
 previous_record="${MTP_PREVIOUS_RELEASE_RECORD:-${releases_root}/current-release.json}"
-[ -f "$previous_record" ] && [ ! -L "$previous_record" ] ||
-  reject "直前のreleaseの記録がありません（current-release.json、または MTP_PREVIOUS_RELEASE_RECORD）"
-
-mapfile -t prev_lines < "$previous_record"
-prev_keys=(manifest_sha256 api_image frontend_deployment_id frontend_artifact_name frontend_sha256 ops_artifact_name ops_sha256 ops_release_dir)
-[ "${#prev_lines[@]}" -eq $((${#prev_keys[@]} + 2)) ] || reject "直前のreleaseの記録の形式が正しくありません（行数）"
-[ "${prev_lines[0]}" = "{" ] && [ "${prev_lines[$((${#prev_keys[@]} + 1))]}" = "}" ] ||
-  reject "直前のreleaseの記録の形式が正しくありません（括弧）"
-
-safe_value='[A-Za-z0-9._:/@+=-]+'
-previous_ops_dir=""
-for index in "${!prev_keys[@]}"; do
-  key="${prev_keys[$index]}"
-  line="${prev_lines[$((index + 1))]}"
-  separator=","
-  [ "$index" -eq $((${#prev_keys[@]} - 1)) ] && separator=""
-  [[ "$line" =~ ^\ \ \"${key}\":\ \"(${safe_value})\"${separator}$ ]] ||
-    reject "直前のreleaseの記録に ${key} が無い、または値が正しくありません"
-  if [ "$key" = "ops_release_dir" ]; then
-    previous_ops_dir="${BASH_REMATCH[1]}"
-  fi
-done
-[[ "$previous_ops_dir" == /* ]] && [ -d "$previous_ops_dir" ] ||
-  reject "直前のreleaseの運用一式（ops_release_dir）のdirectoryがありません"
+# shellcheck source=ops/lib/previous_release_record.sh
+source "$here/lib/previous_release_record.sh"
+parse_previous_release_record "$previous_record"
 
 # ---- 2. 検証と展開（検証入口は、このscriptと同じ場所にある承認済みのもの） ----
 verify_output="$(bash "$here/verify_release.sh" "$archive_dir")"

@@ -20,7 +20,7 @@ render() {
     env -u MTP_REHEARSAL_IMAGE -u MTP_REHEARSAL_DB_PASSWORD -u MTP_REHEARSAL_FRONTEND_DIR \
         "$@" \
         docker compose -p mytechpulse-rehearsal -f docker-compose.rehearsal.yml \
-        --profile migrate --profile serve config 2>&1
+        --profile migrate --profile serve --profile legacy config 2>&1
 }
 
 full_env=(MTP_REHEARSAL_IMAGE="$digest_image" MTP_REHEARSAL_DB_PASSWORD=synthetic-rehearsal-only
@@ -47,15 +47,15 @@ grep -q 'name: mytechpulse_rehearsal_db$' <<<"$rendered" || fail "DB用volume名
 ok 'project名とDB用volume名が隔離用'
 
 published="$(grep -E '^\s+published:' <<<"$rendered" | tr -d ' "' | sort | tr '\n' ' ')"
-[ "$published" = 'published:15432 published:18001 published:18443 ' ] \
+[ "$published" = 'published:15432 published:18000 published:18001 published:18443 ' ] \
     || fail "公開portが想定外: $published"
 if grep -Eq 'published: "?(8000|8001|5432|80|443)"?$' <<<"$rendered"; then
     fail "本番と同じhost portを公開している"
 fi
-ok '公開portは15432/18001/18443だけ'
+ok '公開portは15432/18000/18001/18443だけ'
 
 # 公開portはすべてloopbackだけに束縛する
-[ "$(grep -c 'host_ip: 127.0.0.1' <<<"$rendered")" -eq 3 ] || fail "loopback以外へ公開するportがある"
+[ "$(grep -c 'host_ip: 127.0.0.1' <<<"$rendered")" -eq 4 ] || fail "loopback以外へ公開するportがある"
 ok '公開portはすべて127.0.0.1に束縛'
 
 if grep -Eq '^\s+build:' <<<"$rendered"; then
