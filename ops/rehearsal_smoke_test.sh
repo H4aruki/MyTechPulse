@@ -59,10 +59,24 @@ case "$method $path" in
     "POST /api/v1/auth/signup")
         name="${body_in#*\"username\":\"}"; name="${name%%\"*}"
         printf '%s' "$name" >"$FAKE_DIR/username"
+        # 新しい登録は新しいセッション。以前のログアウトの影響を受けない
+        rm -f "$FAKE_DIR/revoked"
         mark='#HttpOnly_'
         [ -z "${FAKE_NO_HTTPONLY:-}" ] || mark=''
         printf '%s127.0.0.1\tFALSE\t/\tFALSE\t0\tmtp_session\tSYNTHETIC-SESSION-TOKEN\n' "$mark" >"$jar_save"
         respond 201 "{\"user\":{\"id\":1,\"username\":\"$name\",\"role\":\"member\"}}" ;;
+    "POST /api/v1/auth/login")
+        name="${body_in#*\"username\":\"}"; name="${name%%\"*}"
+        pass="${body_in#*\"password\":\"}"; pass="${pass%%\"*}"
+        # 既存の利用者として登録されている組み合わせだけ通す
+        if [ -n "${FAKE_LOGIN_FAIL:-}" ] || [ "$name:$pass" != "existing-user:Existing-Pass-1" ]; then
+            respond 401 '{"code":"unauthenticated"}'
+        else
+            printf '%s' "$name" >"$FAKE_DIR/username"
+            printf '#HttpOnly_127.0.0.1	FALSE	/	FALSE	0	mtp_session	SYNTHETIC-SESSION-TOKEN
+' >"$jar_save"
+            respond 200 "{\"user\":{\"id\":9,\"username\":\"$name\",\"role\":\"member\"}}"
+        fi ;;
     "GET /api/v1/auth/me")
         if [ -z "$token_sent" ] || [ -f "$FAKE_DIR/revoked" ]; then
             respond 401 '{"code":"unauthenticated"}'
@@ -227,6 +241,45 @@ printf 'ok: 片方の提供元だけの部分成功は成功\n'
 # 7. CookieがHttpOnlyでなければ失敗
 run_smoke FAKE_NO_HTTPONLY=1
 expect_failure 'CookieがHttpOnlyでないと失敗する' 1 'signup: CookieがHttpOnlyでない'
+
+# 7b. 復元したDBにもともとある利用者でのログイン確認（指定したときだけ行う）
+EXISTING=(MTP_REHEARSAL_EXISTING_USERNAME=existing-user MTP_REHEARSAL_EXISTING_PASSWORD=Existing-Pass-1)
+run_smoke "${EXISTING[@]}"
+[ "$SMOKE_STATUS" -eq 0 ] || fail "既存利用者の確認つきの正常系が失敗した: $SMOKE_ERR"
+expected_calls="GET /health/live cookie=none
+GET /health/ready cookie=none
+POST /api/v1/auth/login cookie=none
+GET /api/v1/auth/me cookie=$TOKEN
+POST /api/v1/auth/logout cookie=$TOKEN
+POST /api/v1/auth/signup cookie=none
+GET /api/v1/auth/me cookie=$TOKEN
+GET /api/v1/feed cookie=$TOKEN
+POST /api/v1/feedback/article-clicks cookie=$TOKEN
+POST /api/v1/auth/logout cookie=$TOKEN
+GET /api/v1/auth/me cookie=$TOKEN"
+[ "$(cat "$work/fake/calls.log")" = "$expected_calls" ] || fail "既存利用者の確認の呼び出し順が違う: $(cat "$work/fake/calls.log")"
+grep -q '^smoke: login-existing ok (200)$' "$work/out" && grep -q '^smoke: me-existing ok (200)$' "$work/out"     && grep -q '^smoke: logout-existing ok (204)$' "$work/out" || fail "既存利用者の確認の出力が無い"
+for f in "$work/out" "$work/err" "$work/fake/args.log"; do
+    if grep -qF -- 'Existing-Pass-1' "$f" || grep -qF -- 'existing-user' "$f"; then
+        fail "既存利用者の値が $(basename "$f") に出ている"
+    fi
+done
+passed=$((passed + 1))
+printf 'ok: 既存利用者のログイン確認の順番・出力・秘密が出ないこと
+'
+
+run_smoke "${EXISTING[@]}" FAKE_LOGIN_FAIL=1
+expect_failure '既存利用者のログインが失敗すると止まる' 1 'login-existing: 状態番号 401'
+[ "$(tail -1 "$work/fake/calls.log" | cut -d' ' -f1-2)" = 'POST /api/v1/auth/login' ] || fail "ログイン失敗後も次の工程を呼んでいる"
+
+run_smoke MTP_REHEARSAL_EXISTING_USERNAME=existing-user MTP_REHEARSAL_EXISTING_PASSWORD=Wrong-Pass
+expect_failure '既存利用者のパスワードが違うと止まる' 1 'login-existing: 状態番号 401'
+
+run_smoke MTP_REHEARSAL_EXISTING_USERNAME=existing-user
+expect_failure '既存利用者の指定が片方だけだと設定エラー' 2 'E_CONFIG'
+[ ! -s "$work/fake/calls.log" ] || fail "設定エラーなのにAPIを呼んだ"
+run_smoke MTP_REHEARSAL_EXISTING_USERNAME='a"b' MTP_REHEARSAL_EXISTING_PASSWORD=x
+expect_failure '既存利用者の値に引用符があると設定エラー' 2 'E_CONFIG'
 
 # 8. 設定の不正は、APIを呼ぶ前に終了コード2で止まる
 run_smoke MTP_REHEARSAL_BASE_URL='ftp://x'

@@ -9,6 +9,10 @@
 #   MTP_REHEARSAL_INSECURE_TLS     1のとき証明書の検証を省く（隔離環境の内部CA用）。既定は検証する
 #   MTP_REHEARSAL_SMOKE_USERNAME   合成の利用者名。未指定なら rehearsal-smoke- で始まる名前を作る
 #   MTP_REHEARSAL_SMOKE_PASSWORD   合成のパスワード。未指定ならこの実行だけの乱数を作る
+#   MTP_REHEARSAL_EXISTING_USERNAME / MTP_REHEARSAL_EXISTING_PASSWORD
+#                                  任意。復元したDBにもともとある利用者でのログイン確認（旧版が作ったパスワードの形式を
+#                                  Go版が読めるかの確認）。2つ一緒に指定する。ログインして本人確認し、ログアウトするだけで、
+#                                  興味度などは変えない。ops/make_synthetic_dump.sh の合成dumpならこの値で通る
 # 出力は工程名と成否、HTTPの状態番号だけ。パスワード・Cookie・応答本文は出さない。
 # 合成の利用者はDBへ残る。後始末は #127 の承認済みcleanupが「rehearsal-smoke-」始まりの利用者を対象に行う。
 # 終了コード: 0=すべて成功、1=どれかの工程が失敗、2=設定が不正
@@ -46,6 +50,17 @@ for value in "$username" "$password"; do
     esac
 done
 
+existing_username="${MTP_REHEARSAL_EXISTING_USERNAME:-}"
+existing_password="${MTP_REHEARSAL_EXISTING_PASSWORD:-}"
+# 既存の利用者の確認は、利用者名とパスワードの両方があるときだけ行う
+if [ -n "$existing_username$existing_password" ]; then
+    for value in "$existing_username" "$existing_password"; do
+        case "$value" in
+            '' | *[\"\\]* | *[[:cntrl:]]*) fail 'E_CONFIG' 2 ;;
+        esac
+    done
+fi
+
 tmp_dir="$(mktemp -d)"
 chmod 700 -- "$tmp_dir"
 trap 'rm -rf -- "$tmp_dir"' EXIT
@@ -82,6 +97,16 @@ call() {
 # 1. 生存・準備完了
 call health-live GET /health/live 200 </dev/null
 call health-ready GET /health/ready 200 </dev/null
+
+# 1b. 復元したDBにもともとある利用者でログインできる（指定があるときだけ）
+if [ -n "$existing_username" ]; then
+    existing_jar="$tmp_dir/jar.existing"
+    printf '{"username":"%s","password":"%s"}' "$existing_username" "$existing_password"         | call login-existing POST /api/v1/auth/login 200 "$existing_jar" save
+    grep -q '^#HttpOnly_' "$existing_jar" || fail 'login-existing: CookieがHttpOnlyでない'
+    call me-existing GET /api/v1/auth/me 200 "$existing_jar" send </dev/null
+    grep -qF "\"username\":\"$existing_username\"" "$body" || fail 'me-existing: 利用者名が一致しない'
+    call logout-existing POST /api/v1/auth/logout 204 "$existing_jar" send </dev/null
+fi
 
 # 2. 登録（Cookieを受け取る）
 printf '{"username":"%s","password":"%s","favorite_tags":["go","react"]}' "$username" "$password" \
