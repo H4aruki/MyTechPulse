@@ -141,7 +141,7 @@ jobs:
       # 旧公開の凍結条件が外れていないかを確かめる（どちらもNode標準機能だけで動く）
       - name: 外部actionの固定と旧公開の凍結を確認
         run: |
-          node --test scripts/verify-actions-pinned.test.mjs scripts/verify-legacy-deploy-frozen.test.mjs scripts/coverage-report.test.mjs
+          node --test scripts/verify-actions-pinned.test.mjs scripts/verify-legacy-deploy-frozen.test.mjs scripts/coverage-report.test.mjs scripts/cutover-frontend.test.mjs
           node scripts/verify-actions-pinned.mjs
 
   go-check:

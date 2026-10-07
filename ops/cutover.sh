@@ -411,7 +411,8 @@ stage_rollback() {
   echo "cutover: rollback ok（データベースは巻き戻していません）"
   if [ "$PREV_FRONTEND_DEPLOYMENT_ID" = "see-cloudflare-pages-deployments" ]; then
     # cutover_prepare.sh が作る記録には、画面の公開の識別子が入らない（Cloudflare側で控えておく）
-    echo "cutover: 画面（Cloudflare Pages）を、Deploymentsで控えておいた、切り替え前の公開へ戻してください（画面を公開した後の場合）"
+    echo "cutover: 画面を公開した後の場合は、自分のPCで画面も戻してください: gh workflow run cutover-frontend.yml -f action=rollback"
+    echo "cutover: （うまくいかなければ、Cloudflare Pagesの管理画面のDeploymentsで、切り替え前の公開へ戻します）"
   else
     echo "cutover: 画面（Cloudflare Pages）を、直前の公開（ID: ${PREV_FRONTEND_DEPLOYMENT_ID}）へ戻してください"
   fi
