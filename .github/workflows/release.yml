@@ -92,7 +92,7 @@ jobs:
           tar -czf "$artifact_dir/$frontend_file" -C frontend/dist .
 
           mapfile -d '' tracked_ops_files < <(
-            git ls-files -z -- docker-compose.yml Caddyfile ops docker-compose.rehearsal.yml
+            git ls-files -z -- docker-compose.yml Caddyfile ops
           )
           [ "${#tracked_ops_files[@]}" -gt 0 ]
           tar -czf "$artifact_dir/$ops_file" -- "${tracked_ops_files[@]}"
