@@ -568,6 +568,15 @@ case_rollback_after_maintenance() {
   [ ! -e "$RELEASE/cutover-state/done.maintenance-on" ] || fail "切り戻し後も完了の記録が残っている"
 }
 
+case_rollback_message_without_recorded_frontend_id() {
+  # cutover_prepare.sh が作る記録は、画面の公開の識別子を持たない。その場合は、定型の値を表示せず、手順を案内する
+  sed -i 's/"deploy-0001"/"see-cloudflare-pages-deployments"/' "$RELEASE/previous-release.json"
+  advance_to maintenance-on
+  expect 0 rollback
+  out_has 'Deploymentsで控えておいた' || fail "識別子が無いときの案内が無い"
+  ! out_has 'see-cloudflare-pages-deployments' || fail "定型の値をそのまま表示している"
+}
+
 case_rollback_after_switch() {
   advance_to smoke
   expect 0 rollback
@@ -608,6 +617,152 @@ case_status_shows_state_without_changing() {
   advance_to maintenance-on
   expect 0 status
   grep -q 'caddy=maintenance' "$TMP/out" || fail "メンテナンスが表示されていない"
+}
+
+# ---- まとめて実行する（part1・part2） ----
+
+expect_rolled_back() {
+  [ "$(caddy_now)" = python ] || fail "Python版へ戻っていない"
+  grep -qw api "$FAKE_STATE/services" || fail "Python版APIが動いていない"
+  ! grep -qw api-go "$FAKE_STATE/services" || fail "Go版が止まっていない"
+  ls -d "$RELEASE"/cutover-state.rolledback-* >/dev/null 2>&1 || fail "状態が残っていない"
+}
+
+case_part1_runs_all_stages_in_order() {
+  expect 0 part1
+  expect_order 'image inspect' 'caddyfile=ops/caddy/Caddyfile.maintenance .* up -d --no-deps caddy' ' stop api'     'legacy-backup' 'snapshot out=before' 'run --rm migrate-go' 'snapshot out=after ' 'compare before.json after.json'     'up -d --no-deps api-go'
+  expect_lacks 'caddyfile=ops/caddy/Caddyfile.go'
+  [ "$(caddy_now)" = maintenance ] || fail "part1の後は、まだメンテナンスのまま"
+  [ -e "$RELEASE/cutover-state/done.go-start" ] || fail "go-startが完了していない"
+  out_has 'part2' || fail "次の手順（part2）の案内が無い"
+  # tmuxの外で実行したときは、注意が出る
+  out_has 'tmux' || fail "tmuxの注意が出ていない"
+}
+
+part1_failure_rolls_back() {
+  # part1_failure_rolls_back 失敗した段階
+  expect 1 part1
+  out_has "$1 が失敗したため、自動で切り戻します" || fail "自動の切り戻しの表示が無い（$1）"
+  expect_rolled_back
+}
+
+case_part1_rolls_back_when_maintenance_fails() { FAKE_CADDY_STUCK=1 part1_failure_rolls_back maintenance-on; }
+case_part1_rolls_back_when_backup_fails() { FAKE_BACKUP_FAIL=1 part1_failure_rolls_back backup; }
+case_part1_rolls_back_when_snapshot_fails() { FAKE_SNAPSHOT_FAIL=before part1_failure_rolls_back snapshot-before; }
+case_part1_rolls_back_when_migration_fails() { FAKE_FAIL='run --rm migrate-go' part1_failure_rolls_back migrate; }
+case_part1_rolls_back_when_compare_mismatches() { FAKE_COMPARE_EXIT=1 part1_failure_rolls_back compare; }
+case_part1_rolls_back_when_go_is_unhealthy() { FAKE_GO_UNHEALTHY=1 part1_failure_rolls_back go-start; }
+
+case_part1_stops_without_rollback_when_preflight_fails() {
+  FAKE_NO_IMAGE=1 expect 1 part1
+  # 何も変えていないので、切り戻しはしない
+  expect_lacks 'caddyfile=ops/caddy/Caddyfile.maintenance'
+  expect_lacks ' stop api'
+  expect_lacks 'up -d --no-build'
+  [ "$(caddy_now)" = python ] || fail "事前確認の失敗でCaddyが変わった"
+  ! ls -d "$RELEASE"/cutover-state.rolledback-* >/dev/null 2>&1 || fail "何も変えていないのに切り戻した"
+}
+
+case_part1_can_be_retried_after_automatic_rollback() {
+  FAKE_BACKUP_FAIL=1 expect 1 part1
+  expect 0 part1
+  [ -e "$RELEASE/cutover-state/done.go-start" ] || fail "やり直したpart1が完了していない"
+}
+
+case_part1_cannot_run_twice() {
+  expect 0 part1
+  expect 1 part1
+  # 事前確認で止まる（動いているGo版や止まったPython版を、さらに触らない）
+  expect_lacks 'rollback'
+  [ "$(caddy_now)" = maintenance ] || fail "2回目の実行でCaddyが変わった"
+}
+
+case_part2_needs_part1() {
+  expect 2 part2
+  expect_lacks 'caddyfile=ops/caddy/Caddyfile.go'
+}
+
+case_part2_needs_frontend_confirmation() {
+  expect 0 part1
+  # 画面を公開した確認が無ければ（端末でも無いので）、何も切り替えない
+  expect 2 part2
+  expect_lacks 'caddyfile=ops/caddy/Caddyfile.go'
+  [ "$(caddy_now)" = maintenance ] || fail "確認なしでCaddyが切り替わった"
+  MTP_CUTOVER_CONFIRM_FRONTEND=no expect 2 part2
+}
+
+case_part2_completes_cutover() {
+  expect 0 part1
+  MTP_CUTOVER_CONFIRM_FRONTEND=yes expect 0 part2
+  [ "$(caddy_now)" = go ] || fail "最後のCaddyの向け先がGo版でない"
+  expect_order 'caddyfile=ops/caddy/Caddyfile.go .* up -d --no-deps caddy' 'smoke base=http://base.test' 'smoke_user=rehearsal-smoke-'
+  out_has '^cutover: ok' || fail "完了の表示が無い"
+  out_has 'stop-time' || fail "停止時間が出ていない"
+  out_has 'ブラウザ' || fail "ブラウザ確認の案内が無い"
+  [ ! -e "$RELEASE/cutover-state/nonce" ] || fail "finishの後にnonceが残っている"
+}
+
+case_part2_rolls_back_when_switch_fails() {
+  expect 0 part1
+  export MTP_CUTOVER_CONFIRM_FRONTEND=yes
+  FAKE_PUBLIC_FAIL=1 expect 1 part2
+  out_has 'switch が失敗したため、自動で切り戻します' || fail "自動の切り戻しの表示が無い"
+  expect_rolled_back
+  expect_lacks 'smoke base='
+}
+
+case_part2_cleans_up_then_rolls_back_when_smoke_fails() {
+  expect 0 part1
+  export MTP_CUTOVER_CONFIRM_FRONTEND=yes
+  FAKE_SMOKE_FAIL=1 expect 1 part2
+  out_has 'smoke が失敗したため、自動で切り戻します' || fail "自動の切り戻しの表示が無い"
+  expect_rolled_back
+  # 切り戻す前に、合成利用者を片付ける
+  expect_order 'smoke base=http://base.test' 'smoke_user=rehearsal-smoke-'
+  [ "$(first_line 'smoke_user=rehearsal-smoke-')" -lt "$(grep -n 'cwd=legacy .* up -d --no-build --no-deps api' "$FAKE_CALLS" | tail -1 | cut -d: -f1)" ] ||
+    fail "片付けより前にPython版へ戻した"
+}
+
+case_part2_keeps_go_and_stops_when_cleanup_fails() {
+  expect 0 part1
+  export MTP_CUTOVER_CONFIRM_FRONTEND=yes
+  FAKE_LEFTOVER=1 expect 1 part2
+  # 公開はGo版のまま（切り戻さない）。原因を確認するために止まる
+  [ "$(caddy_now)" = go ] || fail "片付けの失敗でCaddyが戻った"
+  out_has '片付けに失敗' || fail "片付けの失敗が表示されていない"
+  expect_lacks 'cwd=legacy .* up -d --no-build'
+}
+
+case_part2_never_prints_secrets() {
+  expect 0 part1
+  MTP_CUTOVER_CONFIRM_FRONTEND=yes expect 0 part2
+  local value
+  for value in "$SECRET_PASSWORD" "$SECRET_TOKEN" 'fake-nonce-value'; do
+    if grep -qF -- "$value" "$TMP/all.log" "$FAKE_CALLS"; then
+      fail "出力か呼び出しに機密値が出ている: $value"
+    fi
+  done
+}
+
+case_inputs_default_from_script_location() {
+  # 環境変数を何も指定しなくても、script の場所と ~/mytechpulse-production.env から決まる
+  cp "$ENVF" "$TMP/mytechpulse-production.env"
+  chmod 600 "$TMP/mytechpulse-production.env"
+  unset MTP_RELEASE_DIR MTP_ENV_FILE MTP_CUTOVER_ORIGIN
+  export HOME="$TMP"
+  expect 0 part1
+  MTP_CUTOVER_CONFIRM_FRONTEND=yes expect 0 part2
+  # 画面のオリジンは、設定ファイルの最初のものを使う
+  expect_has 'smoke base=http://base.test origin=https://front.test '
+}
+
+case_empty_origin_is_still_rejected() {
+  advance_to switch
+  MTP_CUTOVER_ORIGIN='' expect 2 smoke
+}
+
+case_release_dir_must_match_script_location() {
+  MTP_RELEASE_DIR="$TMP" expect 2 status
 }
 
 # ---- 静的な確認 ----
