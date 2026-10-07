@@ -573,7 +573,7 @@ case_rollback_message_without_recorded_frontend_id() {
   sed -i 's/"deploy-0001"/"see-cloudflare-pages-deployments"/' "$RELEASE/previous-release.json"
   advance_to maintenance-on
   expect 0 rollback
-  out_has 'Deploymentsで控えておいた' || fail "識別子が無いときの案内が無い"
+  out_has 'gh workflow run cutover-frontend.yml -f action=rollback' || fail "識別子が無いときの案内が無い"
   ! out_has 'see-cloudflare-pages-deployments' || fail "定型の値をそのまま表示している"
 }
 
