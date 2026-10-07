@@ -5,7 +5,7 @@
 //   終了コード: 0=混ざりなし、1=混ざりあり（「文書:行:言葉」を一覧する）
 //
 // 対象は「いまの姿」を書く文書だけ。過去の経緯を残す文書（ADR、docs/superpowers/、
-// 切り戻し手順、取り込んだ外部Skill）は対象外。
+// 切り戻し手順（docs/deploy/rollback-to-python.md）、取り込んだ外部Skill）は対象外。
 // 行に「旧版」「Python版」「_Avoid_」のいずれかが含まれる行は、
 // 過去との違いを説明しているので許す。
 import { execFileSync } from "node:child_process";
@@ -21,9 +21,10 @@ const TARGETS = [
   /^frontend\/README\.md$/,
   /^docs\/RequirementsSpecification\.md$/,
   /^docs\/BasicDesignSpecifications\//,
+  /^docs\/deploy\/(?!rollback-to-python\.md$)/,
 ];
 
-const STALE = [/\bJWT\b/, /access_token/, /localStorage/, /\bBearer\b/, /FastAPI/, /SQLAlchemy/, /uvicorn/, /backend\//];
+const STALE = [/\bJWT\b/, /access_token/, /localStorage/, /\bBearer\b/, /FastAPI/, /SQLAlchemy/, /uvicorn/, /backend\//, /Oracle/];
 const ALLOWED_LINE = /旧版|Python版|_Avoid_/;
 
 // 混ざっている行を {line, term} で返す。コードブロックの中も見る（例が古いのも誤りのため）

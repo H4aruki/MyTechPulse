@@ -140,5 +140,5 @@ erDiagram
 ## 4. 補足
 
 - 記事情報を保存するテーブルは無いため、表示のたびに外部サイトへ問い合わせが発生する。取得結果をデータベースに貯める案は`TASKS.md`で検討中
-- 本番環境では毎日データのコピーを取り、7日分を保管している（要件定義書の非機能要件を参照）。本番へ反映する前にも、自動でコピーを取る。手順は[database-backup-and-restore.md](../deploy/database-backup-and-restore.md)を参照
+- データのコピー（バックアップ）は、本番へ反映する前に自動で取る。日次の取得はサーバーのcronで行う想定で、古いコピーの自動削除は、事故防止のため、いまは行っていない（要件定義書の非機能要件を参照）。手順は[database-backup-and-restore.md](../deploy/database-backup-and-restore.md)を参照
 - テーブルの変更手順と守るべき決まりは、Skill`database-change`と`server/db/migrations/README.md`にまとまっている

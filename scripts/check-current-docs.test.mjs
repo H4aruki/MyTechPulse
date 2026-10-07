@@ -28,3 +28,7 @@ test("backend/ やFastAPIなど、他の旧語も見つける", () => {
   const found = findStaleTerms("cd backend/app\nFastAPIで動く\nuvicornを起動");
   assert.deepEqual(found.map((f) => f.term), ["backend/", "FastAPI", "uvicorn"]);
 });
+
+test("失効した構成（Oracle）の言葉も見つける", () => {
+  assert.deepEqual(findStaleTerms("Oracle の無料VMで動かす"), [{ line: 1, term: "Oracle" }]);
+});

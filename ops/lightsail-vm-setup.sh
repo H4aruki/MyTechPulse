@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Oracle Cloud Always Free VM（Ampere A1 / Ubuntu 24.04 aarch64 想定）の初期セットアップ。
+# AWS Lightsail の VM（Ubuntu 24.04 / x86_64 想定）の初期セットアップ。
 # VMにSSHしたあと、root権限で1回実行すれば本番実行環境の土台が整う:
 #   sudo ./ops/lightsail-vm-setup.sh
 #
@@ -7,7 +7,7 @@
 # 原因を直してそのまま再実行すればよい。
 #
 # このスクリプトでやらないこと（コンソール側のオーナー作業）:
-#   - VCNのSecurity List / NSG でのingress開放（22 / 80 / 443）
+#   - Lightsailのネットワーク設定（IPv4ファイアウォール）でのingress開放（22 / 80 / 443）
 #   - インスタンス作成そのもの
 #   詳細な手順は docs/deploy/lightsail-provisioning.md を参照。
 set -euo pipefail
@@ -15,7 +15,7 @@ set -euo pipefail
 # ---- 設定（環境変数で上書き可能） ----
 TIMEZONE="${TIMEZONE:-Asia/Tokyo}"
 # dockerグループに追加するユーザー。sudo実行なら呼び出し元ユーザー、無ければ
-# Oracleのubuntuイメージの既定ユーザー名を使う
+# Lightsailのubuntuイメージの既定ユーザー名（ubuntu）を使う
 DOCKER_USER="${DOCKER_USER:-${SUDO_USER:-ubuntu}}"
 # 追加で開放するTCPポート。22はイメージ既定で開いているので含めない
 OPEN_TCP_PORTS="${OPEN_TCP_PORTS:-80 443}"
@@ -45,10 +45,6 @@ if [ "${ID:-}" != "ubuntu" ]; then
 fi
 
 DPKG_ARCH="$(dpkg --print-architecture)"
-if [ "$DPKG_ARCH" != "arm64" ]; then
-    # Always Free には amd64 の VM.Standard.E2.1.Micro もあるため警告のみで続行する
-    warn "arm64以外のアーキテクチャです（$DPKG_ARCH）。Ampere A1ではない可能性があります"
-fi
 
 log "Ubuntu ${VERSION_ID:-?} / ${DPKG_ARCH} でセットアップを開始"
 
@@ -58,7 +54,7 @@ apt-get update -qq
 # python3-systemd は fail2ban の systemd バックエンド（後述）に必要
 apt-get install -y -qq ca-certificates curl gnupg git fail2ban python3-systemd
 
-# Oracleのubuntuイメージは netfilter-persistent を同梱しているが、無い場合は入れる。
+# netfilter-persistent が無い場合は入れる（iptablesルールを再起動後も残すため）。
 # 対話プロンプト（現在のルールを保存するか）は noninteractive で既定のyesになる
 if ! command -v netfilter-persistent >/dev/null 2>&1; then
     log "iptables-persistent を導入（iptablesルールの永続化用）"
@@ -98,8 +94,8 @@ else
 fi
 
 # ---- 3. ファイアウォール（最大の落とし穴） ----
-# OracleのUbuntuイメージは iptables に「これ以降を全部REJECTする」ルールを最後に持つ。
-# Security Listでポートを開けてもここで落ちるので、REJECTより前にACCEPTを挿入する必要がある。
+# 環境によっては、iptables に「これ以降を全部REJECTする」ルールが最後にある（Oracleなど）。
+# その場合は、REJECTより前にACCEPTを挿入する必要がある。Lightsailの標準イメージにはREJECTが無く、末尾への追加になる。
 # ufw は使わない（同じiptablesを二重管理すると事故るため。公式もrules.v4編集を案内している）
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
     warn "ufwが有効です。iptablesを直接編集する本スクリプトと二重管理になるため設定を見直してください"
@@ -131,7 +127,7 @@ if [ "$IPTABLES_CHANGED" -eq 1 ]; then
 fi
 
 # ---- 4. SSH硬化 ----
-# Oracleのイメージは既定で公開鍵認証のみだが、明示的に固定して意図を残す。
+# 既定でも公開鍵認証が基本だが、明示的に固定して意図を残す。
 # sshd_config は先に読まれた値が勝つため、Include されるドロップインで上書きする
 if grep -qs "^Include /etc/ssh/sshd_config.d/\*.conf" /etc/ssh/sshd_config; then
     log "SSH設定を硬化（パスワード認証・root ログインを無効化）"

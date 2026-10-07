@@ -1,53 +1,58 @@
-# CIとrelease成果物
+# CIと配布物（release）
 
-## CI check
+`main` へ取り込む前の検査（CI）と、本番へ入れ替えるための配布物の作り方・照合のしかたをまとめた資料です。入れ替えそのものの手順は [go-auto-deploy.md](go-auto-deploy.md) を参照してください。
 
-`.github/workflows/ci.yml` はpull requestの作成・再開・更新と、各branchへのpushで実行します。GitHub上のjob表示名は次のとおりです。
+## 1. CIの検査
 
-| Job | 確認内容 |
+`.github/workflows/ci.yml` は、プルリクエストの作成・再開・更新と、各枝への push で動きます。GitHub上の表示名は次のとおりです。
+
+| 表示名 | 確認内容 | `main` へ取り込むのに必須か |
+| --- | --- | --- |
+| フロントエンドの書き方チェック | API型の最新性、lint、画面テスト（カバレッジ付き）、組み立て | 必須 |
+| Goバックエンドの検査 | gofmt、vet、競合検出付きの試験、ビルド（DB変更が追加だけであることの試験を含む） | 必須 |
+| sqlcとOpenAPIの生成差分 | 生成物がコミット済みのものと一致するか | 必須 |
+| Go APIのimage検査 | 公開せずに作った最終イメージの起動、疎通、非root実行 | 必須 |
+| 設定まわりの仕掛けの確認 | フック・Skillsの内容一致、外部Actionの固定、自動デプロイの条件、文書のリンクと旧構成の言葉 | 必須ではない |
+
+- 必須の4つは、GitHubのRuleset（Settings → Rules → Rulesets → `main`）で指定しています。表示名を変えるときは、Ruleset側も同じ名前に直してください（一致しないと取り込めなくなります）。
+- PRでは、基本的に読み取り権限だけです。カバレッジをコメントする2つのjobだけ、PRへの書き込み権限を持ちます。本番の秘密や、パッケージへの書き込み権限は渡しません。
+- `main` に取り込まれたときだけ、次の3つが続きます（`GO_DEPLOY_ENABLED` が `true` のときだけ。[go-auto-deploy.md](go-auto-deploy.md)）。
+
+| 表示名 | 内容 |
 | --- | --- |
-| バックエンドの書き方チェック | RuffとPython版の互換テスト |
-| フロントエンドの書き方チェック | API型、lint、画面テスト、build |
-| 設定まわりの仕掛けの確認 | harness testとaction pin、旧deploy停止条件 |
-| Goバックエンドの検査 | format、vet、race付きtest、build |
-| sqlcとOpenAPIの生成差分 | 生成結果がcommit済みファイルと一致するか |
-| Go APIのimage検査 | pushせずbuildした最終imageの起動、health、非root実行 |
+| 本番への反映が要るか | 変更されたファイルから、本番への反映が要るかを判定する。文書・試験だけなら、反映しない |
+| 配布物の作成 | 次の2章の配布物を作る（`release.yml`） |
+| Go版の本番への反映 | 配布物を照合し、本番サーバーで入れ替える。成功したら画面を公開する |
 
-`CONTRIBUTING.md` に記載された現行の必須status check名は `バックエンドの書き方チェック` と `フロントエンドの書き方チェック` です。GitHub Rulesetを変更するときは、job表示名と完全一致させます。
+## 2. 配布物（release）
 
-PRでは基本的に `contents: read` です。カバレッジをPRへコメントする2 jobだけ、job単位で `pull-requests: write` を持ちます。本番secretやpackage書き込み権限はCIに渡しません。
+`release.yml` は、同じ commit から次を作ります。手動の起動と、自動デプロイからの呼び出しの2通りがあります（`main` への push では、これ単独では動きません）。
 
-Release workflowは、GHCRの公開範囲・認証の承認が済むまで手動起動だけを受け付けます。承認後にmainへのpushを起動条件へ追加します。jobはmain以外では動かず、`contents: read` と `packages: write` を使います。GHCR認証にはActionsが発行する `GITHUB_TOKEN` を使います。production Environment、SSH、Cloudflareのsecretは使いません。
+### Go APIの箱（GHCR）
 
-Rulesetで必須にするstatus checkは、実行後にGitHubが表示するjob名と一致させてください。現行CIの必須check設定を変える場合は、既存Rulesetとの照合を先に行います。
+`ghcr.io/h4aruki/mytechpulse-api-go` へ送ります。本番で使う値は、tagではなく、作ったときに得られる完全な `sha256` のdigestです。`latest` は使いません。パッケージは公開のままです（オーナー決定。トークン不要）。そのため、**箱の中に秘密を入れない**運用を続けます。
 
-## GHCR image
-
-Release workflowは `ghcr.io/h4aruki/mytechpulse-api-go` にGo API imageを送ります。push時のtagはcommit SHAですが、releaseで使う値はworkflowのbuild outputから得た完全な `sha256` digestです。`latest` tagをrelease入力に使いません。
-
-このworkflowを有効にする前に、ownerがGHCR packageの公開範囲をprivateに確認し、保存量・転送量の費用と、本番サーバーからprivate imageをpullするときの認証方法を判断します。package設定やsecretの登録はこの変更では行っていません。
-
-今後のproduction切替用Environment secret名は、#127で確定する運用workflowに合わせてownerが登録します。現行の旧deployが参照する名前は `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`LIGHTSAIL_HOST`、`LIGHTSAIL_USER`、`LIGHTSAIL_SSH_KEY` です。値はこの文書やrepositoryへ記録しません。GHCR pull用の認証情報も#127で方式を決めて登録します。
-
-## 同一runの成果物を取得して照合する
-
-Release workflowは、同じcheckoutから次の3成果物を作ります。
+### 3つの成果物
 
 | Artifact名 | 含むもの |
 | --- | --- |
-| `frontend-<commit_sha>` | `frontend-<commit_sha>.tar.gz` |
-| `ops-<commit_sha>` | `ops-<commit_sha>.tar.gz` |
+| `frontend-<commit_sha>` | 画面の一式（`frontend-<commit_sha>.tar.gz`） |
+| `ops-<commit_sha>` | サーバーで使う運用ファイルの一式（`ops-<commit_sha>.tar.gz`） |
 | `release-manifest-<commit_sha>-<run_attempt>` | `release-manifest.json` と `release-manifest.json.sha256` |
 
-GitHub Actionsの実行画面から、manifestに記録されたrun ID・attemptと一致する実行を開き、3 artifactを同じrunからdownloadします。別runや別attemptのarchiveを混ぜないでください。manifest側の `artifact_name` はfrontend/ops artifact名、`sha256` は各tar.gzのバイト列全体のSHA256です。
+manifestには、commit、実行回（run ID・attempt）、箱のdigest、各archiveのSHA256が入っています。別の実行回や別のattemptのarchiveを混ぜて使いません。
 
-manifest artifactを展開したdirectoryでmanifest自身を確認します。
+## 3. 配布物の照合
+
+自動デプロイは、サーバーへ送る前と、サーバーで受け取った後に、それぞれ照合します。手で確かめるときは、次のとおりです。
+
+実行回の画面から3つのartifactを同じ実行回でダウンロードし、1つのディレクトリへ置いて、manifest自身を確認します。
 
 ```bash
 sha256sum -c release-manifest.json.sha256
 ```
 
-2つのarchiveとmanifestを1つのdirectoryへ置き、manifestに書かれたrun ID、attempt、commit SHAとSHA256を再検証します。Node.jsはCI用ですが、検証は標準APIだけで動きます。
+続けて、manifestに書かれた実行回・commit・SHA256とarchiveを照合します（標準のNode.jsだけで動きます）。
 
 ```bash
 node scripts/release-manifest.mjs verify \
@@ -59,14 +64,19 @@ node scripts/release-manifest.mjs verify \
   --commit-sha <manifestのcommit_sha>
 ```
 
-本番サーバー側の入力検証は `ops/verify_release.sh` が行います。成功して出力された `GO_API_IMAGE` はmanifest由来の完全digestです。tagへ置き換えず、migration、公開、service起動を行う前に3成果物をまとめて照合してください。
+サーバー側の照合は `ops/verify_release.sh` が行います。成功すると、manifestに由来する完全なdigest（`GO_API_IMAGE`）を出力します。tagへ置き換えず、このdigestだけを使ってください。
 
-## 保持期間と再作成
+## 4. 保持期間と再作成
 
-各Actions artifactの保持期間は90日です。期限切れ、削除、run消失でartifactを取得できない場合、同じ名前で作り直して代用しません。mainに新しいcommitを作り、新しいrunからrelease一式を作り直したうえで、#126の検証をやり直します。image tagが残っていても、manifestのdigestとarchiveを復元できなければそのreleaseは使えません。
+各artifactの保持期間は90日です。期限切れ・削除で取得できないときは、同じ名前で作り直して代用しません。`main` に新しいcommitを作り、新しい実行回から配布物を作り直します。箱のtagが残っていても、manifestのdigestとarchiveを復元できなければ、その配布物は使えません。
 
-## このIssueの範囲とproduction rollback
+## 5. 必要な秘密（リポジトリのSecrets）
 
-#125はCIと成果物の生成・検査までです。本番serverへの接続、migration、Cloudflare公開、Caddy切替、API起動は行いません。既存のPython版frontend/backend自動deployも、`LEGACY_DEPLOY_ENABLED` が明示的に `true` でない限り実行されません。このvariableは登録しません。
+値は、この文書やリポジトリには書きません。オーナーが登録します。
 
-#127ではGitHub Environment `production` とrequired reviewerの承認後にのみ、本番切替を行います。切替直前のAPI、frontend deployment、ops一式を対応づけた `previous-release.json` と、そのrelease固有directoryを保全します。rollbackはこのrecordにあるAPI image識別子、frontend deployment ID、ops directoryを一組として使い、候補releaseや可変tagから推測して戻しません。DBの破壊的変更やvolume・image・backupの削除をrollbackに含めません。
+| 名前 | 使い道 |
+| --- | --- |
+| `LIGHTSAIL_SSH_KEY`、`LIGHTSAIL_HOST`、`LIGHTSAIL_USER` | 自動デプロイが、本番サーバーへ接続して入れ替える |
+| `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` | 画面（Cloudflare Pages）の公開 |
+
+リポジトリ変数 `GO_DEPLOY_ENABLED`（`true` のときだけ自動デプロイが動く）は、Secretsではなく Variables にあります。

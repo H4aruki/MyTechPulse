@@ -1,14 +1,13 @@
-# AWS Lightsail プロビジョニング手順
+# AWS Lightsail 構築手順（本番を一から作り直す）
 
-MyTechPulse のバックエンド（FastAPI + PostgreSQL）を動かす AWS Lightsail インスタンスを用意する手順。
-フロントエンドは Cloudflare Pages に分離する構成なので、このインスタンスは **API と DB のみ**を持つ。
+MyTechPulse のバックエンド（Go製API・PostgreSQL・Caddy）を動かす AWS Lightsail のサーバーを、**一から用意する**手順です。画面（フロントエンド）は Cloudflare Pages に置くので、このサーバーが持つのは **API と DB と HTTPS の窓口だけ**です。
 
-構成の決定経緯は Issue #65（2分割の判断）と Issue #67（デプロイ先の確定）にある。
+- 通常の更新（`main` に取り込んだ変更を本番へ出す）は、自動デプロイが行います。→ [go-auto-deploy.md](go-auto-deploy.md)
+- この資料を使うのは、サーバーを作り直すとき（壊れた、引っ越す、など）だけです。
+- 構成を決めた経緯は [ADR 0003](../adr/0003-host-on-cloudflare-pages-and-lightsail.md) にあります。
+- データのバックアップと復元は [database-backup-and-restore.md](database-backup-and-restore.md) にあります。
 
-> このファイルは Lightsail のプロビジョニングに限定した部品。
-> デプロイ全体の手順書（`DEPLOYMENT.md`）は Issue #55 で作成し、そこからこのファイルを参照する。
-
-**Lightsail 側の仕様確認日: 2026-08-13**（料金・無料期間は変更されうるため、作業時に必ず現在値を確認する）
+**Lightsail 側の仕様確認日: 2026-08-13**（料金・無料期間は変わることがあるため、作業時に必ず現在の値を確認する）
 
 ---
 
@@ -21,15 +20,15 @@ MyTechPulse のバックエンド（FastAPI + PostgreSQL）を動かす AWS Ligh
 | OS イメージ | Ubuntu 24.04 LTS |
 | 開放ポート | 22（SSH）/ 80（HTTP）/ 443（HTTPS） |
 
-**東京は転送量が半減するリージョンに含まれない**ため、2 TB がフルで使える
-（半減対象はムンバイ・シドニー・ジャカルタ・マレーシア・香港・サンパウロ）。
+**東京は転送量が半減するリージョンに含まれない**ため、2 TB がそのまま使える（半減対象はムンバイ・シドニー・ジャカルタ・マレーシア・香港・サンパウロ）。
 
 作業の流れ:
 
 ```
-AWSアカウント作成 → 有料プランへ切替 → インスタンス作成（東京・1GB）
-  → ファイアウォールで 80/443 開放 → SSH → スワップ2GB作成
-  → ops/lightsail-vm-setup.sh 実行 → 疎通確認
+AWSアカウント → 有料プラン → インスタンス作成（東京・1GB）→ 静的IP
+  → ファイアウォール（80/443）→ SSH → スワップ2GB
+  → ops/lightsail-vm-setup.sh → 設定ファイルと置き場所 → 最初のGo版の起動（初回だけの手作業）
+  → 疎通確認 → 自動デプロイをつなぐ
 ```
 
 ---
@@ -38,54 +37,46 @@ AWSアカウント作成 → 有料プランへ切替 → インスタンス作�
 
 ### 有料プランへの切り替えは必須
 
-**新規 AWS アカウントは、無料プランのままだと 6 ヶ月で閉鎖される。**
-閉鎖されると本番環境ごと消えるため、**運用開始前に必ず有料プラン（Paid plan）へ切り替える**。
+**新規 AWS アカウントは、無料プランのままだと 6 ヶ月で閉鎖される。** 閉鎖されると本番ごと消えるため、**運用開始前に必ず有料プラン（Paid plan）へ切り替える**。
 
-新規アカウントは対象プラン（$5 / $7 の Linux プラン）が **3 ヶ月無料**なので、
-無料期間中に構築を進め、期間内に有料プランへ切り替える段取りにする。
+新規アカウントは、対象プラン（$5 / $7 の Linux プラン）が **3 ヶ月無料**なので、無料期間中に構築を進め、期間内に有料プランへ切り替える。
 
-その他:
+そのほか:
 
 - ルートユーザーで MFA を有効にする（このアカウントが本番の唯一の管理経路になる）
-- 請求ダッシュボードで**予算アラート**を設定する（Lightsail は固定費だが、他サービスを触ったときの取りこぼしを防ぐ）
-- 日常操作用に IAM ユーザーを作り、ルートユーザーを常用しない
+- 請求ダッシュボードで**予算アラート**を設定する
+- 日常の操作用に IAM ユーザーを作り、ルートユーザーを常用しない
 
 ## 2. SSH 鍵の準備
 
-インスタンス作成時に公開鍵を登録する。ローカル PC 側で作っておく。
+インスタンス作成時に公開鍵を登録する。ローカル PC で作っておく。
 
 ```bash
 ssh-keygen -t ed25519 -C "mytechpulse-lightsail" -f ~/.ssh/mytechpulse_lightsail
 ```
 
-秘密鍵（`~/.ssh/mytechpulse_lightsail`）は**リポジトリに絶対に入れない**。
-GitHub Actions の自動デプロイ（Issue #54）では別途デプロイ用の鍵を作り、Secrets に登録する。
+秘密鍵（`~/.ssh/mytechpulse_lightsail`）は**リポジトリに絶対に入れない**。自動デプロイ用の接続（`LIGHTSAIL_SSH_KEY`）は、これとは別に、デプロイ専用の鍵を作ってSecretsへ登録する（[ci-and-release.md](ci-and-release.md)の5章）。
 
-Lightsail はコンソールで鍵を自動生成する選択肢も出るが、**自分で作った鍵をアップロードする**ほうが扱いやすい
-（自動生成鍵はダウンロード機会が一度きり）。
+Lightsail は鍵を自動生成する選択肢も出すが、**自分で作った鍵をアップロードする**ほうが扱いやすい（自動生成の鍵は、ダウンロードの機会が一度きり）。
 
 ## 3. インスタンス作成
 
 Lightsail コンソール → **Create instance**
 
-1. **Instance location**: `Tokyo, Zone A`（`ap-northeast-1a`）を選ぶ
+1. **Instance location**: `Tokyo, Zone A`（`ap-northeast-1a`）
 2. **Select a platform**: Linux/Unix
-3. **Select a blueprint**: **OS Only → Ubuntu 24.04 LTS**
-   （「Apps + OS」の LAMP 等は不要。Docker で全部立てるため）
-4. **SSH key pair**: 手順 2 で作った**公開鍵**をアップロードする
+3. **Select a blueprint**: **OS Only → Ubuntu 24.04 LTS**（「Apps + OS」は不要。Docker で全部立てるため）
+4. **SSH key pair**: 手順 2 の**公開鍵**をアップロードする
 5. **Choose your instance plan**: **$7/月（1 GB RAM / 2 vCPU / 40 GB SSD）**
 6. **Identify your instance**: 名前を付けて Create
 
-Oracle のような容量枯渇（Out of Host Capacity）との戦いは無く、通常は即座に作成できる。
-
 ### 静的 IP の割り当て（必須）
 
-**インスタンス作成直後に静的 IP を割り当てる。** 既定のパブリック IP は**再起動で変わる**ため、
-DNS を向けた後に再起動すると本番が落ちる。
+**作成した直後に静的 IP を割り当てる。** 既定のパブリック IP は**再起動で変わる**ため、DNS を向けた後に再起動すると本番が落ちる。
 
 Lightsail コンソール → Networking → **Create static IP** → 作成したインスタンスにアタッチ。
 
-> 静的 IP は**インスタンスにアタッチされている限り無料**。デタッチしたまま放置すると課金対象になる。
+> 静的 IP は**インスタンスにアタッチされている間は無料**。外したまま放置すると課金対象になる。
 
 ## 4. ファイアウォールで ingress を開放
 
@@ -94,31 +85,24 @@ Lightsail コンソール → Networking → **Create static IP** → 作成し�
 | アプリケーション | プロトコル | ポート | 用途 |
 |---|---|---|---|
 | SSH | TCP | 22 | 既定で開いている |
-| HTTP | TCP | 80 | Let's Encrypt の HTTP-01 チャレンジに必須 |
+| HTTP | TCP | 80 | Let's Encrypt の証明書取得（HTTP-01）に必須 |
 | HTTPS | TCP | 443 | API 本番 |
 
-SSH は「Restrict to IP address」で自分の IP に絞れるが、**固定回線でないなら絞らない**
-（IP が変わると自分が締め出される）。SSH の防御は手順 6 のスクリプトが行う鍵認証強制と fail2ban で担保する。
-
-> Oracle の Ubuntu イメージにあった「OS 側の `iptables` が全部 REJECT する」問題は **Lightsail には無い**。
-> コンソールでポートを開ければそのまま通る。
+SSH は「Restrict to IP address」で自分の IP に絞れるが、**固定回線でないなら絞らない**（IP が変わると自分が締め出される）。SSH の防御は、手順 6 のスクリプトが行う鍵認証の強制と fail2ban で担保する。
 
 ## 5. スワップ領域の作成（必須）
 
-**1 GB プランはメモリの余裕が薄い。** 実測見込みの内訳:
+**1 GB プランはメモリの余裕が薄い。** 見込みの内訳（Go版に切り替えた後の実測を反映）:
 
 | 内容 | 使用量の目安 |
 |---|---|
 | Ubuntu + Docker 本体 | 約 200 MB |
 | PostgreSQL | 約 200 MB |
-| API（Python / uvicorn） | 約 150 MB |
+| Go製API | 約 10 MB（切り替え後の実測は約 8 MB） |
 | Caddy | 約 30 MB |
-| **合計** | **約 580 MB / 1,024 MB** |
+| **合計** | **約 450 MB / 1,024 MB** |
 
-残り約 440 MB で、記事の日次バッチ取得（Issue #66）やイメージビルドのピークを吸収する必要がある。
-**Lightsail の Ubuntu イメージにはスワップが設定されていない**ので、自分で作る。
-
-SSH でログインして実行する（既定ユーザーは `ubuntu`）:
+**Lightsail の Ubuntu イメージにはスワップが設定されていない**ので、自分で作る。SSH でログインして実行する（既定ユーザーは `ubuntu`）:
 
 ```bash
 ssh -i ~/.ssh/mytechpulse_lightsail ubuntu@<静的IP>
@@ -147,7 +131,7 @@ swapon --show  # /swapfile が出る
 
 ## 6. VM の初期セットアップ
 
-リポジトリを取得してセットアップスクリプトを実行する。
+リポジトリを取得して、セットアップスクリプトを実行する。**このリポジトリの置き場所（`~/MyTechPulse`）は、自動デプロイが、バックアップ用のスクリプトを探す場所でもある**ので、この場所に置く。
 
 ```bash
 git clone https://github.com/H4aruki/MyTechPulse.git
@@ -155,95 +139,129 @@ cd MyTechPulse
 sudo ./ops/lightsail-vm-setup.sh
 ```
 
-> **スクリプト名が `oracle-` のままなのは既知の負債。** 中身は Lightsail でもそのまま動く。
-> Lightsail 向けへのリネームとスワップ処理の内包は `TASKS.md` の A 章に残してある。
+スクリプトがやること（何度実行しても同じ結果になる。失敗したら直して再実行してよい）:
 
-スクリプトがやること（冪等。失敗したら直して再実行してよい）:
+1. Docker Engine + Compose plugin の導入と、`ubuntu` ユーザーの docker グループへの追加
+2. `iptables` に 80/443 の ACCEPT を追加（Lightsail では REJECT ルールが無いため、末尾に追加される。実質は無害）
+3. SSH の硬化（パスワード認証・root ログインを無効化）
+4. fail2ban の sshd jail を有効化
+5. タイムゾーンを `Asia/Tokyo` に設定（日次バックアップを意図した時刻で動かすため）
 
-1. Docker Engine + Compose plugin の導入と `ubuntu` ユーザーの docker グループ追加
-2. `iptables` に 80/443 の ACCEPT を追加（Lightsail では **REJECT ルールが無いため末尾に追加**され、実質無害）
-3. SSH 硬化（パスワード認証・root ログインを無効化）
-4. fail2ban の sshd jail 有効化
-5. タイムゾーンを `Asia/Tokyo` に設定（`ops/backup_db.sh` の日次 cron を意図した時刻で回すため）
+実行後、docker グループの反映のために、**一度 SSH を切って再ログインする**。
 
-### Lightsail で読み替える点
+## 7. 設定ファイルと置き場所を用意する
 
-- **「arm64 以外です」という警告が出るが無視してよい。** $7 プランは x86_64。
-  Oracle の Ampere A1（ARM）向けに書かれたチェックが残っているだけで、処理は続行される
-- **ARM64 でのビルド確認は不要になった。** `python:3.12-slim` も `postgres:17-alpine` も x86_64 で素直に動く
+自動デプロイが前提にする、サーバー上の場所は次の3つ。
 
-実行後、docker グループの反映のために**一度 SSH を切って再ログインする**。
-
-## 7. アプリの起動（#52 の入口）
-
-```bash
-cp backend/.env.example backend/.env
-# SECRET_KEY は本番用に新規生成する（開発用の値を使い回さない）
-python3 -c "import secrets; print(secrets.token_hex(32))"
-```
-
-`backend/.env` に設定する値:
-
-- `SECRET_KEY` — 上で生成した値
-- `QIITA_ACCESS_TOKEN` — Qiita のアクセストークン
-- `DATABASE_URL` — そのままでよい（`docker-compose.yml` が `host=db` に上書きする）
-- `CORS_ALLOWED_ORIGINS` — Cloudflare Pages の URL が決まってから設定する（#53）
-
-リポジトリルートの `.env` に DB のパスワードを設定する（既定値を本番で使わない）:
+| 場所 | 中身 | 用意する人 |
+|---|---|---|
+| `~/MyTechPulse` | リポジトリの複製。バックアップ用スクリプト（`ops/backup_db.sh`・`ops/verify_backup.sh`）の置き場所。手順 6 で作成済み | 手順 6 |
+| `~/releases` | 配布物の置き場所。自動デプロイが、新しい版を、ここに実行回ごとに作る | 手作業（下記） |
+| `~/mytechpulse-production.env` | 本番の設定ファイル | 手作業（下記） |
 
 ```bash
-printf 'POSTGRES_PASSWORD=%s\n' "$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" > .env
-chmod 600 .env
+mkdir -p ~/releases
 ```
 
-> **前提**: PostgreSQL への移行（Issue #63）が済んでいること。
-> 未了の場合、変数名は `MYSQL_ROOT_PASSWORD` のままである。
+### 本番の設定ファイル（`~/mytechpulse-production.env`）
 
-起動する（テーブル作成は `backend/entrypoint.sh` の `init_db.py` が自動実行する）:
+1行に1項目、`項目名=値` の形で書く。**値は、チャット・Issue・リポジトリに書かない。** 作ったら、自分だけが読めるようにする。
 
 ```bash
-docker compose up -d --build
-docker compose logs -f api   # 起動ログを確認
+chmod 600 ~/mytechpulse-production.env
 ```
 
-全 API の疎通確認は Issue #52 で行う。
+| 項目 | 値 | 補足 |
+|---|---|---|
+| `APP_ENV` | `production` | 本番にすると、Cookie名が `__Host-mtp_session`・`Secure` 付きになり、説明ページ（`/docs`）が閉じる |
+| `POSTGRES_PASSWORD` | 新しく作ったランダムな値 | 開発用の値を使い回さない。`openssl rand -base64 24 \| tr -d '/+='` などで作る |
+| `QIITA_ACCESS_TOKEN` | Qiita のアクセストークン | 未設定だと、APIは起動しない |
+| `CORS_ALLOWED_ORIGINS` | 画面の公開URL（例: `https://mytechpulse.net`） | 複数ならカンマ区切り。`*` は使えない。画面のURLと完全に一致させる |
+| `SWAGGER_ENABLED` | `false` | 本番では `true` にできない（起動に失敗する） |
+| `API_DOMAIN` | APIのドメイン（例: `api.mytechpulse.net`） | Caddy が、このドメインの証明書を取る。DNS をこのサーバーの静的IPへ向けておく |
+
+- 項目の意味と、ローカル開発との違いは、[`server/.env.example`](../../server/.env.example) と [`.env.example`](../../.env.example) のコメントにまとまっている。
+- `docker-compose.yml` が API に渡す項目は、上の表のうち `APP_ENV`・`QIITA_ACCESS_TOKEN`・`CORS_ALLOWED_ORIGINS`・`SWAGGER_ENABLED` と、`POSTGRES_PASSWORD` から作る接続先。セッションの有効期間などの調整項目は、渡しておらず、既定値で動く。
+
+## 8. 最初のGo版を起動する（初回だけの手作業）
+
+自動デプロイは、**すでに動いているGo版の箱**を「戻し先」として記録してから入れ替える。そのため、**最初の1回だけは、手で起動する**必要がある。2回目以降は、自動デプロイが行う。
+
+### 8-1. 起動する箱を決める
+
+起動する箱は、tagではなく、**digest 付きの名前**で指定する（`ghcr.io/h4aruki/mytechpulse-api-go@sha256:…`）。入手先は、配布物を作った実行回（GitHub Actions の `release.yml`）の結果ページにある manifest。作り方は [ci-and-release.md](ci-and-release.md) を参照。
+
+配布物をまだ作っていなければ、`main` を対象に、`release.yml` を手動で実行して作る。
+
+### 8-2. データベースを起動し、構造を作る
+
+8-2 から 8-4 は、同じターミナルで続けて実行する（`GO_API_IMAGE` の設定を引き継ぐため）。
+
+```bash
+cd ~/MyTechPulse
+docker compose --env-file ~/mytechpulse-production.env -p mytechpulse up -d db
+export GO_API_IMAGE='ghcr.io/h4aruki/mytechpulse-api-go@sha256:…'   # 8-1 で決めたもの
+docker compose --env-file ~/mytechpulse-production.env -p mytechpulse --profile go-migrate run --rm migrate-go
+```
+
+- 空のデータベースなら、`server/db/migrations/` の変更が順に適用され、表ができる。
+- 以前のデータを引き継ぐなら、このあいだに復元が要る。復元の手順は [database-backup-and-restore.md](database-backup-and-restore.md) にあるが、**復元先は新しい名前のDBに限られ**、本番のDBへ置き換える手順は、この資料には無い。置き換えが要るときは、オーナーと、その場で手順を決める。
+
+### 8-3. API と HTTPS の窓口を起動する
+
+```bash
+docker compose --env-file ~/mytechpulse-production.env -p mytechpulse --profile go-preview --profile prod up -d api-go caddy
+```
+
+### 8-4. 動作を確認する
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8001/health/ready    # 200 が出る
+curl -s -o /dev/null -w '%{http_code}\n' https://<API_DOMAIN>/health/ready     # 200 が出る
+docker ps --format '{{.Names}}\t{{.Image}}'
+```
+
+- 1つ目はサーバー内から、2つ目は窓口（Caddy）経由。2つ目は、証明書の取得に少し時間がかかることがある。
+- `docker ps` で、API の箱が `…@sha256:…` の形で動いていること（自動デプロイは、この形でないと「戻し先」にしない）。
 
 ### メモリを実際に確認する
 
-起動後、見込みどおりに収まっているかを必ず見る。
-
 ```bash
-free -h                # 空きメモリとスワップ使用量
+free -h                    # 空きメモリとスワップ使用量
 docker stats --no-stream   # コンテナごとの実使用量
 ```
 
-**スワップを常時数百 MB 使っている状態は黄信号。** $12 の 2 GB プランへの移行を検討する
-（スナップショットから任意のプランで作り直せる）。
+**スワップを常時数百 MB 使っている状態は黄信号。** $12 の 2 GB プランへの移行を検討する（スナップショットから、任意のプランで作り直せる）。
 
-## 8. 完了チェックリスト
+## 9. 日次バックアップ
+
+`ops/backup_db.sh` は、バックアップを1つ作って、中身を確認する。**毎日自動で動かすには、cron への登録が要る**（スクリプトの冒頭に、登録の例がある）。
+
+- 古い世代の自動削除は、事故を防ぐため、いまは行っていない（オーナーの承認待ち。[database-backup-and-restore.md](database-backup-and-restore.md)）。ディスクの空きを、ときどき確認する（`df -h`）。
+- バックアップは、同じサーバーに保存される。サーバーごと失われると復元できないため、外部への退避が残っている（`TASKS.md`）。
+
+## 10. 画面と自動デプロイをつなぐ
+
+- **画面**: Cloudflare Pages へ公開する。自動デプロイが、APIの入れ替えが成功した後に、公開する（[go-auto-deploy.md](go-auto-deploy.md)）。接続用のSecretsは、[ci-and-release.md](ci-and-release.md)の5章を参照。
+- **自動デプロイ**: リポジトリ変数 `GO_DEPLOY_ENABLED` を `true` にしたときから動く。有効にする前の確認は、[go-auto-deploy.md](go-auto-deploy.md)の3章。
+
+## 11. 完了チェックリスト
 
 - [ ] 静的 IP が割り当てられ、再起動しても IP が変わらない
 - [ ] SSH でログインでき、パスワード認証が拒否される（`ssh -o PreferredAuthentications=password ubuntu@<IP>` が失敗する）
-- [ ] `free -h` がスワップ 2 GB を返し、`sudo reboot` 後も残っている
+- [ ] `free -h` がスワップ 2 GB を返し、`sudo reboot` の後も残っている
 - [ ] 再ログイン後、`docker run --rm hello-world` が **sudo なしで**成功する
-- [ ] `docker compose version` が Compose v2 を返す
-- [ ] ローカル PC から `nc -vz <IP> 22` / `80` / `443` が到達する
-      （80/443 はまだ待受プロセスが無いので `Connection refused`。これは**到達している**証拠。
-      ファイアウォールが閉じている場合はタイムアウトになる — この違いで切り分ける）
+- [ ] ローカル PC から `nc -vz <IP> 22` / `80` / `443` が到達する（80/443 は、待ち受けが起動する前なら `Connection refused`。これは**到達している**証拠。ファイアウォールが閉じていると、タイムアウトになる。この違いで切り分ける）
 - [ ] `sudo fail2ban-client status sshd` が jail の稼働を返す
 - [ ] `timedatectl` が JST を返す
-- [ ] **AWS アカウントが有料プランに切り替わっている**（6 ヶ月での閉鎖を回避）
-
-## 次のステップ
-
-- **#51**: ドメイン取得（**課金を伴うためオーナー判断**）と Caddy による HTTPS 化
-- **#52**: `docker-compose.yml` の本番起動と全エンドポイント疎通確認
-- **#53**: Cloudflare Pages へのフロントエンドデプロイ
-- **#54**: GitHub Actions による自動デプロイ
-- **#55**: `DEPLOYMENT.md` への統合と移行ランブック
+- [ ] `~/mytechpulse-production.env` の権限が `600` で、必要な6項目がある
+- [ ] 8-4 の確認で、`/health/ready` が、サーバー内と窓口経由の両方で 200 を返す
+- [ ] ブラウザで、会員登録・ログイン・記事の表示ができる
+- [ ] 日次バックアップが cron に登録され、1回は実行されて、検証（`ops/verify_backup.sh`）が通っている
+- [ ] **AWS アカウントが有料プランに切り替わっている**（6 ヶ月での閉鎖を避ける）
 
 ## 参考
 
-- [Amazon Lightsail Pricing](https://aws.amazon.com/lightsail/pricing/)（プラン内容と転送量半減リージョン）
+- [Amazon Lightsail Pricing](https://aws.amazon.com/lightsail/pricing/)（プランの内容と、転送量が半減するリージョン）
 - [Create a static IP in Lightsail — AWS Docs](https://docs.aws.amazon.com/lightsail/latest/userguide/lightsail-create-static-ip.html)
 - [Install Docker Engine on Ubuntu — Docker Docs](https://docs.docker.com/engine/install/ubuntu/)

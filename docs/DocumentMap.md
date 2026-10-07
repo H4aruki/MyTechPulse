@@ -44,7 +44,7 @@ docs/
 │           ├── Login.md                  … G-03 ログイン画面
 │           └── ArticleList.md            … G-04 記事一覧画面
 └── deploy/                               … 公開・運用の手順書
-    ├── lightsail-provisioning.md         … サーバー準備手順（現行）
+    ├── lightsail-provisioning.md         … サーバーを一から作り直す手順（初回のGo版の起動まで）
     ├── go-auto-deploy.md                 … 通常の更新（自動デプロイ）の流れ・止め方・失敗時の見方
     ├── ci-and-release.md                 … CIの検査と、配布成果物（イメージ・画面・運用ファイル）
     ├── database-backup-and-restore.md    … DBのバックアップと復元の手順
@@ -118,8 +118,8 @@ APIに共通する決まりごと。データの形式や送り方、結果をHT
 
 公開・運用の手順書。目的ごとに分かれている。
 
-- `lightsail-provisioning.md`: 現行のサーバー（AWS Lightsail）を用意する手順書。インスタンスの作成から初期設定までを記載している。
+- `lightsail-provisioning.md`: 本番のサーバー（AWS Lightsail）を一から作り直す手順書。インスタンスの作成、初期設定、本番の設定ファイル（項目の一覧）、最初のGo版を手で起動する手順、日次バックアップ、完了チェックリストを記載している。通常の更新は `go-auto-deploy.md` が行う。
 - `go-auto-deploy.md`: 通常の更新の仕組み。`main` に取り込まれた変更が、検査成功後に自動で本番へ入る流れ、止め方、有効にする手順、失敗したときの見方。
-- `ci-and-release.md`: CIの検査の一覧と、配布成果物（Go版のDockerイメージ、画面、運用ファイル、manifest）の作り方・照合の仕方。
+- `ci-and-release.md`: CIの検査の一覧（必須かどうか）と、配布成果物（Go版のDockerイメージ、画面、運用ファイル、manifest）の作り方・照合の仕方、必要な秘密の名前。
 - `database-backup-and-restore.md`: データベースを安全にバックアップし、別のDBへ復元して中身を確かめる手順。
 - `rollback-to-python.md`: Go版に重大な問題が出たときに、サーバーに残してある手段でPython版へ戻す緊急手順。切り戻し先を削除するときに、この資料も削除する。
