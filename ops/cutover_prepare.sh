@@ -138,11 +138,30 @@ step_audit() {
 
 # ---- 3. 切り戻し用の記録 ----
 step_previous_record() {
-  local container image_id tag
+  local container container_image image_ref image_id container_created image_created tag
   container="$(legacy_dc ps -q api 2>/dev/null | head -1 | tr -d '\r')"
   [ -n "$container" ] || fail_step previous-record "Python版のAPIが動いていない"
-  image_id="$(docker inspect --format '{{.Image}}' "$container" 2>/dev/null | tr -d '\r')"
-  [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || fail_step previous-record "Python版の箱の識別子を取得できない"
+
+  # 1. コンテナが持つ識別子で箱を引く（従来の保存方式ではこれで引ける）
+  container_image="$(docker inspect --format '{{.Image}}' "$container" 2>/dev/null | tr -d '\r')"
+  image_id="$(docker image inspect "$container_image" --format '{{.Id}}' 2>/dev/null | tr -d '\r' || true)"
+
+  # 2. 引けないとき（containerdの保存方式では、コンテナが持つ識別子で箱を引けない）は、箱の名前から引く。
+  #    ただし、名前の箱がいま動いているものと同じとは限らない（作り直された後かもしれない）ので、
+  #    コンテナが箱より後に作られていること（＝いま動いているのが、この箱であること）を確かめる
+  if [[ ! "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    image_ref="$(docker inspect --format '{{.Config.Image}}' "$container" 2>/dev/null | tr -d '\r')"
+    [[ "$image_ref" =~ ^[A-Za-z0-9._/:@-]+$ ]] || fail_step previous-record "Python版の箱の名前を取得できない"
+    image_id="$(docker image inspect "$image_ref" --format '{{.Id}}' 2>/dev/null | tr -d '\r' || true)"
+    [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || fail_step previous-record "Python版の箱の識別子を取得できない"
+    container_created="$(date -d "$(docker inspect --format '{{.Created}}' "$container" 2>/dev/null | tr -d '\r')" +%s 2>/dev/null || true)"
+    image_created="$(date -d "$(docker image inspect "$image_ref" --format '{{.Created}}' 2>/dev/null | tr -d '\r')" +%s 2>/dev/null || true)"
+    [[ "$container_created" =~ ^[0-9]+$ ]] && [[ "$image_created" =~ ^[0-9]+$ ]] ||
+      fail_step previous-record "コンテナと箱の作成日時を確認できない"
+    [ "$container_created" -ge "$image_created" ] ||
+      fail_step previous-record "箱が、いま動いているコンテナより後に作り直されている（動いている箱と同じ保証がない）"
+  fi
+
   # 別名を付けておく（以後 `docker compose build` などで元の名前が付け替わっても、箱が消えない）
   tag="mytechpulse-legacy-api:pre-go-$(date -u +%Y%m%d)"
   docker tag "$image_id" "$tag" >/dev/null 2>&1 || fail_step previous-record "Python版の箱に別名を付けられない"
