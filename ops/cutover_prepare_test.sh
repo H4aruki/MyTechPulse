@@ -70,7 +70,7 @@ setup() {
 
   export FAKE_CALLS="$FX_TMP/calls.log"
   : >"$FAKE_CALLS"
-  unset FAKE_IMAGE_EXTRA FAKE_IMAGE_ENV_BAD FAKE_HISTORY_BAD FAKE_AUDIT_FAIL FAKE_NAMES_BAD FAKE_NO_API FAKE_BAD_IMAGE_ID FAKE_PULL_FAIL FAKE_PREFLIGHT_FAIL MTP_ENV_FILE MTP_CORS_ALLOWED_ORIGINS
+  unset FAKE_CONTAINERD FAKE_CONTAINER_CREATED FAKE_IMAGE_CREATED FAKE_IMAGE_EXTRA FAKE_IMAGE_ENV_BAD FAKE_HISTORY_BAD FAKE_AUDIT_FAIL FAKE_NAMES_BAD FAKE_NO_API FAKE_BAD_IMAGE_ID FAKE_PULL_FAIL FAKE_PREFLIGHT_FAIL MTP_ENV_FILE MTP_CORS_ALLOWED_ORIGINS
   setup_fakes
 }
 
@@ -94,13 +94,21 @@ args="$*"
 printf 'docker [cwd=%s project=%s] %s\n' "${PWD##*/}" "${COMPOSE_PROJECT_NAME:-}" "$args" >>"$FAKE_CALLS"
 case "$args" in
   "compose ps -q api") [ "${FAKE_NO_API:-}" = 1 ] || echo cid-api ;;
-  "inspect --format {{.Image}} cid-api") if [ "${FAKE_BAD_IMAGE_ID:-}" = 1 ]; then echo broken; else echo "$FAKE_LEGACY_IMAGE_ID"; fi ;;
+  # コンテナが持つ識別子。containerdの保存方式では、これで箱を引けない（FAKE_CONTAINERD=1）
+  "inspect --format {{.Image}} cid-api") if [ "${FAKE_CONTAINERD:-}" = 1 ]; then echo "$FAKE_CONTAINERD_ID"; else echo "$FAKE_LEGACY_IMAGE_ID"; fi ;;
+  "inspect --format {{.Config.Image}} cid-api") echo mytechpulse-api ;;
+  "inspect --format {{.Created}} cid-api") echo "${FAKE_CONTAINER_CREATED:-2026-10-05T01:17:05.111952982Z}" ;;
+  "image inspect "*"--format {{.Id}}")
+    # 識別子の指定が、引けない識別子のときは失敗する
+    if [ "${FAKE_CONTAINERD:-}" = 1 ] && [ "$3" = "$FAKE_CONTAINERD_ID" ]; then echo "Error response from daemon: No such image" >&2; exit 1; fi
+    if [ "${FAKE_BAD_IMAGE_ID:-}" = 1 ]; then echo broken; else echo "$FAKE_LEGACY_IMAGE_ID"; fi ;;
+  "image inspect "*"--format {{.Created}}") echo "${FAKE_IMAGE_CREATED:-2026-10-05T10:16:56.135812664+09:00}" ;;
   "tag "*) ;;
   create*) echo cid-inspect ;;
   "export cid-inspect")
     if [ "${FAKE_IMAGE_EXTRA:-}" = 1 ]; then cat "$FAKE_IMAGE_TAR_EXTRA"; else cat "$FAKE_IMAGE_TAR"; fi ;;
   "rm cid-inspect") ;;
-  "image inspect "*"--format"*)
+  "image inspect "*"{{json .Config.Env}}")
     if [ "${FAKE_IMAGE_ENV_BAD:-}" = 1 ]; then echo '["PATH=/usr/bin","API_TOKEN=synthetic"]'; else echo '["PATH=/usr/local/sbin:/usr/bin"]'; fi ;;
   "history --no-trunc"*)
     echo 'COPY api /api'
@@ -122,6 +130,7 @@ esac
 exit 0
 FAKE
   chmod +x "$FX_TMP/bin/docker"
+  export FAKE_CONTAINERD_ID="sha256:$(printf 'c%.0s' $(seq 1 64))"
   export FAKE_LEGACY_IMAGE_ID="$LEGACY_IMAGE_ID" FAKE_IMAGE_TAR="$FX_TMP/image.tar" FAKE_IMAGE_TAR_EXTRA="$FX_TMP/image-extra.tar"
   export PATH="$FX_TMP/bin:$PATH"
 }
@@ -300,6 +309,36 @@ case_unreadable_image_id_stops() {
   FAKE_BAD_IMAGE_ID=1 expect 1
   [ ! -e "$FX_ROOT/previous-release.json" ] || fail "切り戻しの記録が作られている"
   expect_lacks '^docker .* tag '
+}
+
+# containerdの保存方式（本番）: コンテナが持つ識別子では箱を引けない。名前から引き、作成日時で裏づけを取る
+case_containerd_store_finds_the_image_by_name() {
+  FAKE_CONTAINERD=1 expect 0
+  # 引けなかった識別子ではなく、名前から引いた箱に別名を付けている
+  expect_has "docker .* tag $LEGACY_IMAGE_ID mytechpulse-legacy-api:pre-go-"
+  expect_lacks "tag $FAKE_CONTAINERD_ID"
+  out_has 'prepare: previous-record [0-9]+s ok' || fail "工程が成功していない"
+}
+
+case_containerd_store_rejects_an_image_rebuilt_after_the_container() {
+  # 箱が、コンテナより後に作り直されている（動いている箱と同じ保証がない）。別名を付けずに止まる
+  FAKE_CONTAINERD=1 FAKE_IMAGE_CREATED=2026-10-06T00:00:00+09:00 FAKE_CONTAINER_CREATED=2026-10-05T01:17:05Z expect 1
+  out_has '後に作り直されている' || fail "理由が表示されていない"
+  expect_lacks '^docker .* tag '
+  [ ! -e "$FX_ROOT/previous-release.json" ] || fail "切り戻しの記録が作られている"
+}
+
+case_containerd_store_rejects_unreadable_timestamps() {
+  FAKE_CONTAINERD=1 FAKE_CONTAINER_CREATED=not-a-date expect 1
+  out_has '作成日時を確認できない' || fail "理由が表示されていない"
+  expect_lacks '^docker .* tag '
+}
+
+case_classic_store_does_not_need_the_name_lookup() {
+  expect 0
+  # 従来の保存方式では、コンテナが持つ識別子で引けるので、名前や日時の確認は要らない
+  expect_lacks '{{.Config.Image}}'
+  expect_lacks '{{.Created}}'
 }
 
 case_pull_failure_stops_before_env_file() {
