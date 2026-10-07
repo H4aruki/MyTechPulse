@@ -197,18 +197,11 @@ if [ "$NEED_RELOGIN" -eq 1 ]; then
 fi
 
 cat <<'EOF'
-▲ VCNのSecurity List / NSG で ingress（tcp 22 / 80 / 443）の開放が別途必要です。
+▲ Lightsail の「ネットワーク」→ IPv4 ファイアウォールで、tcp 22 / 80 / 443 の開放が別途必要です。
   未設定だとホスト側のiptablesを開けても外部から到達できません。
 
-次の手順（詳細は docs/deploy/lightsail-provisioning.md）:
-  1. git clone <このリポジトリ> && cd MyTechPulse
-  2. cp backend/.env.example backend/.env して値を埋める
-     - SECRET_KEY は本番用に新規生成する（開発用を使い回さない）:
-         python3 -c "import secrets; print(secrets.token_hex(32))"
-     - QIITA_ACCESS_TOKEN を設定する
-  3. ルートに .env を作り MYSQL_ROOT_PASSWORD を強いランダム値で設定する
-  4. docker compose up -d --build
-     （テーブル作成は backend/entrypoint.sh の init_db.py が自動実行する）
-  5. curl -sS http://localhost:8000/ で {"Hello":"World"} を確認
+次の手順は docs/deploy/lightsail-provisioning.md を参照してください。
+アプリの起動（Go版API・DB・Caddy）と、通常の更新（自動デプロイ）の前提は、
+docs/deploy/go-auto-deploy.md にあります。
 ========================================================================
 EOF
