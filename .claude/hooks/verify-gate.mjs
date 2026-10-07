@@ -36,9 +36,10 @@ writeState(sessionId, { ...state, stuckCount });
 emit(
   buildStopBlock(
     'コードを編集しましたが、検査も組み立ても一度も実行していません。終わりにする前に実際に動かして、その出力を確認してください。' +
-      '\n  サーバー側: ruff check backend' +
-      '\n  画面側: cd frontend && npm run lint && npm run build' +
-      '\n  設定まわりの仕掛け: node --test ".claude/hooks/**/*.test.mjs"' +
+      '\n  サーバー側（Go）: cd server && go vet ./... && go test ./...' +
+      '\n  画面側: cd frontend && npm run lint && npm run test && npm run build' +
+      '\n  運用スクリプト（ops/）: bash ops/<名前>_test.sh' +
+      '\n  設定まわりの仕掛け: node --test ".claude/hooks/**/*.test.mjs" scripts/*.test.mjs' +
       '\n結果が失敗でも構いません。失敗しているならその内容をそのまま報告してください。',
   ),
 );

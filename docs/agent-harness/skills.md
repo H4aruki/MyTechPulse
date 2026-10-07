@@ -20,7 +20,7 @@
 - `harness-maintenance`: 共通設定の同期
 - `mytechpulse-domain`: 推薦と記事順位の仕様
 - `api-contract`: APIとフロント型の同期
-- `auth-security-review`: JWT、権限、秘密情報の確認
+- `auth-security-review`: セッション、CSRF、権限、秘密情報の確認
 - `database-change`: 既存データを守るDB変更
 - `frontend-implementation`: 画面実装と操作確認
 - `release-readiness`: PR提出前の公開準備確認

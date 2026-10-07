@@ -18,5 +18,5 @@ Claude Codeでは、上の `AGENTS.md` をこのプロジェクトの共通ル�
 Claude Codeを親にしてCodex workerを起動する明示依頼だけ、次の共通ランナーを使います。
 
 ```powershell
-node scripts/agent-harness/spawn-agent.mjs --activate multi --parent claude --agent codex --worktree auth-api --task "backend/app/routes/配下の認証APIだけを担当し、テストとコミットを行う"
+node scripts/agent-harness/spawn-agent.mjs --activate multi --parent claude --agent codex --worktree auth-api --task "server/internal/auth/配下の認証APIだけを担当し、テストとコミットを行う"
 ```

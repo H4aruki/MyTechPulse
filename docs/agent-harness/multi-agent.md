@@ -23,7 +23,7 @@ node scripts/agent-harness/spawn-agent.mjs --activate multi --parent codex --age
 Claude Codeを親、Codexをworkerにする場合:
 
 ```powershell
-node scripts/agent-harness/spawn-agent.mjs --activate multi --parent claude --agent codex --worktree auth-api --task "backend/app/routes/配下の認証APIだけを担当し、テストとコミットを行う"
+node scripts/agent-harness/spawn-agent.mjs --activate multi --parent claude --agent codex --worktree auth-api --task "server/internal/auth/配下の認証APIだけを担当し、テストとコミットを行う"
 ```
 
 `--activate multi` は明示的な有効化です。省略した起動は拒否されます。
