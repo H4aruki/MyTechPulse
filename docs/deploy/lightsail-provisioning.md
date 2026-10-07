@@ -237,7 +237,8 @@ docker stats --no-stream   # コンテナごとの実使用量
 
 `ops/backup_db.sh` は、バックアップを1つ作って、中身を確認する。**毎日自動で動かすには、cron への登録が要る**（スクリプトの冒頭に、登録の例がある）。
 
-- 古い世代の自動削除は、事故を防ぐため、いまは行っていない（オーナーの承認待ち。[database-backup-and-restore.md](database-backup-and-restore.md)）。ディスクの空きを、ときどき確認する（`df -h`）。
+- 取得と検証に成功した後、**7日を超えた古い世代が自動で削除される**。残したいバックアップには、同じ名前に `.keep` を付けた空のファイルを置く（[database-backup-and-restore.md](database-backup-and-restore.md)）。ディスクの空きは、ときどき確認する（`df -h`）。
+- この動きは、サーバーの `~/MyTechPulse` が、`ops/prune_backups.sh` を含む新しい版であることが前提（`cd ~/MyTechPulse && git pull --ff-only`）。
 - バックアップは、同じサーバーに保存される。サーバーごと失われると復元できないため、外部への退避が残っている（`TASKS.md`）。
 
 ## 10. 画面と自動デプロイをつなぐ
