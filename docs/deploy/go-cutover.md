@@ -37,7 +37,7 @@
 | 切り替え・切り戻しの実行 | `part1`・`part2`（失敗したら自動で切り戻す）と、段階ごとのスクリプト | `ops/cutover.sh` | 偽の道具で57項目（`ops/cutover_test.sh`）。**本物のDocker・Caddy・PostgreSQL・Go版の箱で、本番と同じ構成を別の名前・別のportに作り、`part1`（成功と、失敗したときの自動の切り戻し）・`part2`・その後の切り戻しまで通した**（`ops/cutover_integration_test.sh`、15項目） |
 | Go版のDB移行 | 箱の `/migrate` を1回実行 | `docker-compose.yml`（`migrate-go`） | 上の通しで確認済み |
 | 前後の内容比較・動作確認・片付け | #126 で使ったものと同じ | `ops/snapshot_migration_state.sh`、`ops/compare_migration_state.sh`、`ops/rehearsal_smoke.sh`、`ops/sql/rehearsal_cleanup.sql` | #126 で確認済み |
-| 画面の公開と切り戻し | Cloudflare Pages（手動） | §5、§6 | **未確認**（実際のアカウントでの操作は、当日が初めて） |
+| 画面の公開と切り戻し | GitHubから1コマンド（照合 → 公開 → 確認。再ビルドしない） | `.github/workflows/cutover-frontend.yml`、`scripts/cutover-frontend.mjs` | 判定・API呼び出しの組み立ては偽のCloudflareで確認（`scripts/cutover-frontend.test.mjs`、19項目）。**実際のアカウントでの操作は、当日が初めて**（うまくいかないときは管理画面で手動） |
 
 この環境では確認できないこと（当日、サーバー上で確認が要る）:
 
@@ -105,7 +105,7 @@ bash ~/cutover-boot/ops/cutover_prepare.sh ~/cutover-in <Manifest SHA256>
 
 最後に、当日のコマンドが、実際のパス入りで表示されます。
 
-画面（Cloudflare Pages）の、**いまの公開の識別子**だけは、ダッシュボードの Deployments（Production）で見て、控えておきます（切り戻しで戻す先です）。
+画面（Cloudflare Pages）の、いまの公開の識別子は、当日の画面の公開のとき（§5）に自動で記録されます。控える作業は要りません。
 
 ### 4-3. 決めること・知らせること
 
@@ -133,22 +133,33 @@ MTP_IT_GO_IMAGE=ghcr.io/h4aruki/mytechpulse-api-go@sha256:<digest> MTP_IT_LEGACY
 | --- | --- | --- | --- |
 | 1 | — | — | 作業者・承認者・実行回・中止条件を確認し、**承認者が開始を承認** |
 | 2 | サーバー | `bash <release directory>/ops/cutover.sh part1` | 事前確認 → **メンテナンス開始（ここから停止時間）** → 最終バックアップ → 移行前の記録 → DB移行 → 移行後の比較 → Go版の起動（まだ公開しない）。**どれかが失敗したら、確認なしで自動的に切り戻します**（事前確認の失敗だけは、何も変えていないので切り戻しません） |
-| 3 | 自分のPC | 下の「画面の公開」 | 新しい画面をCloudflare Pagesへ公開する |
+| 3 | 自分のPC | 下の「画面の公開」（`gh workflow run cutover-frontend.yml …`） | 照合済みの新しい画面をCloudflare Pagesへ公開する（切り戻し先の識別子も記録される） |
 | 4 | サーバー | `bash <release directory>/ops/cutover.sh part2` | 「画面を公開しましたか？」に `yes` と答える → **Go版へ切り替え（ここで停止が終わる）** → 動作確認 → 片付け → 完了。切り替え・動作確認が失敗したら、合成利用者を片付けてから、自動的に切り戻します |
 | 5 | ブラウザ | 既存の利用者でログイン → 記事が出る | **Qiitaの記事が取れること**も確認する。ここで問題があれば §6 の判断をする |
 
 出力は、段階の名前・秒数・成功/失敗と、固定の文、件数だけです（設定ファイルの値は出ません）。`part1` の途中でバックアップの件数（利用者,タグ,興味度）が出るので、記録係が #127 に控えます。停止時間は `part2` の中で表示されます。状態は、いつでも `bash <release directory>/ops/cutover.sh status` で見られます。
 
-### 画面の公開（順3・手動）
+### 画面の公開（順3）
 
-新しい画面を、再 build せずに、同じ実行回の画面の成果物（`frontend-<コミットSHA>`）から公開します。自分のPCで行います（4-1 で取り出したフォルダに、`frontend-<コミットSHA>.tar.gz` があります）。
+自分のPCから、GitHub のワークフロー（`.github/workflows/cutover-frontend.yml`、#163）を実行します。同じ実行回の画面の成果物を、**再ビルドせずに**公開します。`<実行回のID>` と `<Manifest SHA256>` は、4-1 で控えた配布の Summary の値です。
 
 ```bash
-cd /c/work/cutover-in && mkdir -p site && tar -xzf frontend-*.tar.gz -C site
-npx wrangler pages deploy site --project-name=mytechpulse --branch=main
+gh workflow run cutover-frontend.yml -R H4aruki/MyTechPulse -f action=publish -f run_id=<実行回のID> -f manifest_sha256=<Manifest SHA256>
+gh run watch -R H4aruki/MyTechPulse
 ```
 
-（**要確認**: 実際のアカウントでの操作は、当日が初めてです。公開できたら、Cloudflare Pages の Deployments で、新しい公開が現在のものになっていることを確認します。）
+ワークフローは、次を順に行います。どれかが失敗したら、そこで止まり、**何も公開しません**。
+
+1. 実行回が、成功した `main` の配布であること、Manifest SHA256 が一致することを確認する。
+2. 画面の成果物のSHA256を照合する（照合に使うのは配布時に作ったもので、再ビルドはしません）。
+3. いま公開されている画面の識別子を記録する（**切り戻し先**。結果のページ（Summary）にも出ます）。
+4. Cloudflare Pages へ公開する。
+5. 本番の画面が入れ替わったこと、`https://mytechpulse.net/` と `/app` に届くことを確認する。
+
+注意:
+
+- このワークフローは、**`main` に取り込まれてから**使えます（それまでは実行できません）。
+- 実際のアカウントでの操作は、当日が初めてです。Cloudflare の API の応答の形は、公式の資料に合わせて作ってありますが、実際の応答での確認は、当日になります。**うまくいかなかったときは、Cloudflare Pages の管理画面（Deployments）で、手で公開・切り戻しできます**（結果のページに出た識別子を使う）。
 
 ### 1段階ずつ実行したいとき
 
@@ -197,7 +208,12 @@ npx wrangler pages deploy site --project-name=mytechpulse --branch=main
    bash <release directory>/ops/cutover.sh rollback
    ```
    これは、次を順に行います。Caddyをメンテナンスにする → Go版を止める（コンテナを消さない）→ `previous-release.json` にある旧版の運用ファイルで、Python版APIを起動する → 稼働確認 → Caddyを旧版の設定（Python版向け）へ戻す → 本番のホスト名で確認。**データベースは巻き戻しません。**
-2. 画面を、直前の公開へ戻す（Cloudflare Pages の Deployments で、控えておいた切り替え前の公開を選んで「Rollback」）。
+2. 画面を公開した後だった場合は、画面を直前の公開へ戻す（自分のPCで）。戻す先は、公開前に記録された識別子（結果のページに出ています）です。指定しなければ、1つ前の成功した公開へ戻ります。
+   ```bash
+   gh workflow run cutover-frontend.yml -R H4aruki/MyTechPulse -f action=rollback
+   gh run watch -R H4aruki/MyTechPulse
+   ```
+   特定の公開へ戻したいときは、`-f rollback_to=<公開の識別子>` を付けます。うまくいかなければ、Cloudflare Pages の管理画面（Deployments）で、切り替え前の公開を選んで「Rollback」します。
 3. 稼働確認（Python版でログイン、記事一覧）。
 4. 状態は、名前を変えて残ります（`cutover-state.rolledback-…`）。`part1` から、やり直せます。
 
