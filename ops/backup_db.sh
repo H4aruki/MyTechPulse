@@ -5,6 +5,8 @@
 set -euo pipefail
 
 BACKUP_DIR="${BACKUP_DIR:-backups}"
+# この日数を超えた古い世代を、取得と検証に成功した後に削除する（ops/prune_backups.sh。.keep付きは残す）
+RETENTION_DAYS="${RETENTION_DAYS:-7}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 
 mkdir -p "$BACKUP_DIR"
@@ -37,5 +39,11 @@ backup_name="$(basename "$DEST")"
 (cd "$backup_dir" && sha256sum "$backup_name") > "$DEST.sha256"
 
 docker compose exec -T db pg_restore --list < "$DEST" > /dev/null
+
+# 取得と検証に成功した後だけ、古い世代を削除する（途中で失敗したときは、ここへ来ない）。
+# 削除の出力は標準エラーへ出るため、最後の行（バックアップの場所）は変わらない
+# 削除に失敗しても、取得したバックアップは有効なので、全体は失敗にしない（自動デプロイが止まらないように）
+"$(dirname "${BASH_SOURCE[0]}")/prune_backups.sh" "$BACKUP_DIR" "$RETENTION_DAYS" ||
+    echo "WARN: 古いバックアップの削除に失敗しました（取得したバックアップは有効です）" >&2
 
 printf '%s\n' "$DEST"

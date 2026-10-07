@@ -33,9 +33,12 @@ rg -q "RAISE EXCEPTION 'tag normalization collision'" \
 
 rg -q 'pg_dump -Fc' ops/backup_db.sh || fail 'backup is not custom format'
 rg -q 'sha256sum' ops/backup_db.sh || fail 'backup checksum is missing'
-if rg -n 'find .* -delete|RETENTION_DAYS' ops/backup_db.sh; then
-    fail 'backup retention deletion remains enabled'
-fi
+rg -q 'prune_backups.sh' ops/backup_db.sh || fail 'backup retention is not wired'
+rg -q 'RETENTION_DAYS' ops/backup_db.sh || fail 'backup retention days is missing'
+# 削除の処理は、バックアップの取得・検証の後ろにあること（失敗したときに消さないため）
+restore_line="$(rg -n 'pg_restore --list' ops/backup_db.sh | head -1 | cut -d: -f1)"
+prune_line="$(rg -n 'dirname .*prune_backups.sh' ops/backup_db.sh | head -1 | cut -d: -f1)"
+[ "$prune_line" -gt "$restore_line" ] || fail 'backup retention runs before the backup is verified'
 
 if ./ops/restore_db.sh sample.dump mytechpulse >/dev/null 2>&1; then
     fail 'existing database name was accepted'
