@@ -23,14 +23,14 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 ### Lightsailのプロビジョニングと初期セットアップ ✅ **完了（2026-08-14）**（#50 closed）
 本番インスタンス: 東京 `ap-northeast-1a` / Ubuntu 24.04.4 LTS / x86_64 / 静的IP `54.168.29.67`
 
-- [x] VM初期セットアップスクリプト `ops/oracle-vm-setup.sh` 作成（Docker導入 / SSH硬化 / fail2ban / TZ）。**Lightsailでもそのまま動作する**（arm64チェックは警告のみ、iptables部分はREJECTルールが無ければ末尾追加にフォールバック）
+- [x] VM初期セットアップスクリプト `ops/lightsail-vm-setup.sh`（旧名 oracle-vm-setup.sh。2026-10-07に改名）作成（Docker導入 / SSH硬化 / fail2ban / TZ）。**Lightsailでもそのまま動作する**（arm64チェックは警告のみ、iptables部分はREJECTルールが無ければ末尾追加にフォールバック）
 - [x] プロビジョニング手順書 `docs/deploy/lightsail-provisioning.md` 作成（有料プラン切替・静的IP・スワップ2GB）
 - [x] **オーナー作業（登録）**: AWSアカウント作成（2026-08-13完了。MFA / 請求アラート / リージョン東京 / カード登録まで済）
 - [x] **オーナー作業（課金）**: 有料プランへ切り替え（2026-08-14完了）
 - [x] **オーナー作業**: Lightsailインスタンス作成（$7プラン / Dual-stack）＋静的IPの割り当て
 - [x] **オーナー作業**: IPv4 Firewall で 22 / 80 / 443 開放（80/443はAnywhere IPv4+IPv6）
 - [x] **スワップ2GB作成**（`vm.swappiness=10`。`/etc/fstab`に登録済み）
-- [x] `sudo bash ops/oracle-vm-setup.sh` 実行 → 手順書8節のチェックリストを全て満たすことを確認（sudoなしdocker / Compose v5.4.0 / JST / パスワード認証・rootログイン無効 / fail2ban稼働）
+- [x] `sudo bash ops/lightsail-vm-setup.sh` 実行 → 手順書8節のチェックリストを全て満たすことを確認（sudoなしdocker / Compose v5.4.0 / JST / パスワード認証・rootログイン無効 / fail2ban稼働）
 - [x] **再起動テスト実施（2026-08-17）**。`sudo systemctl reboot` 後、**約40秒でAPIが自動復帰**。スワップ2GB / `vm.swappiness=10` / iptablesの80・443 ACCEPT / crontab / JST / fail2ban / 静的IP のすべてが維持され、3コンテナとも `restart: unless-stopped` で自動起動した
 - [ ] セットアップスクリプトをLightsail向けに整理（`ops/lightsail-vm-setup.sh`へリネーム / スワップ作成の内包 / arm64前提の警告文とiptables節の削除）。**完了メッセージが`MYSQL_ROOT_PASSWORD`とOracleの手順書を案内したままなので併せて直す**（#63でDBがPostgreSQLに変わったため誤った案内になっている）。**#50をクローズしたので、この項目がこの作業の唯一の記録になる**
 
@@ -117,7 +117,7 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 
 ### #55 DEPLOYMENT.mdを作成する（Lightsail運用手順＋移行ランブック）
 - [ ] `docs/deploy/lightsail-provisioning.md`を統合＋スケールアップ/移行の判断基準＋さくらVPS移行ランブック＋READMEからのリンク
-- [ ] 失効した`docs/deploy/oracle-vm-provisioning.md`を残すか削除するか判断（**削除はオーナー確認事項**）
+- [x] 失効した`docs/deploy/oracle-vm-provisioning.md`は削除した（2026-10-07、オーナー許可）。`ops/oracle-vm-setup.sh`はLightsailの初期設定で使うため、`ops/lightsail-vm-setup.sh` へ改名して残した
 
 ### 本番運用開始後すぐ
 - [x] 本番用`backend/.env`作成（2026-08-14）。**SECRET_KEYはサーバー上で新規生成**し開発用とは別の値（S12対応）。`CORS_ALLOWED_ORIGINS`にPagesのURLを設定済み。パーミッションは600

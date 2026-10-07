@@ -29,7 +29,7 @@ MyTechPulse のバックエンド（FastAPI + PostgreSQL）を動かす AWS Ligh
 ```
 AWSアカウント作成 → 有料プランへ切替 → インスタンス作成（東京・1GB）
   → ファイアウォールで 80/443 開放 → SSH → スワップ2GB作成
-  → ops/oracle-vm-setup.sh 実行 → 疎通確認
+  → ops/lightsail-vm-setup.sh 実行 → 疎通確認
 ```
 
 ---
@@ -152,7 +152,7 @@ swapon --show  # /swapfile が出る
 ```bash
 git clone https://github.com/H4aruki/MyTechPulse.git
 cd MyTechPulse
-sudo ./ops/oracle-vm-setup.sh
+sudo ./ops/lightsail-vm-setup.sh
 ```
 
 > **スクリプト名が `oracle-` のままなのは既知の負債。** 中身は Lightsail でもそのまま動く。

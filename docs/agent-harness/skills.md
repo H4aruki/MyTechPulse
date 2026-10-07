@@ -6,7 +6,6 @@
 
 | Skill | 出所 | 固定コミット |
 |---|---|---|
-| `fastapi` | `fastapi/fastapi` の `fastapi/.agents/skills/fastapi` | `50113da16fec53b66b80d75e80a89296de4fa5a5` |
 | `react-best-practices` | `vercel-labs/agent-skills` の `skills/react-best-practices` | `063bee94c3f4df8453406c830b0a7df0f2860278` |
 | `webapp-testing` | `anthropics/skills` の `skills/webapp-testing` | `41bbe19d1a1a7eaab5e7bb9050a417e5c6cffc8f` |
 

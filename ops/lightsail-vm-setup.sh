@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Oracle Cloud Always Free VM（Ampere A1 / Ubuntu 24.04 aarch64 想定）の初期セットアップ。
 # VMにSSHしたあと、root権限で1回実行すれば本番実行環境の土台が整う:
-#   sudo ./ops/oracle-vm-setup.sh
+#   sudo ./ops/lightsail-vm-setup.sh
 #
 # 何度実行しても同じ結果になるよう冪等に書いてある。失敗して途中で止まった場合は
 # 原因を直してそのまま再実行すればよい。
@@ -9,7 +9,7 @@
 # このスクリプトでやらないこと（コンソール側のオーナー作業）:
 #   - VCNのSecurity List / NSG でのingress開放（22 / 80 / 443）
 #   - インスタンス作成そのもの
-#   詳細な手順は docs/deploy/oracle-vm-provisioning.md を参照。
+#   詳細な手順は docs/deploy/lightsail-provisioning.md を参照。
 set -euo pipefail
 
 # ---- 設定（環境変数で上書き可能） ----
@@ -137,7 +137,7 @@ if grep -qs "^Include /etc/ssh/sshd_config.d/\*.conf" /etc/ssh/sshd_config; then
     log "SSH設定を硬化（パスワード認証・root ログインを無効化）"
     install -m 0755 -d /etc/ssh/sshd_config.d
     cat > "$SSHD_DROPIN" <<'EOF'
-# MyTechPulse: 本番VMのSSH硬化設定（ops/oracle-vm-setup.sh が生成）
+# MyTechPulse: 本番VMのSSH硬化設定（ops/lightsail-vm-setup.sh が生成）
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
@@ -159,7 +159,7 @@ fi
 log "fail2ban のsshd jailを有効化"
 install -m 0755 -d /etc/fail2ban/jail.d
 cat > "$FAIL2BAN_JAIL" <<'EOF'
-# MyTechPulse: SSHブルートフォース対策（ops/oracle-vm-setup.sh が生成）
+# MyTechPulse: SSHブルートフォース対策（ops/lightsail-vm-setup.sh が生成）
 [sshd]
 enabled = true
 # Ubuntu 24.04 は auth.log を持たずjournaldに記録するため systemd を明示する
@@ -200,7 +200,7 @@ cat <<'EOF'
 ▲ VCNのSecurity List / NSG で ingress（tcp 22 / 80 / 443）の開放が別途必要です。
   未設定だとホスト側のiptablesを開けても外部から到達できません。
 
-次の手順（詳細は docs/deploy/oracle-vm-provisioning.md）:
+次の手順（詳細は docs/deploy/lightsail-provisioning.md）:
   1. git clone <このリポジトリ> && cd MyTechPulse
   2. cp backend/.env.example backend/.env して値を埋める
      - SECRET_KEY は本番用に新規生成する（開発用を使い回さない）:
