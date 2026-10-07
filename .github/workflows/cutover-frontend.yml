@@ -1,7 +1,8 @@
 name: Cutover frontend
 
-# 本番のGo版への切り替えで、画面（Cloudflare Pages）を公開する・直前の公開へ戻す（#127・#163）。
-# 手動実行だけ。オーナーが、切り替えの当日に実行する（手順は docs/deploy/go-cutover.md）。
+# 画面（Cloudflare Pages）を、配布の実行回の成果物から公開する・直前の公開へ戻す（#127・#163）。
+# 手動実行だけ。通常の更新は自動デプロイ（ci.yml の go-deploy）が行うので、これは、画面だけを出し直す・
+# 戻すときに、オーナーが使う（手順は docs/deploy/go-auto-deploy.md）。
 #
 #   公開:     gh workflow run cutover-frontend.yml -f action=publish -f run_id=<実行回のID> -f manifest_sha256=<Manifest SHA256>
 #   切り戻し: gh workflow run cutover-frontend.yml -f action=rollback [-f rollback_to=<公開の識別子>]

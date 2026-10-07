@@ -23,7 +23,7 @@ test("Go版・画面・運用スクリプト・composeの変更は、反映が�
 test("文書・設定・他のworkflowだけの変更は、反映しない", () => {
   for (const file of [
     "README.md",
-    "docs/deploy/go-cutover.md",
+    "docs/deploy/go-auto-deploy.md",
     "CONTRIBUTING.md",
     "TASKS.md",
     ".claude/settings.json",

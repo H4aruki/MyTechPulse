@@ -131,8 +131,8 @@ prepare_release() {
   local run_id="$1" src="$FX_TMP/src/ops-real"
   rm -rf "$src" "$work/boot-$run_id"
   mkdir -p "$src" "$work/boot-$run_id"
-  (cd "$repo_root" && tar -cf - docker-compose.yml Caddyfile ops docker-compose.rehearsal.yml) | tar -xf - -C "$src"
-  tar -czf "$FX_ART/ops-${FX_COMMIT}.tar.gz" -C "$src" docker-compose.yml Caddyfile ops docker-compose.rehearsal.yml
+  (cd "$repo_root" && tar -cf - docker-compose.yml Caddyfile ops) | tar -xf - -C "$src"
+  tar -czf "$FX_ART/ops-${FX_COMMIT}.tar.gz" -C "$src" docker-compose.yml Caddyfile ops
   FX_MANIFEST_RUN_ID="$run_id" fx_write_manifest
   MANIFEST_SHA="$MTP_MANIFEST_SHA256"
   tar -xzf "$FX_ART/ops-${FX_COMMIT}.tar.gz" -C "$work/boot-$run_id"

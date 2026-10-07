@@ -40,8 +40,8 @@ setup() {
   # 本番の配布と同じ作りのopsのarchive（リポジトリの運用ファイル一式）を作る
   local src="$FX_TMP/src/ops-real"
   mkdir -p "$src"
-  (cd "$repo_root" && tar -cf - docker-compose.yml Caddyfile ops docker-compose.rehearsal.yml) | tar -xf - -C "$src"
-  tar -czf "$FX_ART/ops-${FX_COMMIT}.tar.gz" -C "$src" docker-compose.yml Caddyfile ops docker-compose.rehearsal.yml
+  (cd "$repo_root" && tar -cf - docker-compose.yml Caddyfile ops) | tar -xf - -C "$src"
+  tar -czf "$FX_ART/ops-${FX_COMMIT}.tar.gz" -C "$src" docker-compose.yml Caddyfile ops
   fx_write_manifest
   MANIFEST_SHA="$MTP_MANIFEST_SHA256"
   unset MTP_RELEASE_MANIFEST MTP_MANIFEST_SHA256 MTP_RELEASE_RUN_ID MTP_RELEASE_RUN_ATTEMPT MTP_RELEASES_ROOT

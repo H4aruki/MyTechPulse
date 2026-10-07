@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 直前のreleaseの記録（切り戻しの入力）を読む部品。deploy_release.sh と rehearsal.sh が共有する。
+# 直前のreleaseの記録（切り戻しの入力）を読む部品。deploy_release.sh と deploy_go.sh が共有する。
 # 単独では実行しない。呼び出し側が `set -euo pipefail` と、拒否して終了する `reject MESSAGE` を用意しておく。
 
 # parse_previous_release_record FILE
