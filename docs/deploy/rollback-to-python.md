@@ -16,6 +16,8 @@
 | 切り替え直前のバックアップ | `/home/ubuntu/MyTechPulse/backups/mytechpulse_20261007T045240Z.dump` |
 | 切り替え前の画面（Cloudflare Pages）の公開 | 識別子 `ccd95985-0a47-412a-acd7-53ccb7159710` |
 
+**注意**: バックアップは、取得のたびに、7日を超えた古い世代が自動で削除されます（`ops/prune_backups.sh`）。切り替え直前のバックアップを、切り戻しのために残すには、同じ場所に `mytechpulse_20261007T045240Z.dump.keep`（空のファイル）を作ります（`touch`）。`.keep` があるバックアップは、削除されません。
+
 ## 手順
 
 ### 0. 自動デプロイを止める（先に行う）

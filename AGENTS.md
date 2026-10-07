@@ -111,7 +111,7 @@ node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/
 ```
 
 - DBが要る試験（`server/db/migrations` のDB結合試験など）は、環境変数 `TEST_DATABASE_URL` が無いとスキップされる。
-- `ops/` を変更したときは、対応する試験も実行する（`bash ops/deploy_go_test.sh`、`deploy_release_test.sh`、`verify_release_test.sh`。本物のDockerでの通しは `deploy_go_integration_test.sh`）。
+- `ops/` を変更したときは、対応する試験も実行する（`bash ops/deploy_go_test.sh`、`deploy_release_test.sh`、`verify_release_test.sh`、`ops/tests/test_prune_backups.sh`。本物のDockerでの通しは `deploy_go_integration_test.sh`）。
 - Windowsの `gofmt -l` は、改行がCRLFのファイルも列挙する（CIはLinuxで動くため、CIで確認する）。
 
 失敗した検証を成功と報告しません。
