@@ -126,32 +126,42 @@ git config commit.template .gitmessage.txt
 
 | チェック | 中身 | 落ちたら |
 |----------|------|----------|
-| バックエンドの書き方と計算テスト | Ruffで明らかな誤りを検出し、pytestで推薦の重み計算を確認 | **取り込めない**（直す必要がある） |
-| （同上・見た目のズレ） | 字下げや引用符の統一のズレを一覧表示 | 落とさない（いまは参考情報のみ） |
-| フロントエンドの書き方と画面テスト | oxlint、認証状態の画面動作、型、組み立てを確認 | **取り込めない**（直す必要がある） |
-| エージェント設定の確認 | Claude CodeとCodexのフック、Skillsの内容一致 | 公開は止めないが、設定修正が必要 |
+| フロントエンドの書き方チェック | oxlint、API型、画面テスト（カバレッジ付き）、組み立て | **取り込めない**（直す必要がある） |
+| Goバックエンドの検査 | gofmt、go vet、競合検出付きの試験とカバレッジ、ビルド（DB変更が追加だけであることの試験を含む） | **取り込めない**（直す必要がある） |
+| sqlcとOpenAPIの生成差分 | 生成物（DB問い合わせ・API契約）が、コミット済みの内容と一致するか | **取り込めない**（再生成してコミットする） |
+| Go APIのimage検査 | 最終的なDockerイメージの起動・疎通・非root実行 | **取り込めない**（直す必要がある） |
+| 設定まわりの仕掛けの確認 | Claude CodeとCodexのフック・Skillsの内容一致、外部Actionの固定、自動デプロイの条件の試験 | 公開は止めないが、設定修正が必要 |
 
-自動テストは推薦の重み計算から導入しています。認証やAPI、画面のテストは段階的に追加します。カバレッジ計測は、対象が増えた段階で導入します。
+PRには、Goとフロントエンドのカバレッジがコメントで付きます。
+
+### `main` に取り込まれた後（自動デプロイ）
+
+`main` に取り込まれて、上の検査が全部成功すると、本番のGo版APIと画面が自動で入れ替わります。リポジトリ変数 `GO_DEPLOY_ENABLED` が `true` のときだけ動きます（止めたいときは、この変数を消します）。入れ替えに失敗したら、自動で直前の版へ戻ります。**DBの変更は、追加だけにしてください**（戻ったときに直前の版が動かなくなるため。試験が確かめます）。詳しくは [`docs/deploy/go-auto-deploy.md`](./docs/deploy/go-auto-deploy.md) を参照してください。
 
 ### 手元で同じチェックを走らせる
 
 ```bash
-# バックエンド（初回のみ導入）
-backend/venv/Scripts/python.exe -m pip install -r requirements-dev.txt
-backend/venv/Scripts/python.exe -m ruff check backend      # 誤りの検出
-backend/venv/Scripts/python.exe -m ruff format backend     # 見た目を自動で整える
-backend/venv/Scripts/python.exe -m pytest backend/tests/unit/test_scoring.py
+# バックエンド（Go）
+cd server
+test -z "$(gofmt -l .)"      # 整形（出力があれば、整っていないファイル）
+go vet ./...
+go test ./... -race -cover
+go run ./cmd/openapi         # API契約を変えたとき。生成物の差分をコミットに含める
+go tool sqlc generate        # DB問い合わせ（server/db/queries）を変えたとき
 
 # フロントエンド
 cd frontend
 npm run lint
 npm run test
-npx tsc -b
+npm run build
+
+# 運用スクリプト（ops/）を変えたとき
+bash ops/deploy_go_test.sh
 ```
 
-判定の基準は `backend/pyproject.toml` と `frontend/.oxlintrc.json` に書いてあります。
-厳しさは意図的に段階を分けてあり、いまは「明らかな誤り」だけを必須にしています。
-既存コードを一括で整え終えたら、見た目のズレも必須に引き上げます。
+- DBが要る試験は、環境変数 `TEST_DATABASE_URL` が無いとスキップされます。
+- Windowsでは、`gofmt -l` が改行コードの違いで、実際には問題のないファイルも列挙することがあります。その場合はCIの結果で判断してください。
+- 判定の基準は、Goは標準の `gofmt`・`go vet`、フロントエンドは `frontend/.oxlintrc.json` です。
 
 ### `main` を守る設定（設定済み）
 
@@ -163,7 +173,7 @@ npx tsc -b
 | Restrict deletions | `main` を消せない |
 | Block force pushes | 履歴を書き換える強制 push を禁止 |
 | Require a pull request before merging | 直接 push できない。承認の必須人数は 0（1人開発のため） |
-| Require status checks to pass | **上の2つのチェックが緑でないと取り込めない** |
+| Require status checks to pass | **必須チェック4つ（フロントエンドの書き方チェック、Goバックエンドの検査、sqlcとOpenAPIの生成差分、Go APIのimage検査）が緑でないと取り込めない** |
 | Allowed merge methods | **Squash のみ**。1機能=1コミットを守るため、他の取り込み方は選べない |
 
 例外（bypass）は誰にも許可していないため、オーナー自身もこのルールに従います。

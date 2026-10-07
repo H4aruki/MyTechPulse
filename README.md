@@ -14,7 +14,7 @@ MyTechPulseは、複数の技術情報サイトを巡回する手間を減らし
 
 ## 主な機能
 
-- ユーザー登録・ログイン（JWT認証）
+- ユーザー登録・ログイン（サーバー側セッションのCookie認証）
 - カテゴリ別の興味タグ選択と一括選択
 - 興味の強い上位5タグを使ったQiita・Zennの記事取得
 - 提供元ごとに最大10件の記事を表示
@@ -75,11 +75,32 @@ sequenceDiagram
 
 ## 技術スタック
 
-![技術スタック](https://skillicons.dev/icons?i=react,ts,vite,tailwind,python,fastapi,postgres,docker,githubactions,cloudflare,aws)
+![技術スタック](https://skillicons.dev/icons?i=react,ts,vite,tailwind,go,postgres,docker,githubactions,cloudflare,aws)
 
-アイコンに無いものとして、ログイン状態の保持にJWT、パスワードの保護にbcrypt、本番環境のHTTPS化にCaddyを使っています。
+- 画面: React・TypeScript・Vite・Tailwind CSS（Cloudflare Pages で配信）
+- API: Go（機能ごとに分けたモジュラーモノリス）。契約は OpenAPI（`server/openapi/openapi.json`）
+- データベース: PostgreSQL 17
+- 本番: AWS Lightsail（東京）の1台に、API・DB・Caddy（HTTPS化）を置く。更新は GitHub Actions が自動で行う
 
-構成の詳細は[システム構成図](./docs/BasicDesignSpecifications/SystemArchitectureDiagram.md)を参照してください。
+アイコンに無いものとして、ログイン状態の保持にサーバー側セッション（HttpOnly Cookie）、パスワードの保護にbcryptを使っています。
+
+構成の詳細は[システム構成図](./docs/BasicDesignSpecifications/SystemArchitectureDiagram.md)、設計判断の理由は[`docs/adr/`](./docs/adr/)を参照してください。
+
+## 開発を始める
+
+必要なもの: Docker Desktop、Go 1.26 以降、Node.js 22 以上。
+
+```powershell
+Copy-Item server\.env.example server\.env
+Copy-Item frontend\.env.example frontend\.env
+.\dev.ps1
+```
+
+`dev.ps1` が、DB → DBの移行 → Go API（http://127.0.0.1:8001）→ 画面（http://localhost:5173）の順に起動します。手順を分けて実行する方法と、コマンドの詳細は [`AGENTS.md`](./AGENTS.md) の「開発コマンド」にあります。
+
+- APIの確認画面（Swagger UI）: ローカルでは http://127.0.0.1:8001/docs 。**本番では無効**です。
+- 検査: `cd server && go test ./...`、`cd frontend && npm run lint && npm run test && npm run build`。CIと同じ検査と、ブランチ・コミット・PRの決まりは[コントリビューションガイド](./CONTRIBUTING.md)にあります。
+- 本番の更新（自動デプロイ）、サーバーの構築、バックアップと復元、障害時の切り戻しは、[`docs/deploy/`](./docs/deploy/) にまとめています。
 
 ## Roadmap
 

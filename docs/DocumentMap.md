@@ -20,7 +20,9 @@ docs/
 │   └── 2026-09-14-issue-*.md             … IssueごとのTDD実装計画
 ├── adr/                                  … 変更しにくい設計判断と理由
 │   ├── 0001-use-go-modular-monolith.md   … Goモジュラーモノリスの採用
-│   └── 0002-use-server-side-sessions.md  … サーバー側認証セッションの採用
+│   ├── 0002-use-server-side-sessions.md  … サーバー側認証セッションの採用
+│   └── 0003-host-on-cloudflare-pages-and-lightsail.md
+│                                           … 画面をCloudflare Pages、API・DBをLightsail 1台に置く判断
 ├── BasicDesignSpecifications/            … 基本設計書
 │   ├── FeaturesList.md                   … 機能一覧
 │   ├── SystemArchitectureDiagram.md      … システム構成図
@@ -43,6 +45,10 @@ docs/
 │           └── ArticleList.md            … G-04 記事一覧画面
 └── deploy/                               … 公開・運用の手順書
     ├── lightsail-provisioning.md         … サーバー準備手順（現行）
+    ├── go-auto-deploy.md                 … 通常の更新（自動デプロイ）の流れ・止め方・失敗時の見方
+    ├── ci-and-release.md                 … CIの検査と、配布成果物（イメージ・画面・運用ファイル）
+    ├── database-backup-and-restore.md    … DBのバックアップと復元の手順
+    └── rollback-to-python.md             … Python版へ戻す緊急手順（切り戻し先を削除するまで）
 
 ```
 
@@ -62,7 +68,7 @@ Go移行Issue #118〜#129の実装計画への入口。依存順、設計書の�
 
 ### adr/
 
-後から変更しにくく、採用理由をコードだけでは判断しづらい設計判断を短く記録する。現在はGoモジュラーモノリスとサーバー側認証セッションの採用理由を収録している。
+後から変更しにくく、採用理由をコードだけでは判断しづらい設計判断を短く記録する。現在はGoモジュラーモノリス、サーバー側認証セッション、画面とAPI・DBの置き場（Cloudflare PagesとLightsail 1台）の、採用理由を収録している。
 
 ### RequirementsSpecification.md
 
@@ -108,6 +114,12 @@ APIに共通する決まりごと。データの形式や送り方、結果を�
 
 画面ごとの詳細。構成・表示項目・入力チェック・状態ごとの見え方（読み込み中／0件／失敗時）・レスポンシブの扱いを画面ごとに示す。`LandingPage.md`がサービス紹介ページ（G-01）、`SignUp.md`が会員登録画面（G-02）、`Login.md`がログイン画面（G-03）、`ArticleList.md`が記事一覧画面（G-04）に対応する。
 
-### deploy/lightsail-provisioning.md
+### deploy/
 
-現行のサーバー（AWS Lightsail）を用意する手順書。インスタンスの作成から初期設定までを記載している。
+公開・運用の手順書。目的ごとに分かれている。
+
+- `lightsail-provisioning.md`: 現行のサーバー（AWS Lightsail）を用意する手順書。インスタンスの作成から初期設定までを記載している。
+- `go-auto-deploy.md`: 通常の更新の仕組み。`main` に取り込まれた変更が、検査成功後に自動で本番へ入る流れ、止め方、有効にする手順、失敗したときの見方。
+- `ci-and-release.md`: CIの検査の一覧と、配布成果物（Go版のDockerイメージ、画面、運用ファイル、manifest）の作り方・照合の仕方。
+- `database-backup-and-restore.md`: データベースを安全にバックアップし、別のDBへ復元して中身を確かめる手順。
+- `rollback-to-python.md`: Go版に重大な問題が出たときに、サーバーに残してある手段でPython版へ戻す緊急手順。切り戻し先を削除するときに、この資料も削除する。
