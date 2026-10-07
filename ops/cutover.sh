@@ -22,13 +22,16 @@
 #   rollback         いつでも実行できる。Python版へ戻す（DBは巻き戻さない）
 #   status           今の状態（Caddyの向け先、動いているサービス）を表示する。何も変えない
 #
-# 入力（環境変数）
-#   MTP_RELEASE_DIR           必須。verify_release.sh / deploy_release.sh が作ったrelease directory
-#   MTP_ENV_FILE              必須。Go版の設定ファイル。このscriptは項目の有無と、一部の値の確認だけをし、中身は出さない
+# 入力（すべて任意。ふつうは何も指定しない）
+#   MTP_RELEASE_DIR           release directory。指定する場合は、このscriptの場所と同じであること（既定: このscriptの場所）
+#   MTP_ENV_FILE              Go版の設定ファイル（既定: ~/mytechpulse-production.env）。このscriptは項目の有無と、
+#                             一部の値の確認だけをし、中身は出さない
 #                             必須項目: POSTGRES_PASSWORD, API_DOMAIN, APP_ENV=production, QIITA_ACCESS_TOKEN,
 #                             CORS_ALLOWED_ORIGINS, SWAGGER_ENABLED=false
-#   MTP_CUTOVER_ORIGIN        smokeで必須。本番の画面のオリジン（例: https://mytechpulse.net）。CORS_ALLOWED_ORIGINS に含まれること
+#   MTP_CUTOVER_ORIGIN        smokeで使う、本番の画面のオリジン。CORS_ALLOWED_ORIGINS に含まれること
+#                             （既定: CORS_ALLOWED_ORIGINS の最初のもの）
 #   MTP_CUTOVER_CONFIRM_FRONTEND  switchで必須。新しい画面を公開してから yes を指定する
+#                             （part2は、未指定ならその場で「yes」の入力を求める）
 #   MTP_COMPOSE_PROJECT       既定 mytechpulse（本番のproject名）
 #   試験用: MTP_COMPOSE_EXTRA_FILES, MTP_CUTOVER_BASE_URL, MTP_CUTOVER_GO_URL, MTP_CUTOVER_PY_URL, MTP_CUTOVER_WAIT_SECONDS
 #
@@ -46,15 +49,15 @@ reject() {
   exit 2
 }
 
-[ "$#" -eq 1 ] || reject "使い方: cutover.sh <段階>"
+[ "$#" -eq 1 ] || reject "使い方: cutover.sh <part1 | part2 | 段階>"
 stage="$1"
 case "$stage" in
-  preflight | status | maintenance-on | backup | snapshot-before | migrate | compare | go-start | switch | smoke | smoke-cleanup | finish | rollback) ;;
+  part1 | part2 | preflight | status | maintenance-on | backup | snapshot-before | migrate | compare | go-start | switch | smoke | smoke-cleanup | finish | rollback) ;;
   *) reject "不明な段階です: $stage" ;;
 esac
 
-release_dir="${MTP_RELEASE_DIR:-}"
-env_file="${MTP_ENV_FILE:-}"
+release_dir="${MTP_RELEASE_DIR:-$(dirname "$here")}"
+env_file="${MTP_ENV_FILE:-$HOME/mytechpulse-production.env}"
 project="${MTP_COMPOSE_PROJECT:-mytechpulse}"
 wait_seconds="${MTP_CUTOVER_WAIT_SECONDS:-60}"
 
@@ -335,8 +338,15 @@ stage_switch() {
 }
 
 stage_smoke() {
-  local origin="${MTP_CUTOVER_ORIGIN:-}"
-  [[ "$origin" =~ ^https://[A-Za-z0-9.-]+$ ]] || reject "MTP_CUTOVER_ORIGIN（https://画面のホスト名）を指定してください"
+  # 指定が無いときだけ、設定ファイルの最初のオリジンを使う（空で指定したときは拒否する）
+  local origin
+  if [ -z "${MTP_CUTOVER_ORIGIN+x}" ]; then
+    origin="$(env_value CORS_ALLOWED_ORIGINS)"
+    origin="${origin%%,*}"
+  else
+    origin="$MTP_CUTOVER_ORIGIN"
+  fi
+  [[ "$origin" =~ ^https://[A-Za-z0-9.-]+$ ]] || reject "画面のオリジン（https://画面のホスト名）が正しくありません"
   case ",$(env_value CORS_ALLOWED_ORIGINS)," in
     *",$origin,"*) ;;
     *) reject "MTP_CUTOVER_ORIGIN が CORS_ALLOWED_ORIGINS に含まれていません" ;;
@@ -399,7 +409,12 @@ stage_rollback() {
     exit 1
   fi
   echo "cutover: rollback ok（データベースは巻き戻していません）"
-  echo "cutover: 画面（Cloudflare Pages）を、直前の公開（ID: ${PREV_FRONTEND_DEPLOYMENT_ID}）へ戻してください"
+  if [ "$PREV_FRONTEND_DEPLOYMENT_ID" = "see-cloudflare-pages-deployments" ]; then
+    # cutover_prepare.sh が作る記録には、画面の公開の識別子が入らない（Cloudflare側で控えておく）
+    echo "cutover: 画面（Cloudflare Pages）を、Deploymentsで控えておいた、切り替え前の公開へ戻してください（画面を公開した後の場合）"
+  else
+    echo "cutover: 画面（Cloudflare Pages）を、直前の公開（ID: ${PREV_FRONTEND_DEPLOYMENT_ID}）へ戻してください"
+  fi
 }
 
 run_stage() {
@@ -420,8 +435,86 @@ run_stage() {
   fi
 }
 
+# ---- まとめて実行する（part1・part2）。中で、同じscriptの段階を1つずつ呼ぶ ----
+
+self="$here/cutover.sh"
+
+auto_rollback() {
+  # auto_rollback 失敗した段階 : 確認なしで切り戻す。DBは巻き戻さない
+  echo "cutover: $1 が失敗したため、自動で切り戻します" >&2
+  bash "$self" rollback || exit 1
+}
+
+confirm_frontend() {
+  [ "${MTP_CUTOVER_CONFIRM_FRONTEND:-}" = "yes" ] && return 0
+  [ -t 0 ] || reject "新しい画面を公開してから、MTP_CUTOVER_CONFIRM_FRONTEND=yes を付けて実行してください"
+  local answer=""
+  printf '新しい画面（Cloudflare Pages）を公開しましたか？ 公開済みなら yes と入力してください: '
+  read -r answer || true
+  [ "$answer" = "yes" ] || reject "新しい画面を公開してから、もう一度実行してください"
+  export MTP_CUTOVER_CONFIRM_FRONTEND=yes
+}
+
+part1() {
+  [ -n "${TMUX:-}${STY:-}" ] ||
+    echo "cutover: 注意 tmux（または screen）の中で実行すると、接続が切れても作業が止まりません" >&2
+  trap 'echo "cutover: 中断しました。状態は cutover.sh status、戻すときは cutover.sh rollback" >&2; exit 130' INT TERM
+  # 事前確認は毎回やり直す。ここで失敗したときは、まだ何も変えていないので、切り戻さない
+  bash "$self" preflight || exit $?
+  local s status
+  for s in maintenance-on backup snapshot-before migrate compare go-start; do
+    status=0
+    bash "$self" "$s" || status=$?
+    if [ "$status" -eq 1 ]; then
+      auto_rollback "$s"
+      exit 1
+    elif [ "$status" -ne 0 ]; then
+      # 入力の拒否（2）は、その段階が何も実行していない。自動では戻さず、状態の確認を求める
+      echo "cutover: $s を実行できませんでした。status で状態を確認してください" >&2
+      exit "$status"
+    fi
+  done
+  echo "cutover: part1 ok（Go版は起動済み・まだ公開していません）"
+  echo "cutover: 次: 新しい画面をCloudflare Pagesへ公開する → cutover.sh part2"
+}
+
+part2() {
+  require_done go-start
+  confirm_frontend
+  trap 'echo "cutover: 中断しました。状態は cutover.sh status、戻すときは cutover.sh rollback" >&2; exit 130' INT TERM
+  local s status
+  for s in switch smoke; do
+    status=0
+    bash "$self" "$s" || status=$?
+    if [ "$status" -eq 1 ]; then
+      # 動作確認が作った合成利用者は、切り戻す前に片付ける（失敗しても切り戻しは続ける）
+      if [ "$s" = "smoke" ]; then
+        bash "$self" smoke-cleanup || echo "cutover: 合成利用者の片付けに失敗しました。切り戻しは続けます" >&2
+      fi
+      auto_rollback "$s"
+      exit 1
+    elif [ "$status" -ne 0 ]; then
+      echo "cutover: $s を実行できませんでした。status で状態を確認してください" >&2
+      exit "$status"
+    fi
+  done
+  # 片付けに失敗しても、公開はGo版のまま。原因を調べるために止まる（切り戻さない）
+  bash "$self" smoke-cleanup || {
+    echo "cutover: 合成利用者の片付けに失敗しました。Go版は公開中です。原因を確認してください" >&2
+    exit 1
+  }
+  bash "$self" finish
+  echo "cutover: 最後に、ブラウザで、既存の利用者のログインと記事の表示、Qiitaの記事が出ることを確認してください"
+}
+
 prepare_state
 case "$stage" in
+  part1)
+    part1
+    ;;
+  part2)
+    part2
+    ;;
   preflight)
     run_stage stage_preflight
     ;;

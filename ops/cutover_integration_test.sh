@@ -4,7 +4,9 @@
 #
 # 通すもの: preflight → maintenance-on → backup → snapshot-before → migrate → compare → go-start → switch
 #           → status → rollback → status、および、メンテナンス中にPython版へ書き込めないこと
-# 通さないもの: smoke（本番のホスト名のHTTPSとCookieが要る。#126 の rehearsal.sh と手順書で確認する）
+#           さらに part1（Go版が起動しないときの自動の切り戻しと、成功）と、part2（切り替え・動作確認・片付け・完了）、
+#           その後の rollback
+# 通さないもの: 本物のドメインのHTTPSと、Cookieに付く __Host- と Secure（ここは http・別名のため。当日にブラウザで確認する）
 #
 # 必要な環境変数
 #   MTP_IT_GO_IMAGE      Go版の箱（ghcr.io/h4aruki/mytechpulse-api-go@sha256:... 。事前に docker pull しておく）
@@ -214,5 +216,55 @@ ok '切り戻しでDBは巻き戻らない（利用者は残り、追加した�
 # 切り戻しの後は、最初からやり直せる
 out="$(cutover preflight 2>&1)" || fail "切り戻しの後に preflight をやり直せない: $out"
 ok '切り戻しの後は、最初からやり直せる'
+
+# ---- part1・part2: まとめて実行と、失敗したときの自動の切り戻し（#161） ----
+
+python_serves() { [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$base_url/")" = 200 ] && [ "$(curl -s --max-time 5 "$base_url/")" != "" ]; }
+go_is_stopped() { case "$(cutover status 2>&1)" in *" api-go "*) return 1 ;; *) return 0 ;; esac; }
+
+# Go版の稼働確認が通らない状況を作る（確認先を、使っていないportにする）。
+# part1 は go-start で失敗し、確認なしで自動的に切り戻す
+set +e
+out="$(MTP_CUTOVER_GO_URL=http://127.0.0.1:28999 MTP_CUTOVER_WAIT_SECONDS=30 cutover part1 2>&1)"
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail "稼働確認が通らないのに part1 が失敗にならない: $status $out"
+case "$out" in *"go-start が失敗したため、自動で切り戻します"*) ;; *) fail "自動の切り戻しの表示が無い: $out" ;; esac
+python_serves || fail "part1 の自動の切り戻しの後に、Python版へ届かない"
+go_is_stopped || fail "part1 の自動の切り戻しの後も、Go版が動いている"
+case "$(cutover status 2>&1)" in *"caddy=python"*) ;; *) fail "part1 の自動の切り戻しの後に、Caddyの向け先がPython版でない" ;; esac
+ok 'part1: Go版が起動しないとき、確認なしでPython版へ自動で切り戻る'
+
+out="$(cutover part1 2>&1)" || fail "part1 が失敗した: $out"
+case "$out" in *"part1 ok"*) ;; *) fail "part1 の完了の表示が無い: $out" ;; esac
+[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$base_url/")" = 503 ] || fail "part1 の後は、メンテナンスのままのはず"
+[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:28001/health/ready")" = 200 ] || fail "part1 の後に、Go版が準備完了でない"
+ok 'part1: メンテナンス〜Go版の起動までを1コマンドで通せる（公開はメンテナンスのまま）'
+
+# 画面の公開の確認が無ければ、何も切り替えない（端末ではないので、入力も求められない）
+set +e
+cutover part2 >/dev/null 2>&1 </dev/null
+status=$?
+set -e
+[ "$status" -eq 2 ] || fail "画面の公開の確認なしで part2 が進んでしまう: $status"
+[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$base_url/")" = 503 ] || fail "確認なしの part2 でメンテナンスが解けた"
+
+# 画面の公開を確認した体で、part2 を通す（切り替え → 動作確認 → 合成利用者の片付け → 完了）
+out="$(MTP_CUTOVER_CONFIRM_FRONTEND=yes MTP_CUTOVER_WAIT_SECONDS=30 cutover part2 2>&1)" || fail "part2 が失敗した: $out"
+case "$out" in *"stop-time"*) ;; *) fail "停止時間が出ない: $out" ;; esac
+case "$out" in *"smoke: ok"*) ;; *) fail "動作確認が成功していない: $out" ;; esac
+case "$out" in *"cutover: ok"*) ;; *) fail "完了の表示が無い: $out" ;; esac
+[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$base_url/health/ready")" = 200 ] || fail "part2 の後に、Caddy経由でGo版に届かない"
+case "$(cutover status 2>&1)" in *"caddy=go"*) ;; *) fail "part2 の後に、Caddyの向け先がGo版でない" ;; esac
+users="$(docker compose -p "$project" -f "$legacy/docker-compose.yml" -f "$work/override.yml" exec -T db \
+    psql -X -q -At -U postgres -d mytechpulse -c 'SELECT count(*) FROM "user"' | tr -d '\r')"
+[ "$users" = 1 ] || fail "動作確認の合成利用者が残っている、または利用者が変わった: $users"
+ok 'part2: 切り替え・動作確認（登録→記事一覧→クリック→ログアウト）・合成利用者の片付け・完了までを1コマンドで通せる'
+
+# 切り替えた後でも、rollback でPython版へ戻れる
+out="$(cutover rollback 2>&1)" || fail "part2 の後の rollback が失敗した: $out"
+python_serves || fail "part2 の後の rollback で、Python版へ届かない"
+go_is_stopped || fail "part2 の後の rollback の後も、Go版が動いている"
+ok 'part2 の後でも rollback でPython版へ戻れる'
 
 printf 'OK: %s cutover integration cases passed\n' "$passed"
