@@ -1,0 +1,188 @@
+name: Cutover frontend
+
+# 本番のGo版への切り替えで、画面（Cloudflare Pages）を公開する・直前の公開へ戻す（#127・#163）。
+# 手動実行だけ。オーナーが、切り替えの当日に実行する（手順は docs/deploy/go-cutover.md）。
+#
+#   公開:     gh workflow run cutover-frontend.yml -f action=publish -f run_id=<実行回のID> -f manifest_sha256=<Manifest SHA256>
+#   切り戻し: gh workflow run cutover-frontend.yml -f action=rollback [-f rollback_to=<公開の識別子>]
+#
+# 公開は、配布（release.yml）の実行回で作った画面の成果物を、再ビルドせずにそのまま使う。
+# 配布のSummaryに出たManifest SHA256と照合し、一致しなければ何も公開しない。
+# 旧画面の自動公開（ci.yml の deploy-frontend）は凍結中のため、このworkflowと干渉しない。
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "publish=新しい画面を公開する / rollback=直前の公開へ戻す"
+        type: choice
+        options:
+          - publish
+          - rollback
+        required: true
+      run_id:
+        description: "publish: 配布（Release artifacts）の実行回のID"
+        type: string
+        required: false
+      manifest_sha256:
+        description: "publish: 配布のSummaryに出たManifest SHA256（64桁）"
+        type: string
+        required: false
+      rollback_to:
+        description: "rollback: 戻す先の公開の識別子（省略すると、1つ前の成功した公開）"
+        type: string
+        required: false
+
+permissions: {}
+
+concurrency:
+  group: cutover-frontend
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: 画面の公開
+    if: github.ref == 'refs/heads/main' && inputs.action == 'publish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ inputs.run_id }}
+      MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: 入力の確認
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo "run_id は数字で指定してください" >&2; exit 2; }
+          [[ "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "manifest_sha256 は64桁の小文字16進数で指定してください" >&2; exit 2; }
+
+      # 別のworkflow・失敗した回・main以外の回の成果物では、公開しない
+      - name: 配布の実行回の確認
+        run: |
+          set -euo pipefail
+          gh run view "$RUN_ID" -R "$GITHUB_REPOSITORY" --json workflowName,conclusion,headBranch,headSha > run.json
+          node scripts/cutover-frontend.mjs check-run run.json | tee -a "$GITHUB_ENV"
+
+      - name: 成果物の取得
+        run: |
+          set -euo pipefail
+          mkdir artifacts flat
+          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -D artifacts \
+            -p 'release-manifest-*' -p 'frontend-*' -p 'ops-*'
+          find artifacts -type f -exec cp {} flat/ \;
+          ls flat
+
+      # manifestのSHA256（オーナーがSummaryから写した値）と、画面・運用ファイルのSHA256を照合する
+      - name: 成果物の照合
+        run: |
+          set -euo pipefail
+          attempt="$(grep -m1 '"run_attempt"' flat/release-manifest.json | sed -E 's/^[^:]+: "([0-9]+)".*$/\1/')"
+          [[ "$attempt" =~ ^[1-9][0-9]*$ ]] || { echo "manifestからattemptを読み取れません" >&2; exit 2; }
+          node scripts/release-manifest.mjs verify \
+            --manifest flat/release-manifest.json \
+            --manifest-sha256 "$MANIFEST_SHA256" \
+            --dir flat \
+            --run-id "$RUN_ID" \
+            --run-attempt "$attempt" \
+            --commit-sha "$commit_sha"
+
+      # 切り戻し先として、公開前の本番の識別子を控える
+      - name: いまの公開の記録
+        run: |
+          set -euo pipefail
+          node scripts/cutover-frontend.mjs current | sed 's/^current_id=/before_id=/' | tee -a "$GITHUB_ENV"
+
+      - name: 画面の展開
+        run: |
+          set -euo pipefail
+          mkdir site
+          tar -xzf "flat/frontend-${commit_sha}.tar.gz" -C site --no-same-owner --no-same-permissions
+          test -f site/index.html
+          test -f site/app.html
+          test -f site/_redirects
+
+      # 再ビルドせず、照合済みの成果物をそのまま公開する。--branch=main で本番の公開先として扱われる
+      - name: Cloudflare Pages へ公開
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy site --project-name=mytechpulse --branch=main
+
+      - name: 公開後の確認
+        run: |
+          set -euo pipefail
+          node scripts/cutover-frontend.mjs after-publish "$before_id" | tee -a "$GITHUB_ENV"
+          for url in https://mytechpulse.net/ https://mytechpulse.net/app; do
+            ok=0
+            for _ in 1 2 3 4 5 6; do
+              if curl -fsS -o /dev/null -m 10 "$url"; then ok=1; break; fi
+              sleep 5
+            done
+            [ "$ok" = 1 ] || { echo "公開後に $url へ届きません" >&2; exit 1; }
+          done
+
+      - name: 結果の記録
+        if: always()
+        run: |
+          {
+            echo "## 画面の公開"
+            echo "- 実行回: ${RUN_ID}"
+            echo "- commit: ${commit_sha:-不明}"
+            echo "- 公開前の識別子（切り戻し先）: ${before_id:-不明}"
+            echo "- 公開後の識別子: ${current_id:-未公開}"
+            echo "- 切り戻し: gh workflow run cutover-frontend.yml -f action=rollback"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  rollback:
+    name: 画面の切り戻し
+    if: github.ref == 'refs/heads/main' && inputs.action == 'rollback'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      ROLLBACK_TO: ${{ inputs.rollback_to }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # 戻す先の指定が無ければ、いまの公開の1つ前の、成功した本番の公開へ戻す
+      - name: 直前の公開へ戻す
+        run: |
+          set -euo pipefail
+          if [ -n "$ROLLBACK_TO" ]; then
+            node scripts/cutover-frontend.mjs rollback --to "$ROLLBACK_TO" | tee -a "$GITHUB_ENV"
+          else
+            node scripts/cutover-frontend.mjs rollback | tee -a "$GITHUB_ENV"
+          fi
+
+      - name: 切り戻し後の確認
+        run: |
+          set -euo pipefail
+          for url in https://mytechpulse.net/ https://mytechpulse.net/app; do
+            ok=0
+            for _ in 1 2 3 4 5 6; do
+              if curl -fsS -o /dev/null -m 10 "$url"; then ok=1; break; fi
+              sleep 5
+            done
+            [ "$ok" = 1 ] || { echo "切り戻し後に $url へ届きません" >&2; exit 1; }
+          done
+
+      - name: 結果の記録
+        if: always()
+        run: |
+          {
+            echo "## 画面の切り戻し"
+            echo "- 切り戻し前の識別子: ${before_id:-不明}"
+            echo "- 戻した先の識別子: ${target_id:-不明}"
+            echo "- 戻した後の識別子: ${current_id:-不明}"
+          } >> "$GITHUB_STEP_SUMMARY"
