@@ -141,7 +141,7 @@ jobs:
       # 旧公開の凍結条件が外れていないかを確かめる（どちらもNode標準機能だけで動く）
       - name: 外部actionの固定と旧公開の凍結を確認
         run: |
-          node --test scripts/verify-actions-pinned.test.mjs scripts/verify-legacy-deploy-frozen.test.mjs scripts/coverage-report.test.mjs scripts/cutover-frontend.test.mjs
+          node --test scripts/verify-actions-pinned.test.mjs scripts/verify-legacy-deploy-frozen.test.mjs scripts/coverage-report.test.mjs scripts/cutover-frontend.test.mjs scripts/deploy-needed.test.mjs scripts/verify-go-deploy-gated.test.mjs
           node scripts/verify-actions-pinned.mjs
 
   go-check:
@@ -255,6 +255,181 @@ jobs:
       # 作った最終imageそのものを動かして確かめる（中身は scripts/check-go-image.sh）
       - name: 最終imageの起動・疎通・非root確認
         run: bash scripts/check-go-image.sh mytechpulse-api-go:ci
+
+  # ---- Go版の自動デプロイ（#125）----
+  # リポジトリ変数 GO_DEPLOY_ENABLED が 'true' のときだけ動く（未設定なら動かない）。
+  # 止めたいときは、この変数を消すか 'false' にする。作る・消す操作は、オーナーが行う。
+  # 流れ: 検査が全部成功した main の commit だけが、配布物の作成 → サーバーへの入れ替え → 画面の公開へ進む。
+  # 入れ替えに失敗したときは、サーバー側（ops/deploy_go.sh）が、確認なしで直前の箱へ戻す。
+  deploy-changes:
+    name: 本番への反映が要るか
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.GO_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      needed: ${{ steps.check.outputs.needed }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # 文書・試験だけの変更では、同じ箱を入れ替え直さない。比較できないときは、安全側に倒して反映する
+      - name: 変更されたファイルから判定
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$BEFORE" =~ ^[0-9a-f]{40}$ ]] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if files="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BEFORE}...${AFTER}" --paginate --jq '.files[].filename')" &&
+            [ "$(printf '%s\n' "$files" | grep -c .)" -lt 300 ]; then
+            printf '%s\n' "$files" | node scripts/deploy-needed.mjs >> "$GITHUB_OUTPUT"
+          else
+            # 取得できない、または一覧が切り詰められている可能性がある
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  go-release:
+    name: 配布物の作成
+    needs: [backend-lint, frontend-lint, hooks-test, go-check, go-generated, go-image, deploy-changes]
+    if: needs.deploy-changes.outputs.needed == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/release.yml
+
+  go-deploy:
+    name: Go版の本番への反映
+    needs: [go-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # 同時に2つの反映を走らせない。後から来たものは、先のものが終わるまで待つ（打ち切らない）
+    concurrency:
+      group: go-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MANIFEST_SHA256: ${{ needs.go-release.outputs.manifest_sha256 }}
+      RUN_ID: ${{ github.run_id }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      COMMIT_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # この実行回の配布物を取り出し、manifestのSHA256（配布の工程が出力した値）と照合する
+      - name: 配布物の取得と照合
+        run: |
+          set -euo pipefail
+          [[ "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "manifestのSHA256を受け取れません" >&2; exit 2; }
+          mkdir artifacts flat
+          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -D artifacts \
+            -p 'release-manifest-*' -p 'frontend-*' -p 'ops-*'
+          find artifacts -type f -exec cp {} flat/ \;
+          node scripts/release-manifest.mjs verify \
+            --manifest flat/release-manifest.json \
+            --manifest-sha256 "$MANIFEST_SHA256" \
+            --dir flat \
+            --run-id "$RUN_ID" \
+            --run-attempt "$RUN_ATTEMPT" \
+            --commit-sha "$COMMIT_SHA"
+
+      # 鍵は改行が壊れやすいので、1行の文字列にした状態で預けてある。ここで元のファイルに戻す。
+      # つなぐ相手が本当に本番サーバーかを、控えた身元と照合する（サーバーを作り直すと値が変わる）
+      - name: 鍵と接続先の用意
+        env:
+          SSH_KEY_B64: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s' "$SSH_KEY_B64" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN+as38LhXOjDSb2DP/yi8npPGDVwTiBwqw1okewupf6\n' "$HOST" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      # 受け渡し用の作業場所（この自動デプロイが作るもの）だけを作り直して、配布物を送る
+      - name: 配布物をサーバーへ送る
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LOGIN_USER: ${{ secrets.LIGHTSAIL_USER }}
+        run: |
+          set -euo pipefail
+          opts=(-i "$HOME/.ssh/deploy_key" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          ssh "${opts[@]}" "$LOGIN_USER@$HOST" 'rm -rf -- "$HOME/deploy-in" "$HOME/deploy-boot" && mkdir -p "$HOME/deploy-in" "$HOME/deploy-boot"'
+          scp "${opts[@]}" flat/frontend-*.tar.gz flat/ops-*.tar.gz flat/release-manifest.json "$LOGIN_USER@$HOST:deploy-in/"
+
+      # 入れ替えは、サーバー側のスクリプトが行う。失敗したら、スクリプトが直前の箱へ戻し、この工程は失敗になる
+      - name: サーバーでGo版を入れ替える
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LOGIN_USER: ${{ secrets.LIGHTSAIL_USER }}
+        run: |
+          set -euo pipefail
+          opts=(-i "$HOME/.ssh/deploy_key" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          ssh "${opts[@]}" "$LOGIN_USER@$HOST" bash -s -- "$MANIFEST_SHA256" <<'REMOTE'
+          set -euo pipefail
+          tar -xzf "$HOME"/deploy-in/ops-*.tar.gz -C "$HOME/deploy-boot"
+          bash "$HOME/deploy-boot/ops/deploy_go.sh" "$HOME/deploy-in" "$1"
+          REMOTE
+
+      # ここから画面。APIの入れ替えが成功したときだけ行う（画面が新しいAPIを前提にしているため）
+      - name: いまの画面の公開の記録
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          node scripts/cutover-frontend.mjs current | sed 's/^current_id=/before_id=/' | tee -a "$GITHUB_ENV"
+
+      - name: 画面の展開
+        run: |
+          set -euo pipefail
+          mkdir site
+          tar -xzf "flat/frontend-${COMMIT_SHA}.tar.gz" -C site --no-same-owner --no-same-permissions
+          test -f site/index.html
+          test -f site/app.html
+          test -f site/_redirects
+
+      # 再ビルドせず、照合済みの成果物をそのまま公開する。--branch=main で本番の公開先として扱われる
+      - name: Cloudflare Pages へ公開
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy site --project-name=mytechpulse --branch=main
+
+      - name: 画面の公開後の確認
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          node scripts/cutover-frontend.mjs after-publish "$before_id" | tee -a "$GITHUB_ENV"
+          for url in https://mytechpulse.net/ https://mytechpulse.net/app https://api.mytechpulse.net/health/ready; do
+            ok=0
+            for _ in 1 2 3 4 5 6; do
+              if curl -fsS -o /dev/null -m 10 "$url"; then ok=1; break; fi
+              sleep 5
+            done
+            [ "$ok" = 1 ] || { echo "公開後に $url へ届きません" >&2; exit 1; }
+          done
+
+      - name: 結果の記録
+        if: always()
+        run: |
+          {
+            echo "## Go版の本番への反映"
+            echo "- commit: ${COMMIT_SHA}"
+            echo "- 実行回: ${RUN_ID}"
+            echo "- 画面の公開前の識別子（画面の切り戻し先）: ${before_id:-未取得}"
+            echo "- 画面の公開後の識別子: ${current_id:-未公開}"
+            echo "- APIの入れ替えと切り戻しの記録は、「サーバーでGo版を入れ替える」の出力（deploy: で始まる行）を見る"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   deploy-frontend:
     name: 画面の公開
