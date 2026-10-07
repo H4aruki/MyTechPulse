@@ -5,8 +5,9 @@
 import { readInput } from './lib/io.mjs';
 import { readState, writeState } from './lib/state.mjs';
 
-const CODE_FILE = /\.(py|ts|tsx|js|jsx|mjs)$/;
-const VERIFY_COMMAND = /\b(ruff|oxlint|tsc|pytest)\b|npm run (lint|build)|node --test/;
+// 検査が要るコード・設定の種類。Go（server/）、画面（frontend/）、運用スクリプト（ops/）、DBの移行（.sql）
+const CODE_FILE = /\.(go|sql|sh|ts|tsx|js|jsx|mjs)$/;
+const VERIFY_COMMAND = /\b(oxlint|tsc|gofmt)\b|go (test|vet|build)|npm run (lint|test|build)|node --test|bash ops\/\S*_test\.sh/;
 
 const input = await readInput();
 const sessionId = input?.session_id ?? 'unknown';

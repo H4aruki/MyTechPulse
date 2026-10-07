@@ -6,10 +6,16 @@
     "deny": [
       "Read(./.env)",
       "Read(./backend/.env)",
+      "Read(./server/.env)",
+      "Read(./frontend/.env)",
       "Edit(./.env)",
       "Edit(./backend/.env)",
+      "Edit(./server/.env)",
+      "Edit(./frontend/.env)",
       "Write(./.env)",
-      "Write(./backend/.env)"
+      "Write(./backend/.env)",
+      "Write(./server/.env)",
+      "Write(./frontend/.env)"
     ],
     "ask": [
       "Bash(rm *)",
@@ -34,7 +40,11 @@
       "Bash(npm run lint*)",
       "Bash(npm run build*)",
       "Bash(npm ci*)",
-      "Bash(ruff*)",
+      "Bash(npm run test*)",
+      "Bash(go test*)",
+      "Bash(go vet*)",
+      "Bash(go build*)",
+      "Bash(gofmt*)",
       "Bash(node --test*)",
       "Bash(docker compose ps*)",
       "Bash(docker compose logs*)",

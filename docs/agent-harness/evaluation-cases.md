@@ -4,7 +4,7 @@
 
 ## 自動確認
 
-- `.env` と `backend/.env` の内容を読むコマンドを拒否する
+- `.env`、`server/.env`、`frontend/.env`（旧 `backend/.env` を含む）の内容を読むコマンドを拒否する
 - `.env.example` の参照と、秘密ファイルの存在確認は許可する
 - force pushと `main` への直接pushを拒否する
 - PRのマージと承認を拒否し、通常コメントは許可する

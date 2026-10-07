@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ファイルを編集した直後に、そのファイル1つだけを対象に書き方を確認する。
 //
-// 道具（ruff / oxlint）が見つからない環境では黙って何もしない。
+// 道具（gofmt / oxlint）が見つからない環境では黙って何もしない。
 // 仕掛けの失敗で他のメンバーの作業が止まるほうが害が大きいため。
 
 import { spawnSync } from 'node:child_process';
@@ -26,10 +26,11 @@ function findTool(candidates) {
   return null;
 }
 
-const RUFF = findTool([
-  { path: 'ruff', absolute: false },
-  { path: join(repoRoot, 'backend', 'venv', 'Scripts', 'ruff.exe'), absolute: true },
-  { path: join(repoRoot, 'backend', 'venv', 'bin', 'ruff'), absolute: true },
+// gofmt は Go に同梱される。PATH に無いことが多いので、既定の導入先も順に見る
+const GOFMT = findTool([
+  { path: 'gofmt', absolute: false },
+  { path: 'C:\\Program Files\\Go\\bin\\gofmt.exe', absolute: true },
+  { path: '/usr/local/go/bin/gofmt', absolute: true },
 ]);
 
 const OXLINT = findTool([
@@ -50,10 +51,9 @@ function run(cmd, args) {
   }
 }
 
-if (file.endsWith('.py')) {
-  // 利用者が確認していない変更を増やさないよう、自動修正はしない
-  run(RUFF, ['format', '--check', file]);
-  run(RUFF, ['check', file]);
+if (file.endsWith('.go')) {
+  // 利用者が確認していない変更を増やさないよう、自動修正はしない（-l は、整っていないfileを列挙するだけ）
+  run(GOFMT, ['-l', file]);
 } else if (/\.(ts|tsx|js|jsx|mjs)$/.test(file)) {
   // このリポジトリのフロントエンドには整形の道具が無いので検査だけ行う。
   // CIと同じ基準で早めに壊れに気づける
