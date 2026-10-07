@@ -4,6 +4,13 @@ on:
   # GHCRの公開範囲・認証の承認前にimageを送らないため、手動実行のみにしている。
   # 承認後に main への push を追加する（#125 Task 4 Step 1）。
   workflow_dispatch:
+  # 自動デプロイ（ci.yml の go-release）から呼ばれる。検査が全部成功したmainのcommitだけが、ここへ来る。
+  # 呼ばれたときも、成果物は呼び出し元の実行回（run）に保存され、manifestもその実行回の値を結び付ける
+  workflow_call:
+    outputs:
+      manifest_sha256:
+        description: "作成したmanifestのSHA256（自動デプロイが、配布物の照合に使う）"
+        value: ${{ jobs.publish.outputs.manifest_sha256 }}
 
 permissions: {}
 
@@ -19,6 +26,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      manifest_sha256: ${{ steps.manifest.outputs.manifest_sha256 }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -65,6 +74,7 @@ jobs:
           npm run build
 
       - name: 3成果物とmanifestを作成
+        id: manifest
         env:
           API_IMAGE: ghcr.io/h4aruki/mytechpulse-api-go@${{ steps.build.outputs.digest }}
           COMMIT_SHA: ${{ github.sha }}
@@ -98,6 +108,7 @@ jobs:
             --output "$artifact_dir/release-manifest.json" > "$RUNNER_TEMP/manifest-sha256"
           manifest_sha="$(cat "$RUNNER_TEMP/manifest-sha256")"
           echo "MTP_MANIFEST_SHA256=$manifest_sha" >> "$GITHUB_ENV"
+          echo "manifest_sha256=$manifest_sha" >> "$GITHUB_OUTPUT"
 
       - name: frontend archiveを保存
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
