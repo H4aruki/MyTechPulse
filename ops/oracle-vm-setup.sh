@@ -9,7 +9,7 @@
 # このスクリプトでやらないこと（コンソール側のオーナー作業）:
 #   - VCNのSecurity List / NSG でのingress開放（22 / 80 / 443）
 #   - インスタンス作成そのもの
-#   詳細な手順は docs/deploy/oracle-vm-provisioning.md を参照。
+#   詳細な手順は docs/deploy/lightsail-provisioning.md を参照。
 set -euo pipefail
 
 # ---- 設定（環境変数で上書き可能） ----
@@ -200,7 +200,7 @@ cat <<'EOF'
 ▲ VCNのSecurity List / NSG で ingress（tcp 22 / 80 / 443）の開放が別途必要です。
   未設定だとホスト側のiptablesを開けても外部から到達できません。
 
-次の手順（詳細は docs/deploy/oracle-vm-provisioning.md）:
+次の手順（詳細は docs/deploy/lightsail-provisioning.md）:
   1. git clone <このリポジトリ> && cd MyTechPulse
   2. cp backend/.env.example backend/.env して値を埋める
      - SECRET_KEY は本番用に新規生成する（開発用を使い回さない）:

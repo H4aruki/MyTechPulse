@@ -117,7 +117,7 @@ MyTechPulseの残タスク一覧。変動が速いため、Obsidian Vaultでは�
 
 ### #55 DEPLOYMENT.mdを作成する（Lightsail運用手順＋移行ランブック）
 - [ ] `docs/deploy/lightsail-provisioning.md`を統合＋スケールアップ/移行の判断基準＋さくらVPS移行ランブック＋READMEからのリンク
-- [ ] 失効した`docs/deploy/oracle-vm-provisioning.md`を残すか削除するか判断（**削除はオーナー確認事項**）
+- [x] 失効した`docs/deploy/oracle-vm-provisioning.md`は削除した（2026-10-07、オーナー許可）。`ops/oracle-vm-setup.sh`はLightsailの初期設定で使うため残す（名前の整理は別件）
 
 ### 本番運用開始後すぐ
 - [x] 本番用`backend/.env`作成（2026-08-14）。**SECRET_KEYはサーバー上で新規生成**し開発用とは別の値（S12対応）。`CORS_ALLOWED_ORIGINS`にPagesのURLを設定済み。パーミッションは600
