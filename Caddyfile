@@ -1,4 +1,4 @@
-# 本番APIのHTTPS終端。
+# 本番APIのHTTPS終端。Go版APIへ中継する。
 #
 # 証明書は Let's Encrypt から自動取得され、期限が近づくと自動更新される。
 # そのため 80番ポートを開けたままにしておく必要がある（HTTP-01チャレンジに使われる）。
@@ -6,9 +6,11 @@
 # 取り直しにはならない（Let's Encrypt のレート制限に当たらないための要）。
 #
 # ドメインはルートの .env の API_DOMAIN で指定する。値が無いと Caddy は起動に失敗する。
+# メンテナンス応答（503）にしたいときは、docker-compose.yml の MTP_CADDYFILE で
+# ops/caddy/Caddyfile.maintenance を選ぶ。
 
 {$API_DOMAIN} {
-	reverse_proxy api:8000
+	reverse_proxy api-go:8001
 
 	# HTTPSでしか繋がせない。ブラウザは一度アクセスすると以後HTTPを試さなくなる
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"

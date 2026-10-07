@@ -6,9 +6,9 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      # このDBはコンテナ初回起動時に自動作成される（init_db.py はテーブル作成のみを担当）
+      # このDBはコンテナ初回起動時に自動作成される（テーブルは migrate が作る）
       POSTGRES_DB: mytechpulse
-    # ローカルでuvicornを直接動かす開発方法のために公開する。
+    # ローカルでGo APIを直接動かす開発方法のために公開する。
     # 外部へ晒さないよう必ずループバックに束縛する（0.0.0.0にするとVPSでDBが世界に開く）
     ports:
       - "127.0.0.1:5432:5432"
@@ -20,35 +20,14 @@ services:
       timeout: 5s
       retries: 20
 
-  api:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    restart: unless-stopped
-    # release bundleや検査環境には秘密の設定ファイルを入れないため、無くても
-    # composeの読み込み自体は通す（api-goのpullや構文確認が止まらないように）。
-    # ファイルがある環境では、これまでと同じ内容が渡る
-    env_file:
-      - path: ./backend/.env
-        required: false
-    environment:
-      # DATABASE_URL は host を db に上書き（backend/.env の localhost 版より優先される）
-      DATABASE_URL: "postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/mytechpulse"
-    # 外部への公開は caddy が443で受けて中継する。ここはローカルからの疎通確認用に
-    # ループバックだけへ公開する（0.0.0.0だとTLS無しのAPIが直接晒される）
-    ports:
-      - "127.0.0.1:8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-
-  # ---- Go版API（移行中の並行起動）。既定では起動しない ----
-  # 起動: docker compose --env-file server/.env --profile go-preview up -d api-go
-  # 既存の api（Python版, 8000番）とは別ポート(8001)で併存する。Caddyの接続先はまだ切り替えない
+  # ---- Go版API。既定では起動しない ----
+  # 本番: 自動デプロイ（ops/deploy_go.sh）が、manifestのdigest（ghcr.io/...@sha256:...）を GO_API_IMAGE へ入れ、
+  #       再buildせずpullして、--profile go-preview で起動する。
+  # ローカル: 通常は dev.ps1 が `go run` で起動する。コンテナで動かすときは、
+  #   docker compose --env-file server/.env --profile go-preview up -d api-go
   api-go:
     profiles: ["go-preview"]
-    # ローカルでは未指定のままbuildして使う。本番は ops/deploy_release.sh が
-    # manifestのdigest（ghcr.io/...@sha256:...）を GO_API_IMAGE へ入れ、再buildせずpullして使う
+    # ローカルでは未指定のままbuildして使う
     image: ${GO_API_IMAGE:-mytechpulse-api-go:local}
     build:
       context: .
@@ -59,17 +38,20 @@ services:
       QIITA_ACCESS_TOKEN: ${QIITA_ACCESS_TOKEN:-}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
-    # サーバー再起動後に自動で復帰させる（Python版の api と同じ）。止めたときは止まったままになる
+    # サーバー再起動後に自動で復帰させる。止めたときは止まったままになる
     restart: unless-stopped
+    # 外部への公開は caddy が443で受けて中継する。ここはローカルからの疎通確認用に
+    # ループバックだけへ公開する（0.0.0.0だとTLS無しのAPIが直接晒される）
     ports:
       - "127.0.0.1:8001:8001"
     depends_on:
       db:
         condition: service_healthy
 
-  # ---- Go版のDBマイグレーション（切り替えの当日に1回だけ実行。常駐しない）----
+  # ---- Go版のDBマイグレーション（常駐しない）----
   # 実行: docker compose --profile go-migrate run --rm migrate-go
-  # api-go と同じ箱（GO_API_IMAGE）の /migrate を使う。追加するだけの変更で、既存の3表には触れない
+  # 本番では、自動デプロイが、入れ替えの前に実行する。api-go と同じ箱（GO_API_IMAGE）の /migrate を使う。
+  # 追加するだけの変更に限る（直前のAPIへ戻ったとき、DBは巻き戻らないため）
   migrate-go:
     profiles: ["go-migrate"]
     image: ${GO_API_IMAGE:-mytechpulse-api-go:local}
@@ -99,31 +81,13 @@ services:
       # HTTP/3。UDPを開けないと対応ブラウザで無駄な待ちが入ることがある
       - "443:443/udp"
     volumes:
-      # 向け先の設定は MTP_CADDYFILE（このfileから見た相対path）で選ぶ。既定は Python版向けの Caddyfile。
-      # Go版への切り替えでは ops/caddy/Caddyfile.maintenance や ops/caddy/Caddyfile.go を指定する（#127）。
+      # 向け先の設定は MTP_CADDYFILE（このfileから見た相対path）で選ぶ。既定は Go版向けの Caddyfile。
+      # メンテナンス応答（503）にしたいときは ops/caddy/Caddyfile.maintenance を指定する。
       # 先頭に ./ を付けるのは、./ や / が無いと、composeがfileでなく名前付きvolumeと解釈するため
       - ./${MTP_CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
       # 取得済み証明書の保存先。消すと再取得になりレート制限に近づくので消さない
       - caddy_data:/data
       - caddy_config:/config
-    depends_on:
-      - api
-
-  # ---- 任意（案B）: 静的フロント配信。`docker compose --profile frontend up` で有効化 ----
-  # 事前に `cd frontend && npm install && npm run build` で dist/ を生成しておくこと。
-  # 使う場合は frontend/.env の VITE_API_BASE_URL（ビルド時に埋め込まれる）と
-  # backend/app/main.py の CORS 調整が必要。
-  # SPAの深いリンク（/app/login 等）を直接開くには nginx 側にも rewrite が必要
-  # （frontend/public/_redirects はNetlify/Cloudflare Pages用でnginxは解釈しない）。
-  # frontend:
-  #   image: nginx:alpine
-  #   profiles: ["frontend"]
-  #   ports:
-  #     - "8080:80"
-  #   volumes:
-  #     - ./frontend/dist:/usr/share/nginx/html:ro
-  #   depends_on:
-  #     - api
 
 volumes:
   db_data:

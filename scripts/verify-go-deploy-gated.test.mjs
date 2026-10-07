@@ -48,7 +48,7 @@ function evaluate(expression, context) {
 }
 
 const jobs = splitJobs(text);
-const checks = ["backend-lint", "frontend-lint", "hooks-test", "go-check", "go-generated", "go-image"];
+const checks = ["frontend-lint", "hooks-test", "go-check", "go-generated", "go-image"];
 const main = { "github.event_name": "push", "github.ref": "refs/heads/main" };
 
 test("自動デプロイの3つのjobが存在する", () => {
@@ -90,10 +90,9 @@ test("本番への反映は、配布物の作成が成功したときだけ動�
   assert.match(deploy.body, /concurrency:\s*\n\s+group: go-deploy\s*\n\s+cancel-in-progress: false/);
 });
 
-test("本番の鍵・Cloudflareの秘密は、反映のjob（と凍結中の旧公開）だけが使う", () => {
-  const allowed = new Set(["go-deploy", "deploy-frontend", "deploy-backend"]);
+test("本番の鍵・Cloudflareの秘密は、反映のjobだけが使う", () => {
   for (const job of Object.values(jobs)) {
-    if (allowed.has(job.id)) continue;
+    if (job.id === "go-deploy") continue;
     assert.ok(!/secrets\.(LIGHTSAIL_|CLOUDFLARE_)/.test(job.body), `${job.id} が本番の秘密を使っています`);
   }
   // 反映のjobは、本番サーバーの身元を照合してから接続する
@@ -107,8 +106,15 @@ test("反映のjobの権限は、読み取りだけに絞られている", () =>
   assert.ok(!/(contents|packages|actions|id-token|pull-requests):\s*write/.test(body));
 });
 
-test("旧公開の凍結は、そのまま保たれている", () => {
-  for (const id of ["deploy-frontend", "deploy-backend"]) {
-    assert.ok(jobs[id].condition?.includes("vars.LEGACY_DEPLOY_ENABLED == 'true'"), `${id} の凍結条件が外れています`);
+test("本番へ反映するjobは、Go版の自動デプロイの1系統だけ（旧Python版の公開・検査は残っていない）", () => {
+  for (const id of ["backend-lint", "deploy-frontend", "deploy-backend"]) {
+    assert.equal(jobs[id], undefined, `${id} が残っています（旧Python版のjobは削除済み）`);
   }
+  assert.ok(!text.includes("LEGACY_DEPLOY_ENABLED"), "旧公開のスイッチ（LEGACY_DEPLOY_ENABLED）への言及が残っています");
+  // 本番の秘密を使うjobは、go-deploy 1つだけ
+  const usingSecrets = Object.values(jobs).filter((job) => /secrets\.(LIGHTSAIL_|CLOUDFLARE_)/.test(job.body));
+  assert.deepEqual(
+    usingSecrets.map((job) => job.id),
+    ["go-deploy"],
+  );
 });

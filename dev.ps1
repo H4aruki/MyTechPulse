@@ -1,25 +1,39 @@
 ﻿# ローカル開発環境を1コマンドで起動する。
-# db(docker) → backend(uvicorn) → frontend(vite) の順に立ち上げ、
-# backendとfrontendはそれぞれ別ウィンドウで起動してログを分離する。
+# db(docker) → DBの移行 → Go API → frontend(vite) の順に立ち上げ、
+# Go APIとfrontendはそれぞれ別ウィンドウで起動してログを分離する。
 #
+# 事前に必要なもの: Docker Desktop、Go、Node.js（npm）
 # 使い方: .\dev.ps1
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
+$serverEnv = "$root\server\.env"
 
-if (-not (Test-Path "$root\backend\.env")) {
-    Write-Host "backend\.env が見つかりません。backend\.env.example をコピーして作成してください。" -ForegroundColor Red
+if (-not (Test-Path $serverEnv)) {
+    Write-Host "server\.env が見つかりません。server\.env.example をコピーして作成してください。" -ForegroundColor Red
+    exit 1
+}
+if (-not (Test-Path "$root\frontend\.env")) {
+    Write-Host "frontend\.env が見つかりません。frontend\.env.example をコピーして作成してください。" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "[1/3] DBコンテナを起動中..." -ForegroundColor Cyan
+# Go版は環境変数だけを読む。server\.env を、このウィンドウの環境変数へ読み込む。
+# 後で起動する別ウィンドウ（Go API）も、この環境変数を引き継ぐ
+Get-Content $serverEnv | ForEach-Object {
+    if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+        Set-Item -Path "Env:$($Matches[1])" -Value $Matches[2]
+    }
+}
+
+Write-Host "[1/4] DBコンテナを起動中..." -ForegroundColor Cyan
 docker compose -f "$root\docker-compose.yml" up -d db
 if ($LASTEXITCODE -ne 0) {
     Write-Host "docker compose up に失敗しました。Docker Desktopが起動しているか確認してください。" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "[1/3] DBのヘルスチェック待ち..." -ForegroundColor Cyan
+Write-Host "[1/4] DBのヘルスチェック待ち..." -ForegroundColor Cyan
 $dbContainer = docker compose -f "$root\docker-compose.yml" ps -q db
 if (-not $dbContainer) {
     Write-Host "DBコンテナIDを取得できませんでした。docker compose ps db で状態を確認してください。" -ForegroundColor Red
@@ -39,13 +53,25 @@ while ($true) {
 }
 Write-Host "DB起動確認OK" -ForegroundColor Green
 
-Write-Host "[2/3] バックエンドを別ウィンドウで起動中..." -ForegroundColor Cyan
+Write-Host "[2/4] DBの移行を実行中..." -ForegroundColor Cyan
+Push-Location "$root\server"
+try {
+    go run ./cmd/migrate
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "DBの移行に失敗しました。server\.env の DATABASE_URL を確認してください。" -ForegroundColor Red
+        exit 1
+    }
+} finally {
+    Pop-Location
+}
+
+Write-Host "[3/4] Go APIを別ウィンドウで起動中..." -ForegroundColor Cyan
 Start-Process powershell -ArgumentList @(
     "-NoExit", "-Command",
-    "cd '$root\backend'; .\venv\Scripts\python.exe -m uvicorn app.main:app --reload"
+    "cd '$root\server'; go run ./cmd/api"
 )
 
-Write-Host "[3/3] フロントエンドを別ウィンドウで起動中..." -ForegroundColor Cyan
+Write-Host "[4/4] フロントエンドを別ウィンドウで起動中..." -ForegroundColor Cyan
 Start-Process powershell -ArgumentList @(
     "-NoExit", "-Command",
     "cd '$root\frontend'; npm run dev"
@@ -54,7 +80,6 @@ Start-Process powershell -ArgumentList @(
 Start-Sleep -Seconds 3
 Write-Host "起動コマンドを実行しました。数秒後に以下を確認できます:" -ForegroundColor Green
 Write-Host "  フロントエンド: http://localhost:5173"
-Write-Host "  API Swagger UI: http://127.0.0.1:8000/docs"
+Write-Host "  API の稼働確認: http://127.0.0.1:8001/health/ready"
 
 Start-Process "http://localhost:5173"
-Start-Process "http://127.0.0.1:8000/docs"
