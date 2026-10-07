@@ -104,12 +104,13 @@ jobs:
         run: node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/agent-harness/**/*.test.mjs"
 
       # 外部actionが40桁のcommit SHAで固定されているか、自動デプロイが意図した条件でだけ動くか、
-      # 文書の相対リンクが切れていないかを確かめる（どれもNode標準機能だけで動く）
-      - name: 外部actionの固定・自動デプロイの条件・文書のリンクを確認
+      # 文書の相対リンクが切れていないか、現行の説明に旧構成の言葉が混ざっていないかを確かめる（どれもNode標準機能だけで動く）
+      - name: 外部actionの固定・自動デプロイの条件・文書の整合を確認
         run: |
-          node --test scripts/verify-actions-pinned.test.mjs scripts/coverage-report.test.mjs scripts/cutover-frontend.test.mjs scripts/deploy-needed.test.mjs scripts/verify-go-deploy-gated.test.mjs scripts/check-doc-links.test.mjs
+          node --test scripts/verify-actions-pinned.test.mjs scripts/coverage-report.test.mjs scripts/cutover-frontend.test.mjs scripts/deploy-needed.test.mjs scripts/verify-go-deploy-gated.test.mjs scripts/check-doc-links.test.mjs scripts/check-current-docs.test.mjs
           node scripts/verify-actions-pinned.mjs
           node scripts/check-doc-links.mjs
+          node scripts/check-current-docs.mjs
 
   go-check:
     name: Goバックエンドの検査

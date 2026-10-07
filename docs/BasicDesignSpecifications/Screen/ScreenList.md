@@ -3,7 +3,7 @@
 MyTechPulseの画面を一覧にしたもの。実際の実装は`frontend/index.html`（LP）と`frontend/src/pages/`（ログイン後のSPA）にあり、この文書はその内容を人が読める形に書き起こしている。
 
 - 画面IDは要件定義書の画面一覧（[RequirementsSpecification.md](../../RequirementsSpecification.md)）のG-01〜G-04と対応する
-- ステータスコードごとの文言（エラーメッセージ等）はこの資料の対象外。APIの資料側（`docs/BasicDesignSpecifications/API/`）でまとめて定義する予定
+- ステータスごとのエラーの種類（`code`）はこの資料の対象外。APIの資料側（`docs/BasicDesignSpecifications/API/ApiCommonRules.md`）で定義している。画面に出す文言は、各画面の資料と画面側のコードが決める
 - この資料が扱うのは画面のレイアウト・表示項目・入力チェック・状態ごとの見え方・レスポンシブ対応など、見た目と振る舞いのルール
 
 ## 1. 資料の構成
@@ -40,11 +40,11 @@ flowchart LR
     G03 -->|ログイン成功| G04
     G02 <-->|画面下部のリンク| G03
     G04 -->|ログアウト| G03
-    G04 -->|合言葉なしでアクセス| G03
+    G04 -->|ログインしていない／期限切れ| G03
 ```
 
 - G-01はReactを使わない静的ページで、G-02〜G-04は`/app/`配下のSPA（React）が担当する
-- G-04は合言葉（JWT）を持っていない状態で開こうとすると、自動的にG-03へ戻される（[Login.md](Details/Login.md)を参照）
+- G-04は、ログイン中でない（セッションが無い・期限切れ）状態で開こうとすると、自動的にG-03へ戻される。ログイン中かどうかはサーバーに確認して判断する（[Login.md](Details/Login.md)を参照）
 
 ## 4. 補足
 
