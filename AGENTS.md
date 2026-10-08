@@ -83,7 +83,7 @@ Go APIは `server/` から実行します。設定は環境変数で渡します
 ```bash
 cd server
 go run ./cmd/migrate   # DBの移行（追加だけ）。APIの起動時には自動では実行されない
-go run ./cmd/api       # 既定は http://127.0.0.1:8001
+go run ./cmd/api       # 既定は http://localhost:8001
 ```
 
 フロントエンドは次の手順です。
@@ -96,8 +96,8 @@ npm run dev
 
 - Go依存: `server/go.mod`。追加は `go get` ではなく、事前に許可を得る
 - APIのローカル設定: `server/.env`。値を読まず、必要なら利用者に確認する
-- フロントのAPI URL: `frontend/.env` の `VITE_API_BASE_URL`（ローカルは `http://127.0.0.1:8001`）。形式は `frontend/.env.example` を参照する
-- Swagger UI は、ローカル（`SWAGGER_ENABLED=true`）では `http://127.0.0.1:8001/docs`。**本番では無効**（`APP_ENV=production` では有効にできない）
+- フロントのAPI URL: `VITE_API_BASE_URL`。ローカルの既定は、リポジトリの `frontend/.env.development`（`http://localhost:8001`）。`.env.development` は `frontend/.env` より優先される（個人の上書きは `.env.development.local`）。ホスト名は、画面を開くアドレスと同じ `localhost` にする。`127.0.0.1` だと、ブラウザが別のサイトとして扱い、Cookieが付かず、ログイン後が401になる。形式は `frontend/.env.example` を参照する
+- Swagger UI は、ローカル（`SWAGGER_ENABLED=true`）では `http://localhost:8001/docs`。**本番では無効**（`APP_ENV=production` では有効にできない）
 - APIの契約は `server/openapi/openapi.json`。変更したら `cd server && go run ./cmd/openapi` で生成し直す（CIが差分を検査する）。DB問い合わせは `server/db/queries/` から `go tool sqlc generate` で生成する
 
 ## 完了前の検証

@@ -13,9 +13,15 @@ if (-not (Test-Path $serverEnv)) {
     Write-Host "server\.env が見つかりません。server\.env.example をコピーして作成してください。" -ForegroundColor Red
     exit 1
 }
-if (-not (Test-Path "$root\frontend\.env")) {
-    Write-Host "frontend\.env が見つかりません。frontend\.env.example をコピーして作成してください。" -ForegroundColor Red
-    exit 1
+
+# 画面側の既定は、リポジトリの frontend\.env.development にある（frontend\.env は不要）。
+# それより優先される設定が残っていると、画面が古い接続先（例: :8000）へ行き、APIに接続できなくなる。
+# 存在だけを調べ、中身は読まない
+if (Test-Path "$root\frontend\.env.development.local") {
+    Write-Host "警告: frontend\.env.development.local があります。接続先を上書きしていないか確認してください。" -ForegroundColor Yellow
+}
+if ($env:VITE_API_BASE_URL) {
+    Write-Host "警告: 環境変数 VITE_API_BASE_URL が設定されており、画面の接続先を上書きします。" -ForegroundColor Yellow
 }
 
 # Go版は環境変数だけを読む。server\.env を、このウィンドウの環境変数へ読み込む。

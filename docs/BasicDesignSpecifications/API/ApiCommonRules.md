@@ -6,7 +6,7 @@
 
 | 項目 | 内容 |
 | --- | --- |
-| 入口のアドレス | 開発中は`http://127.0.0.1:8001`。画面側は`frontend/`の`VITE_API_BASE_URL`で切り替える |
+| 入口のアドレス | 開発中は`http://localhost:8001`（画面と同じ`localhost`にそろえる。`127.0.0.1`だとCookieが付かない）。画面側は`frontend/`の`VITE_API_BASE_URL`で切り替える |
 | データの形式 | 送受信ともにJSON（UTF-8）。エラーだけは`application/problem+json` |
 | 送り方 | 読むだけの窓口はGET、書き込みや状態が変わる窓口はPOST。値はPOSTでは本文（ボディ）に入れる |
 | 本人確認 | ログインで発行されるCookie（HttpOnly）を、ブラウザが自動で付けて送る。画面側のプログラムは中身に触れない |
