@@ -41,7 +41,7 @@ APIの入れ替えが成功したときだけ行います（画面が新しいAP
 - リポジトリ変数 `GO_DEPLOY_ENABLED` を削除する、または `false` にする（Settings → Secrets and variables → Actions → Variables）。
 - 動いている実行を止めるときは、Actions の該当の実行を「Cancel workflow」する。**入れ替えの途中で止めると、中途半端な状態が残る可能性があります**。サーバーで状態を確認してください（§4）。
 
-## 3. 有効にする（オーナーの作業）
+## 3. 有効にする（オーナーの作業。2026-10-08 に実施済み）
 
 次を確認してから、リポジトリ変数 `GO_DEPLOY_ENABLED` を `true` で作ります。
 
