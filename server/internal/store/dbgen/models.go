@@ -15,6 +15,62 @@ type AuthSession struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type FeedbackAnswer struct {
+	SubmissionID pgtype.UUID
+	FormID       int64
+	QuestionID   int64
+	Score        int32
+}
+
+type FeedbackForm struct {
+	ID           int64
+	FormKey      string
+	Version      int32
+	Title        string
+	Status       string
+	CooldownDays int32
+	CreatedAt    pgtype.Timestamptz
+}
+
+type FeedbackInterestSnapshot struct {
+	SubmissionID pgtype.UUID
+	Rank         int32
+	TagID        pgtype.Int4
+	TagName      string
+	MatchInt     int32
+}
+
+type FeedbackPrompt struct {
+	ID         pgtype.UUID
+	FormID     int64
+	UserID     int32
+	Status     string
+	Stage      string
+	ShownAt    pgtype.Timestamptz
+	FinishedAt pgtype.Timestamptz
+}
+
+type FeedbackQuestion struct {
+	ID                  int64
+	FormID              int64
+	QuestionKey         string
+	QuestionText        string
+	SortOrder           int32
+	IsRequired          bool
+	DisplayIfQuestionID pgtype.Int8
+	DisplayIfScoreMax   pgtype.Int4
+}
+
+type FeedbackSubmission struct {
+	ID          pgtype.UUID
+	FormID      int64
+	UserID      int32
+	PromptID    pgtype.UUID
+	Status      string
+	StartedAt   pgtype.Timestamptz
+	CompletedAt pgtype.Timestamptz
+}
+
 type Recommend struct {
 	UserID   int32
 	TagID    int32
