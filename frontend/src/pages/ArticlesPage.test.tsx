@@ -3,15 +3,27 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ApiError, UnauthorizedError } from '@/api/client'
-import { fetchFeed, logout, recordArticleClick } from '@/api/endpoints'
+import {
+  fetchFeed,
+  fetchFeedbackStatus,
+  logout,
+  recordArticleClick,
+  requestFeedbackPresentation,
+} from '@/api/endpoints'
 import type { Article, FeedResponse } from '@/api/types'
 import { authQueryKey } from '@/lib/auth'
+import { clearFeedbackState } from '@/lib/feedbackTracker'
 import { ArticlesPage } from './ArticlesPage'
 
 vi.mock('@/api/endpoints', () => ({
   fetchFeed: vi.fn(),
   recordArticleClick: vi.fn(),
   logout: vi.fn(),
+  fetchFeedbackStatus: vi.fn(),
+  requestFeedbackPresentation: vi.fn(),
+  submitFeedbackOverall: vi.fn(),
+  completeFeedbackFollowup: vi.fn(),
+  dismissFeedback: vi.fn(),
 }))
 
 function article(source: 'Qiita' | 'Zenn', title: string, tags: string[] | null): Article {
@@ -51,6 +63,13 @@ describe('ArticlesPage', () => {
     vi.mocked(recordArticleClick).mockReset()
     vi.mocked(logout).mockReset()
     vi.spyOn(window, 'open').mockImplementation(() => null)
+    clearFeedbackState()
+    window.sessionStorage.clear()
+    vi.mocked(fetchFeedbackStatus).mockReset().mockResolvedValue({ eligible: true })
+    vi.mocked(requestFeedbackPresentation)
+      .mockReset()
+      .mockResolvedValue({ eligible: false, next_eligible_at: '2099-01-01T00:00:00Z' })
+    vi.mocked(recordArticleClick).mockResolvedValue(undefined)
   })
   afterEach(() => {
     cleanup()
@@ -212,5 +231,100 @@ describe('ArticlesPage', () => {
     vi.mocked(logout).mockResolvedValue(undefined)
     fireEvent.click(screen.getByRole('button', { name: 'ログアウト' }))
     expect(await screen.findByRole('heading', { name: 'ログイン' })).toBeInTheDocument()
+  })
+
+  function threeArticlesFeed() {
+    return feed({
+      qiita_articles: [article('Qiita', 'a', ['go']), article('Qiita', 'b', ['go'])],
+      zenn_articles: [article('Zenn', 'c', ['go'])],
+    })
+  }
+
+  test('異なる記事を3件開くまでは表示を要求せず、同じ記事は1件として数える', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue(threeArticlesFeed())
+    renderArticles()
+    await screen.findByText('a')
+    fireEvent.click(screen.getByText('a'))
+    fireEvent.click(screen.getByText('a'))
+    fireEvent.click(screen.getByText('b'))
+    await waitFor(() => expect(recordArticleClick).toHaveBeenCalledTimes(3))
+    expect(requestFeedbackPresentation).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText('c'))
+    await waitFor(() => expect(requestFeedbackPresentation).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(requestFeedbackPresentation).mock.calls[0][0]).toMatch(/^[0-9a-f-]{36}$/)
+  })
+
+  test('表示が許可されたらポップアップを出し、開封履歴を消す', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue(threeArticlesFeed())
+    vi.mocked(requestFeedbackPresentation).mockImplementation(async (promptId: string) => ({
+      eligible: true,
+      status: 'shown',
+      stage: 'overall',
+      prompt_id: promptId,
+      form: {
+        title: 'おすすめ記事についてのアンケート',
+        version: 1,
+        questions: [
+          { id: 10, key: 'overall', text: '今日のおすすめ記事は役に立ちましたか？', sort_order: 1, required: true },
+        ],
+      },
+    }))
+    renderArticles()
+    await screen.findByText('a')
+    for (const title of ['a', 'b', 'c']) fireEvent.click(screen.getByText(title))
+    expect(
+      await screen.findByRole('dialog', { name: 'おすすめ記事についてのアンケート' }),
+    ).toBeInTheDocument()
+    expect(window.sessionStorage.getItem('mtp.feedback.openedArticles')).toBeNull()
+  })
+
+  test('次回表示可能日時より前は、記事を開いても再要求しない', async () => {
+    vi.mocked(fetchFeedbackStatus).mockResolvedValue({
+      eligible: false,
+      next_eligible_at: '2099-01-01T00:00:00Z',
+    })
+    vi.mocked(fetchFeed).mockResolvedValue(threeArticlesFeed())
+    renderArticles()
+    await screen.findByText('a')
+    await waitFor(() => expect(fetchFeedbackStatus).toHaveBeenCalled())
+    for (const title of ['a', 'b', 'c']) fireEvent.click(screen.getByText(title))
+    await waitFor(() => expect(recordArticleClick).toHaveBeenCalledTimes(3))
+    expect(requestFeedbackPresentation).not.toHaveBeenCalled()
+  })
+
+  test('状態照会に失敗しても記事は読める', async () => {
+    vi.mocked(fetchFeedbackStatus).mockRejectedValue(new ApiError({ status: 500 }))
+    vi.mocked(fetchFeed).mockResolvedValue(threeArticlesFeed())
+    renderArticles()
+    expect(await screen.findByText('a')).toBeInTheDocument()
+  })
+
+  test('認証切れでログイン画面へ戻すときは、前の利用者の取得結果と判定記録を捨てる', async () => {
+    vi.mocked(fetchFeed).mockRejectedValue(new UnauthorizedError())
+    window.sessionStorage.setItem('mtp.feedback.openedArticles', '["https://a"]')
+    const client = renderArticles()
+    expect(await screen.findByRole('heading', { name: 'ログイン' })).toBeInTheDocument()
+    expect(client.getQueryData(authQueryKey)).toBeUndefined()
+    expect(window.sessionStorage.getItem('mtp.feedback.openedArticles')).toBeNull()
+  })
+
+  test('状態照会が認証切れなら、ログイン画面へ戻す', async () => {
+    vi.mocked(fetchFeedbackStatus).mockRejectedValue(new UnauthorizedError())
+    vi.mocked(fetchFeed).mockResolvedValue(threeArticlesFeed())
+    const client = renderArticles()
+    expect(await screen.findByRole('heading', { name: 'ログイン' })).toBeInTheDocument()
+    expect(client.getQueryData(authQueryKey)).toBeUndefined()
+  })
+
+  test('表示要求の結果が分からないときは開封履歴を消し、3件から数え直す', async () => {
+    vi.mocked(requestFeedbackPresentation).mockRejectedValue(new ApiError({ status: 0 }))
+    vi.mocked(fetchFeed).mockResolvedValue(threeArticlesFeed())
+    renderArticles()
+    await screen.findByText('a')
+    for (const title of ['a', 'b', 'c']) fireEvent.click(screen.getByText(title))
+    await waitFor(() => expect(requestFeedbackPresentation).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(window.sessionStorage.getItem('mtp.feedback.openedArticles')).toBeNull(),
+    )
   })
 })

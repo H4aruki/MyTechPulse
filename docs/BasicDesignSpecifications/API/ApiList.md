@@ -18,6 +18,7 @@ APIの資料は役割ごとに次のように分けている。このファイ�
 | [Details/Auth.md](Details/Auth.md) | 会員登録・ログイン・ログアウト・ログイン中の利用者の確認の詳細 |
 | [Details/News.md](Details/News.md) | おすすめ記事の取得の詳細 |
 | [Details/Article.md](Details/Article.md) | 記事クリックの記録の詳細 |
+| [Details/UserFeedback.md](Details/UserFeedback.md) | 利用者アンケートの詳細 |
 | [ApiExternal.md](ApiExternal.md) | サーバーがQiita・Zennへ問い合わせている内容 |
 
 ## 2. API一覧
@@ -32,8 +33,13 @@ APIの資料は役割ごとに次のように分けている。このファイ�
 | A-2-4 | ログアウト | POST | `/api/v1/auth/logout` | 不要（あれば失効する） | F-2-8 | 実装済み | [Auth.md](Details/Auth.md#4-a-2-4-ログアウト) |
 | A-4-1 | おすすめ記事の取得 | GET | `/api/v1/feed` | 必要 | F-4-1〜F-4-4, F-4-7 | 実装済み | [News.md](Details/News.md) |
 | A-5-1 | 記事クリックの記録 | POST | `/api/v1/feedback/article-clicks` | 必要 | F-5-1〜F-5-3 | 実装済み | [Article.md](Details/Article.md) |
+| A-7-1 | アンケートの表示可否の確認 | GET | `/api/v1/user-feedback/status` | 必要 | F-7-2 | 実装済み | [UserFeedback.md](Details/UserFeedback.md#1-a-7-1-アンケートの表示可否の確認) |
+| A-7-2 | アンケートの表示要求 | POST | `/api/v1/user-feedback/presentations` | 必要 | F-7-2 | 実装済み | [UserFeedback.md](Details/UserFeedback.md#2-a-7-2-アンケートの表示要求) |
+| A-7-3 | 総合評価の保存 | POST | `/api/v1/user-feedback/submissions` | 必要 | F-7-2 | 実装済み | [UserFeedback.md](Details/UserFeedback.md#3-a-7-3-総合評価の保存) |
+| A-7-4 | 追加質問の回答の保存 | PUT | `/api/v1/user-feedback/submissions/{submission_id}` | 必要 | F-7-2 | 実装済み | [UserFeedback.md](Details/UserFeedback.md#4-a-7-4-追加質問の回答の保存) |
+| A-7-5 | 回答せず閉じたことの保存 | POST | `/api/v1/user-feedback/dismissals` | 必要 | F-7-2 | 実装済み | [UserFeedback.md](Details/UserFeedback.md#5-a-7-5-回答せず閉じたことの保存) |
 
-現在の窓口は以上の8つ。
+現在の窓口は以上の13個。
 
 ## 3. 補足
 

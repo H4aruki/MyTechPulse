@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { UnauthorizedError } from '@/api/client'
 import { fetchFeed, logout, recordArticleClick } from '@/api/endpoints'
 import type { Article } from '@/api/types'
 import { AppLayout } from '@/components/AppLayout'
 import { ArticleCard } from '@/components/ArticleCard'
+import { FeedbackDialog } from '@/components/FeedbackDialog'
 import { authQueryKey } from '@/lib/auth'
+import { clearFeedbackState } from '@/lib/feedbackTracker'
+import { useUserFeedback } from '@/lib/useUserFeedback'
 
 const FEED_QUERY_KEY = ['feed'] as const
 
@@ -49,9 +52,21 @@ export function ArticlesPage() {
   })
 
   const sessionExpired = error instanceof UnauthorizedError
+
+  // ログアウト・認証切れのどちらでも、利用者ごとの情報が次にログインする人へ見えないよう、
+  // ブラウザ内の取得結果とアンケートの判定に使う記録を捨ててログイン画面へ移る
+  const leaveSession = useCallback(() => {
+    queryClient.removeQueries({ queryKey: authQueryKey })
+    queryClient.removeQueries({ queryKey: FEED_QUERY_KEY })
+    clearFeedbackState()
+    navigate('/login', { replace: true })
+  }, [queryClient, navigate])
+
   useEffect(() => {
-    if (sessionExpired) navigate('/login', { replace: true })
-  }, [sessionExpired, navigate])
+    if (sessionExpired) leaveSession()
+  }, [sessionExpired, leaveSession])
+
+  const feedback = useUserFeedback(leaveSession)
 
   // クリック学習の送信。失敗しても閲覧体験を妨げないため、UIには出さない。
   // 二重に学習させないよう再送しない
@@ -59,16 +74,9 @@ export function ArticlesPage() {
     mutationFn: recordArticleClick,
     retry: false,
     onError: (clickError: Error) => {
-      if (clickError instanceof UnauthorizedError) navigate('/login', { replace: true })
+      if (clickError instanceof UnauthorizedError) leaveSession()
     },
   })
-
-  const leaveSession = () => {
-    // 利用者ごとの情報が次にログインする人へ見えないよう、ブラウザ内の取得結果を捨てる
-    queryClient.removeQueries({ queryKey: authQueryKey })
-    queryClient.removeQueries({ queryKey: FEED_QUERY_KEY })
-    navigate('/login', { replace: true })
-  }
 
   // サーバーのセッションを終わらせる。すでに401（期限切れ）なら終わっているのでログイン画面へ移る。
   // それ以外の失敗ではセッションが残っている可能性があるため、画面に残して再試行できるようにする
@@ -84,7 +92,9 @@ export function ArticlesPage() {
   const handleOpen = (article: Article) => {
     // ポップアップブロックを避けるため、クリック直後に同期的に開く
     window.open(article.url, '_blank', 'noopener,noreferrer')
-    clickMutation.mutate(article.tags ?? [])
+    // アンケートの表示判定は、このクリック学習の通信が確定してから行う。失敗も確定として扱う
+    const click = clickMutation.mutateAsync(article.tags ?? []).catch(() => undefined)
+    feedback.articleOpened(article.url, click)
   }
 
   const handleLogout = () => {
@@ -155,6 +165,13 @@ export function ArticlesPage() {
           </div>
         )}
       </div>
+      {feedback.presentation && (
+        <FeedbackDialog
+          presentation={feedback.presentation}
+          onUnauthorized={leaveSession}
+          onClose={feedback.close}
+        />
+      )}
     </AppLayout>
   )
 }

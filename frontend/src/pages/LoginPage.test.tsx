@@ -52,6 +52,17 @@ describe('LoginPage', () => {
     expect(client.getQueryData(authQueryKey)).toEqual(user)
   })
 
+  test('成功すると、前の利用者のアンケート判定の記録を消す', async () => {
+    window.sessionStorage.setItem('mtp.feedback.openedArticles', '["https://a"]')
+    vi.mocked(login).mockResolvedValue({ user })
+    renderLogin()
+
+    submit('alice', 'secret')
+
+    expect(await screen.findByRole('heading', { name: '記事一覧' })).toBeInTheDocument()
+    expect(window.sessionStorage.getItem('mtp.feedback.openedArticles')).toBeNull()
+  })
+
   test('401は利用者名の有無を区別しない同一の文言を出す', async () => {
     vi.mocked(login).mockRejectedValue(new UnauthorizedError())
     renderLogin()

@@ -17,8 +17,14 @@ MyTechPulseがデータを保存している場所（データベース）の構
 | 2 | tag | 技術タグ | 「Python」「React」などの技術分野の名前を保存する | 100件程度 |
 | 3 | recommend | 興味の強さ | 「どの利用者が、どのタグに、どれくらい興味があるか」を保存する。利用者とタグを結びつける橋渡し役 | 利用者数 × 選んだタグ数 |
 | 4 | auth_session | ログインのセッション | ログイン中の端末ごとの合言葉（のハッシュ）と有効期限を保存する | 同時にログインしている端末の数 |
+| 5 | feedback_forms | アンケート | アンケートの題名・版・公開状態を保存する | フォームの版数 |
+| 6 | feedback_questions | アンケートの質問 | フォームごとの質問文、順番、表示条件を保存する | フォームごとの質問数 |
+| 7 | feedback_prompts | アンケートの表示記録 | 誰にいつ表示し、回答済みか閉じたかを保存する | 利用者ごとの表示回数 |
+| 8 | feedback_submissions | アンケートの回答 | 総合評価と追加質問への回答状況を保存する | 表示記録ごとに最大1件 |
+| 9 | feedback_answers | 質問への回答 | 質問ごとの評価（1〜5）を保存する | 回答ごとの質問数 |
+| 10 | feedback_interest_snapshots | 回答時点の興味傾向 | 回答時点の上位タグと興味の強さを記録する | 回答ごとに最大5件 |
 
-現在のテーブルは以上の4つのみ。記事そのものはデータベースに保存しておらず、表示のたびにQiita・Zennから取得している。
+現在のテーブルは以上の10個。アンケートの質問や回答も保存する。記事そのものはデータベースに保存しておらず、表示のたびにQiita・Zennから取得している。
 
 ## 2. ER図
 
@@ -27,6 +33,17 @@ erDiagram
     user ||--o{ recommend : "興味タグを持つ"
     tag  ||--o{ recommend : "利用者に選ばれる"
     user ||--o{ auth_session : "ログイン中の端末を持つ"
+    user ||--o{ feedback_prompts : "アンケートが表示される"
+    user ||--o{ feedback_submissions : "アンケートに回答する"
+    tag o|--o{ feedback_interest_snapshots : "回答時点のタグを記録する"
+    feedback_forms ||--|{ feedback_questions : "質問を持つ"
+    feedback_forms ||--o{ feedback_prompts : "表示記録に使う"
+    feedback_forms ||--o{ feedback_submissions : "回答に使う"
+    feedback_questions o|--o{ feedback_questions : "表示条件に使う"
+    feedback_prompts ||--o| feedback_submissions : "回答を持つ"
+    feedback_submissions ||--|{ feedback_answers : "質問への回答を持つ"
+    feedback_submissions ||--o{ feedback_interest_snapshots : "回答時点の興味を記録する"
+    feedback_questions ||--o{ feedback_answers : "回答される"
 
     user {
         integer user_ID PK "利用者ID（自動採番）"
@@ -136,6 +153,21 @@ erDiagram
 - 有効期限に索引を付けてあり、期限切れの掃除（ログインのたびに実行）が速い。利用者IDにも索引がある
 - ログアウトでその端末の行だけを消す。利用者が削除されると、セッションも一緒に消える（連動削除）
 - Python版の時代にはこのテーブルは無かった（合言葉に署名するだけで、サーバーは何も覚えていなかった）。切り替え後に追加した
+
+### 3-5. アンケート（feedback_*）
+
+アンケートの内容、表示した記録、利用者の回答を保存する。回答時点の興味の強さも記録し、あとから回答と照らし合わせられる。
+
+| テーブル | 主な列 | 役割 |
+| --- | --- | --- |
+| feedback_forms | id、form_key、version、title、status、cooldown_days、created_at | アンケートの識別名・版・題名・公開状態・再表示までの日数を保存する。同時に公開できるのは1版 |
+| feedback_questions | id、form_id、question_key、question_text、sort_order、is_required、display_if_question_id、display_if_score_max | 質問文、表示順、必須かどうか、追加質問を表示する条件を保存する |
+| feedback_prompts | id、form_id、user_ID、status、stage、shown_at、finished_at | 利用者への表示ごとに、表示日時・段階・状態を保存する。同じ表示IDは重複しない |
+| feedback_submissions | id、form_id、user_ID、prompt_id、status、started_at、completed_at | 表示1回分の回答状況と開始・完了日時を保存する。状態は途中または完了 |
+| feedback_answers | submission_id、form_id、question_id、score | 質問ごとの評価（1〜5）を保存する。同じ質問への回答は1件 |
+| feedback_interest_snapshots | submission_id、rank、tag_ID、tag_name、match_int | 回答時点の上位5タグと、そのときの興味の強さを保存する。タグが削除されても名前と値は残る |
+
+回答に関係するデータは、表示された日または回答・離脱が確定した日から2年間保持する。表示要求の処理時に期限を過ぎた表示記録を古い順に最大500件削除し、関連する回答やスナップショットも一緒に削除する。削除は1時間に1回まで、処理時間は最大2秒に制限する。フォームと質問の定義は、回答の意味を保つため2年経過だけを理由に削除しない。
 
 ## 4. 補足
 

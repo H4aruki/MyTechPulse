@@ -14,6 +14,7 @@ import (
 	"github.com/H4aruki/MyTechPulse/server/internal/auth"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/config"
 	"github.com/H4aruki/MyTechPulse/server/internal/recommendation"
+	"github.com/H4aruki/MyTechPulse/server/internal/userfeedback"
 )
 
 type noopChecker struct{}
@@ -34,6 +35,7 @@ func run(path string) error {
 		Ready:          noopChecker{},
 		Auth:           &auth.Service{},
 		Recommendation: &recommendation.Service{},
+		UserFeedback:   &userfeedback.Service{},
 	})
 	data, err := json.MarshalIndent(spec, "", "  ")
 	if err != nil {

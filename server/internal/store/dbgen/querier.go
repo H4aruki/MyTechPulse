@@ -11,20 +11,43 @@ import (
 )
 
 type Querier interface {
+	CompleteFeedbackSubmission(ctx context.Context, arg CompleteFeedbackSubmissionParams) error
 	CreateInitialRecommendation(ctx context.Context, arg CreateInitialRecommendationParams) error
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateTag(ctx context.Context, tagName string) (Tag, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	// 保持期限（終了日時、未終了なら表示日時）の古い順に、上限件数まで消す。回答などは連鎖して消える
+	DeleteExpiredFeedbackPrompts(ctx context.Context, arg DeleteExpiredFeedbackPromptsParams) (int64, error)
 	DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error
 	DeleteSession(ctx context.Context, tokenHash []byte) error
 	FindSessionUser(ctx context.Context, arg FindSessionUserParams) (FindSessionUserRow, error)
 	FindTagByNormalizedName(ctx context.Context, dollar_1 string) (Tag, error)
 	FindUserByUsername(ctx context.Context, userName string) (User, error)
+	GetActiveFeedbackForm(ctx context.Context) (GetActiveFeedbackFormRow, error)
+	GetFeedbackAnswerScore(ctx context.Context, arg GetFeedbackAnswerScoreParams) (int32, error)
+	GetFeedbackFormByID(ctx context.Context, id int64) (GetFeedbackFormByIDRow, error)
+	GetFeedbackSubmissionByPrompt(ctx context.Context, promptID pgtype.UUID) (GetFeedbackSubmissionByPromptRow, error)
+	GetFeedbackSubmissionOwner(ctx context.Context, id pgtype.UUID) (GetFeedbackSubmissionOwnerRow, error)
+	InsertFeedbackAnswer(ctx context.Context, arg InsertFeedbackAnswerParams) error
+	InsertFeedbackPrompt(ctx context.Context, arg InsertFeedbackPromptParams) (int64, error)
+	InsertFeedbackSnapshot(ctx context.Context, arg InsertFeedbackSnapshotParams) error
+	InsertFeedbackSubmission(ctx context.Context, arg InsertFeedbackSubmissionParams) (pgtype.UUID, error)
+	// 版をまたいで、同じフォームの直近の表示を返す
+	LastFeedbackPrompt(ctx context.Context, arg LastFeedbackPromptParams) (LastFeedbackPromptRow, error)
+	ListFeedbackQuestions(ctx context.Context, formID int64) ([]ListFeedbackQuestionsRow, error)
+	ListFeedbackSnapshotSource(ctx context.Context, userID int32) ([]ListFeedbackSnapshotSourceRow, error)
 	ListRecommendations(ctx context.Context, userID int32) ([]ListRecommendationsRow, error)
+	LockFeedbackPrompt(ctx context.Context, id pgtype.UUID) (LockFeedbackPromptRow, error)
+	LockFeedbackSubmission(ctx context.Context, id pgtype.UUID) (LockFeedbackSubmissionRow, error)
 	// 表記違い(大文字小文字・前後空白)のタグをGo書き込み同士で重複作成しないよう、
 	// 正規化したタグ名ごとにトランザクション内の排他ロックを取ってから再検索する。
 	LockNormalizedTag(ctx context.Context, dollar_1 string) error
+	// 同じ利用者・同じフォームの表示判定を1つずつ行う（まだ表示記録が無い初回でも効く）
+	LockUserFeedbackForm(ctx context.Context, lockKey string) error
 	LockUserForRecommendation(ctx context.Context, userID int32) (int32, error)
+	MarkFeedbackPromptDismissed(ctx context.Context, arg MarkFeedbackPromptDismissedParams) error
+	MarkFeedbackPromptFollowup(ctx context.Context, id pgtype.UUID) error
+	MarkFeedbackPromptSubmitted(ctx context.Context, arg MarkFeedbackPromptSubmittedParams) error
 	UpsertRecommendation(ctx context.Context, arg UpsertRecommendationParams) error
 }
 
