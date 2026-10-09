@@ -61,6 +61,8 @@ export function FeedbackDialog({ presentation, onUnauthorized, onClose }: Feedba
   }
 
   const close = () => {
+    // 送信中に閉じると、回答と閉じた記録が同時に届き、回答が保存されないことがあるため受け付けない
+    if (sending) return
     // 回答を終える前に閉じたら離脱として記録を試みる。届かなくても記事閲覧を優先するが、
     // 認証切れだけはログイン画面へ戻す
     if (step !== 'thanks') {
@@ -147,8 +149,9 @@ export function FeedbackDialog({ presentation, onUnauthorized, onClose }: Feedba
           <button
             type="button"
             onClick={close}
+            disabled={sending}
             aria-label="閉じる"
-            className="rounded-lg px-2 text-xl leading-none text-ink-muted hover:bg-slate-100"
+            className="rounded-lg px-2 text-xl leading-none text-ink-muted hover:bg-slate-100 disabled:opacity-50"
           >
             ×
           </button>

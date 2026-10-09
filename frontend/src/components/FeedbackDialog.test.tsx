@@ -137,6 +137,24 @@ describe('FeedbackDialog', () => {
     await waitFor(() => expect(onUnauthorized).toHaveBeenCalled())
   })
 
+  test('送信中は閉じられず、閉じた記録と回答が同時に送られない', async () => {
+    let finish: (v: { submission_id: string; status: 'completed'; followup_required: boolean }) => void = () => {}
+    vi.mocked(submitFeedbackOverall).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    const { onClose } = renderDialog()
+    fireEvent.click(screen.getByRole('button', { name: /4\s*満足/ }))
+    expect(screen.getByRole('button', { name: '閉じる' })).toBeDisabled()
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(dismissFeedback).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    finish({ submission_id: SUBMISSION, status: 'completed', followup_required: false })
+    expect(await screen.findByText('ご回答ありがとうございました。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '閉じる' })).toBeEnabled()
+  })
+
   test('部分回答が保存済みの再送結果では、追加質問から始める', () => {
     renderDialog(presentation({ stage: 'followup', submission_id: SUBMISSION }))
     expect(screen.getByText('興味に合っていましたか？')).toBeInTheDocument()

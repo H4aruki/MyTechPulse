@@ -67,8 +67,10 @@ export function useUserFeedback(onUnauthorized: () => void) {
         setNextEligibleAt(status.eligible, status.next_eligible_at)
         void maybeRequest()
       })
-      .catch(() => {
-        // 状態照会の失敗は記事閲覧を妨げない。表示要求の側でも同じ判定が行われる
+      .catch((error: unknown) => {
+        // 認証切れだけはログイン画面へ戻す。それ以外の失敗は記事閲覧を妨げない
+        // （表示要求の側でも同じ判定が行われる）
+        if (!cancelled && error instanceof UnauthorizedError) unauthorized.current()
       })
     return () => {
       cancelled = true

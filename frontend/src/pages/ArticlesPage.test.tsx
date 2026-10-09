@@ -308,6 +308,14 @@ describe('ArticlesPage', () => {
     expect(window.sessionStorage.getItem('mtp.feedback.openedArticles')).toBeNull()
   })
 
+  test('状態照会が認証切れなら、ログイン画面へ戻す', async () => {
+    vi.mocked(fetchFeedbackStatus).mockRejectedValue(new UnauthorizedError())
+    vi.mocked(fetchFeed).mockResolvedValue(threeArticlesFeed())
+    const client = renderArticles()
+    expect(await screen.findByRole('heading', { name: 'ログイン' })).toBeInTheDocument()
+    expect(client.getQueryData(authQueryKey)).toBeUndefined()
+  })
+
   test('表示要求の結果が分からないときは開封履歴を消し、3件から数え直す', async () => {
     vi.mocked(requestFeedbackPresentation).mockRejectedValue(new ApiError({ status: 0 }))
     vi.mocked(fetchFeed).mockResolvedValue(threeArticlesFeed())
