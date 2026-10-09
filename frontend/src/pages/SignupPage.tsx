@@ -9,6 +9,7 @@ import { signup } from '@/api/endpoints'
 import { AppLayout } from '@/components/AppLayout'
 import { TAG_CATEGORIES } from '@/constants/tags'
 import { authQueryKey } from '@/lib/auth'
+import { clearFeedbackState } from '@/lib/feedbackTracker'
 
 // サーバー側の入力規則（利用者名は前後の空白を除いて1〜50文字、パスワードはUTF-8で1〜72バイト、
 // タグは1〜128件で各1〜50文字）と同じ範囲を画面でも先に確認する。
@@ -69,6 +70,8 @@ export function SignupPage() {
     // 登録は繰り返し送ると二重登録の疑いが出るため、失敗しても自動で再送しない
     retry: false,
     onSuccess: (data) => {
+      // 同じブラウザで前に使っていた利用者のアンケート判定の記録を残さない
+      clearFeedbackState()
       queryClient.setQueryData(authQueryKey, data.user)
       navigate('/articles', { replace: true })
     },

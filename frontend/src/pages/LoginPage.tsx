@@ -8,6 +8,7 @@ import { UnauthorizedError } from '@/api/client'
 import { login } from '@/api/endpoints'
 import { AppLayout } from '@/components/AppLayout'
 import { authQueryKey } from '@/lib/auth'
+import { clearFeedbackState } from '@/lib/feedbackTracker'
 
 const loginSchema = z.object({
   username: z.string().min(1, 'ユーザー名を入力してください'),
@@ -32,6 +33,8 @@ export function LoginPage() {
     // 認証失敗を自動で繰り返すと、試行回数制限に余計にかかるため再送しない
     retry: false,
     onSuccess: (data) => {
+      // 同じブラウザで前に使っていた利用者のアンケート判定の記録を残さない
+      clearFeedbackState()
       queryClient.setQueryData(authQueryKey, data.user)
       navigate('/articles', { replace: true })
     },
