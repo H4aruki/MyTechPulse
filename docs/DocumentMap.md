@@ -37,7 +37,8 @@ docs/
 │   │   └── Details/                      … 窓口ごとの詳細
 │   │       ├── Auth.md                   … 会員登録・ログイン
 │   │       ├── News.md                   … おすすめ記事の取得
-│   │       └── Article.md                … 記事クリックの記録
+│   │       ├── Article.md                … 記事クリックの記録
+│   │       └── UserFeedback.md           … 利用者アンケート
 │   └── Screen/                           … 画面の設計書
 │       ├── ScreenList.md                 … 画面一覧（画面の資料の入口）
 │       ├── ScreenCommonRules.md          … 画面に共通する決まりごと
