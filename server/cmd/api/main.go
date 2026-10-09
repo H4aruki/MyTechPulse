@@ -27,6 +27,7 @@ import (
 	"github.com/H4aruki/MyTechPulse/server/internal/provider/zenn"
 	"github.com/H4aruki/MyTechPulse/server/internal/recommendation"
 	"github.com/H4aruki/MyTechPulse/server/internal/store"
+	"github.com/H4aruki/MyTechPulse/server/internal/userfeedback"
 )
 
 const shutdownTimeout = 10 * time.Second
@@ -61,7 +62,8 @@ func run(ctx context.Context, lookup func(string) (string, bool), stdout, stderr
 		Providers:   recommendation.ProviderSet{Qiita: qiita.New(fetcher, cfg.QiitaToken), Zenn: zenn.New(fetcher)},
 		FeedTimeout: cfg.FeedTimeout,
 	}
-	handler, _ := app.New(cfg, app.Dependencies{Logger: logger, Ready: pool, Auth: authService, Recommendation: recommendService})
+	feedbackService := &userfeedback.Service{Repo: store.NewFeedback(pool), Clock: auth.SystemClock{}, Logger: logger}
+	handler, _ := app.New(cfg, app.Dependencies{Logger: logger, Ready: pool, Auth: authService, Recommendation: recommendService, UserFeedback: feedbackService})
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)
 	if err != nil {
 		return fmt.Errorf("%sで待ち受けできません", cfg.HTTPAddr)

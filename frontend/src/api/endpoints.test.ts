@@ -71,4 +71,19 @@ describe('endpoints', () => {
       body: '{"tags":["go","react"]}',
     })
   })
+
+  test('アンケートの窓口を正しい方式とパスで呼ぶ', async () => {
+    const e = await loadEndpoints()
+    const id = '11111111-1111-4111-8111-111111111111'
+    await e.fetchFeedbackStatus()
+    expect(lastCall()).toEqual({ url: `${BASE}/api/v1/user-feedback/status`, method: 'GET', body: undefined })
+    await e.requestFeedbackPresentation(id)
+    expect(lastCall()).toEqual({ url: `${BASE}/api/v1/user-feedback/presentations`, method: 'POST', body: `{"prompt_id":"${id}"}` })
+    await e.submitFeedbackOverall({ prompt_id: id, question_id: 10, score: 2 })
+    expect(lastCall()).toEqual({ url: `${BASE}/api/v1/user-feedback/submissions`, method: 'POST', body: `{"prompt_id":"${id}","question_id":10,"score":2}` })
+    await e.completeFeedbackFollowup(id, [{ question_id: 11, score: 3 }])
+    expect(lastCall()).toEqual({ url: `${BASE}/api/v1/user-feedback/submissions/${id}`, method: 'PUT', body: '{"answers":[{"question_id":11,"score":3}]}' })
+    await e.dismissFeedback(id)
+    expect(lastCall()).toEqual({ url: `${BASE}/api/v1/user-feedback/dismissals`, method: 'POST', body: `{"prompt_id":"${id}"}` })
+  })
 })

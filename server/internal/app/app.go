@@ -13,6 +13,7 @@ import (
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/config"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/httpx"
 	"github.com/H4aruki/MyTechPulse/server/internal/recommendation"
+	"github.com/H4aruki/MyTechPulse/server/internal/userfeedback"
 )
 
 // Dependencies は app が外から受け取る依存。
@@ -22,6 +23,7 @@ type Dependencies struct {
 	// Auth が nil のときは認証APIを登録しない。
 	Auth           *auth.Service
 	Recommendation *recommendation.Service
+	UserFeedback   *userfeedback.Service
 }
 
 // New はHTTPハンドラーとOpenAPI仕様を返す。
@@ -43,6 +45,9 @@ func New(cfg config.Config, deps Dependencies) (http.Handler, *huma.OpenAPI) {
 	}
 	if deps.Auth != nil && deps.Recommendation != nil {
 		recommendation.Handler{Service: *deps.Recommendation, Auth: *deps.Auth, CookieName: cfg.CookieName}.Register(api)
+	}
+	if deps.Auth != nil && deps.UserFeedback != nil {
+		userfeedback.Handler{Service: deps.UserFeedback, Auth: *deps.Auth, CookieName: cfg.CookieName}.Register(api)
 	}
 	// 外側から RequestID -> Recover -> AccessLog -> CORS -> CSRF -> Huma の順に通す
 	var h http.Handler = mux
