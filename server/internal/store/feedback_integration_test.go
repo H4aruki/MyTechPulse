@@ -166,3 +166,173 @@ func TestFeedbackCooldownSpansFormVersions(t *testing.T) {
 		t.Fatalf("再送では表示時の版1が返る: %+v, %v", replay, err)
 	}
 }
+
+func presentForTest(t *testing.T, repo *store.Feedback, uid int64, promptID string) userfeedback.Form {
+	t.Helper()
+	p, err := repo.Present(context.Background(), uid, promptID, fixedNow)
+	if err != nil || p.Form == nil {
+		t.Fatalf("present = %+v, %v", p, err)
+	}
+	return *p.Form
+}
+
+func TestFeedbackHighScoreCompletesAndIsIdempotent(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewFeedback(pool)
+	uid := feedbackUser(t, pool, "fb-high", 61)
+	form := presentForTest(t, repo, uid, promptA)
+	got, err := repo.SubmitOverall(ctx, uid, promptA, form.Root().ID, 4, fixedNow.Add(time.Minute))
+	if err != nil || got.Status != userfeedback.SubmissionCompleted || got.FollowupRequired {
+		t.Fatalf("submit = %+v, %v", got, err)
+	}
+	again, err := repo.SubmitOverall(ctx, uid, promptA, form.Root().ID, 4, fixedNow.Add(2*time.Minute))
+	if err != nil || again.SubmissionID != got.SubmissionID {
+		t.Fatalf("再送は既存の結果を返す: %+v, %v", again, err)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM feedback_prompts WHERE status='submitted' AND finished_at IS NOT NULL`); n != 1 {
+		t.Fatalf("submitted prompts = %d", n)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM feedback_submissions WHERE status='completed' AND completed_at IS NOT NULL`); n != 1 {
+		t.Fatalf("completed submissions = %d", n)
+	}
+	if _, err := repo.Dismiss(ctx, uid, promptA, fixedNow.Add(3*time.Minute)); !errors.Is(err, userfeedback.ErrConflict) {
+		t.Fatalf("回答済みは閉じられない: %v", err)
+	}
+}
+
+func TestFeedbackLowScoreFollowupAndSnapshot(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewFeedback(pool)
+	uid := feedbackUser(t, pool, "fb-low", 62)
+	if _, err := pool.Exec(ctx, `INSERT INTO tag(tag_name) VALUES ('A'),('B'),('C'),('D'),('E'),('F')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO recommend("user_ID","tag_ID",match_int) SELECT $1, "tag_ID", CASE tag_name WHEN 'A' THEN 9000 WHEN 'B' THEN 7000 WHEN 'C' THEN 7000 WHEN 'D' THEN 5000 WHEN 'E' THEN 3000 ELSE 100 END FROM tag WHERE tag_name IN ('A','B','C','D','E','F')`, uid); err != nil {
+		t.Fatal(err)
+	}
+	form := presentForTest(t, repo, uid, promptA)
+	got, err := repo.SubmitOverall(ctx, uid, promptA, form.Root().ID, 2, fixedNow.Add(time.Minute))
+	if err != nil || got.Status != userfeedback.SubmissionPartial || !got.FollowupRequired {
+		t.Fatalf("submit = %+v, %v", got, err)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM feedback_prompts WHERE stage='followup' AND status='shown'`); n != 1 {
+		t.Fatalf("followup prompts = %d", n)
+	}
+	rows, err := pool.Query(ctx, `SELECT tag_name, match_int FROM feedback_interest_snapshots ORDER BY rank`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for rows.Next() {
+		var name string
+		var value int
+		if err := rows.Scan(&name, &value); err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, name)
+	}
+	rows.Close()
+	if len(names) != 5 || names[0] != "A" || names[1] != "B" || names[2] != "C" || names[4] != "E" {
+		t.Fatalf("snapshot = %v", names)
+	}
+	answers := []userfeedback.Answer{}
+	for _, q := range form.FollowupsFor(2) {
+		answers = append(answers, userfeedback.Answer{QuestionID: q.ID, Score: 3})
+	}
+	done, err := repo.CompleteFollowup(ctx, uid, got.SubmissionID, answers, fixedNow.Add(2*time.Minute))
+	if err != nil || done.Status != userfeedback.SubmissionCompleted {
+		t.Fatalf("complete = %+v, %v", done, err)
+	}
+	if again, err := repo.CompleteFollowup(ctx, uid, got.SubmissionID, answers, fixedNow.Add(3*time.Minute)); err != nil || again.Status != userfeedback.SubmissionCompleted {
+		t.Fatalf("再送は既存の結果を返す: %+v, %v", again, err)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM feedback_answers`); n != 4 {
+		t.Fatalf("answers = %d", n)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM feedback_interest_snapshots`); n != 5 {
+		t.Fatalf("追加回答ではスナップショットを作り直さない: %d", n)
+	}
+}
+
+func TestFeedbackFollowupRejectsInvalidAndOtherUsers(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewFeedback(pool)
+	uid := feedbackUser(t, pool, "fb-invalid", 63)
+	other := feedbackUser(t, pool, "fb-other", 64)
+	form := presentForTest(t, repo, uid, promptA)
+	if _, err := repo.SubmitOverall(ctx, uid, promptA, form.Root().ID, 6, fixedNow); !errors.Is(err, userfeedback.ErrInvalidInput) {
+		t.Fatalf("score 6: %v", err)
+	}
+	if _, err := repo.SubmitOverall(ctx, other, promptA, form.Root().ID, 3, fixedNow); !errors.Is(err, userfeedback.ErrNotFound) {
+		t.Fatalf("other user: %v", err)
+	}
+	got, err := repo.SubmitOverall(ctx, uid, promptA, form.Root().ID, 1, fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.CompleteFollowup(ctx, uid, got.SubmissionID, []userfeedback.Answer{{QuestionID: form.FollowupsFor(1)[0].ID, Score: 3}}, fixedNow); !errors.Is(err, userfeedback.ErrInvalidInput) {
+		t.Fatalf("missing answers: %v", err)
+	}
+	if _, err := repo.CompleteFollowup(ctx, other, got.SubmissionID, nil, fixedNow); !errors.Is(err, userfeedback.ErrNotFound) {
+		t.Fatalf("other user submission: %v", err)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM feedback_answers`); n != 1 {
+		t.Fatalf("失敗した追加回答は保存しない: %d", n)
+	}
+}
+
+func TestFeedbackDismissDuringFollowupKeepsOverall(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewFeedback(pool)
+	uid := feedbackUser(t, pool, "fb-dismiss", 65)
+	form := presentForTest(t, repo, uid, promptA)
+	got, err := repo.SubmitOverall(ctx, uid, promptA, form.Root().ID, 1, fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := repo.Dismiss(ctx, uid, promptA, fixedNow.Add(time.Minute))
+	if err != nil || s.Status != userfeedback.PromptDismissed || s.Stage != userfeedback.StageFollowup {
+		t.Fatalf("dismiss = %+v, %v", s, err)
+	}
+	if again, err := repo.Dismiss(ctx, uid, promptA, fixedNow.Add(2*time.Minute)); err != nil || again.Status != userfeedback.PromptDismissed {
+		t.Fatalf("再送は既存の結果を返す: %+v, %v", again, err)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM feedback_submissions WHERE status='partial'`); n != 1 {
+		t.Fatalf("部分回答は残る: %d", n)
+	}
+	if _, err := repo.CompleteFollowup(ctx, uid, got.SubmissionID, nil, fixedNow); !errors.Is(err, userfeedback.ErrConflict) {
+		t.Fatalf("閉じた後の追加回答は競合: %v", err)
+	}
+}
+
+func TestFeedbackDeleteExpiredCascadesAndTagDeleteKeepsSnapshot(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewFeedback(pool)
+	uid := feedbackUser(t, pool, "fb-retention", 66)
+	form := presentForTest(t, repo, uid, promptA)
+	if _, err := repo.SubmitOverall(ctx, uid, promptA, form.Root().ID, 1, fixedNow.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM tag WHERE tag_name='Go'`); err != nil {
+		t.Fatal(err)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM feedback_interest_snapshots WHERE "tag_ID" IS NULL AND tag_name='Go'`); n != 1 {
+		t.Fatalf("タグを消してもスナップショットは残る: %d", n)
+	}
+	if n, err := repo.DeleteExpired(ctx, fixedNow, 500); err != nil || n != 0 {
+		t.Fatalf("early delete = %d, %v", n, err)
+	}
+	if n, err := repo.DeleteExpired(ctx, fixedNow.AddDate(2, 0, 0).Add(time.Second), 500); err != nil || n != 1 {
+		t.Fatalf("delete = %d, %v", n, err)
+	}
+	for _, table := range []string{"feedback_prompts", "feedback_submissions", "feedback_answers", "feedback_interest_snapshots"} {
+		if n := queryInt(t, pool, `SELECT count(*) FROM `+table); n != 0 {
+			t.Fatalf("%s rows = %d", table, n)
+		}
+	}
+}

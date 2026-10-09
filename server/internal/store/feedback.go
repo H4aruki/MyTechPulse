@@ -198,3 +198,207 @@ func (r *Feedback) Present(ctx context.Context, userID int64, promptID string, n
 	}
 	return userfeedback.Presentation{Eligible: true, Prompt: &userfeedback.PromptSummary{ID: uuidText(pid), Status: userfeedback.PromptShown, Stage: userfeedback.StageOverall, ShownAt: now}, Form: &form}, nil
 }
+
+func lockOwnPrompt(ctx context.Context, q *dbgen.Queries, uid int32, pid pgtype.UUID) (dbgen.LockFeedbackPromptRow, error) {
+	p, err := q.LockFeedbackPrompt(ctx, pid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return p, userfeedback.ErrNotFound
+	}
+	if err != nil {
+		return p, errFeedback
+	}
+	if p.UserID != uid {
+		return p, userfeedback.ErrNotFound
+	}
+	return p, nil
+}
+
+func (r *Feedback) SubmitOverall(ctx context.Context, userID int64, promptID string, questionID int64, score int32, now time.Time) (userfeedback.SubmitResult, error) {
+	uid, err := feedbackUserID(userID)
+	if err != nil {
+		return userfeedback.SubmitResult{}, err
+	}
+	pid, err := parseUUID(promptID)
+	if err != nil {
+		return userfeedback.SubmitResult{}, err
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	p, err := lockOwnPrompt(ctx, q, uid, pid)
+	if err != nil {
+		return userfeedback.SubmitResult{}, err
+	}
+	existing, err := q.GetFeedbackSubmissionByPrompt(ctx, pid)
+	if err == nil {
+		st := userfeedback.SubmissionStatus(existing.Status)
+		return userfeedback.SubmitResult{SubmissionID: uuidText(existing.ID), Status: st, FollowupRequired: st == userfeedback.SubmissionPartial && p.Status == string(userfeedback.PromptShown)}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	if p.Status != string(userfeedback.PromptShown) {
+		return userfeedback.SubmitResult{}, userfeedback.ErrConflict
+	}
+	form, err := r.formByID(ctx, q, p.FormID)
+	if err != nil {
+		return userfeedback.SubmitResult{}, err
+	}
+	followup, err := userfeedback.ValidateOverall(form, questionID, score)
+	if err != nil {
+		return userfeedback.SubmitResult{}, err
+	}
+	status, completedAt := userfeedback.SubmissionCompleted, ts(now)
+	if followup {
+		status, completedAt = userfeedback.SubmissionPartial, pgtype.Timestamptz{}
+	}
+	sid, err := q.InsertFeedbackSubmission(ctx, dbgen.InsertFeedbackSubmissionParams{FormID: p.FormID, UserID: uid, PromptID: pid, Status: string(status), StartedAt: ts(now), CompletedAt: completedAt})
+	if err != nil {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	if err := q.InsertFeedbackAnswer(ctx, dbgen.InsertFeedbackAnswerParams{SubmissionID: sid, FormID: p.FormID, QuestionID: questionID, Score: score}); err != nil {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	weights, err := q.ListFeedbackSnapshotSource(ctx, uid)
+	if err != nil {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	for i, w := range weights {
+		if err := q.InsertFeedbackSnapshot(ctx, dbgen.InsertFeedbackSnapshotParams{SubmissionID: sid, Rank: int32(i + 1), TagID: pgtype.Int4{Int32: w.TagID, Valid: true}, TagName: w.TagName, MatchInt: w.MatchInt}); err != nil {
+			return userfeedback.SubmitResult{}, errFeedback
+		}
+	}
+	if followup {
+		err = q.MarkFeedbackPromptFollowup(ctx, pid)
+	} else {
+		err = q.MarkFeedbackPromptSubmitted(ctx, dbgen.MarkFeedbackPromptSubmittedParams{ID: pid, FinishedAt: ts(now)})
+	}
+	if err != nil {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	return userfeedback.SubmitResult{SubmissionID: uuidText(sid), Status: status, FollowupRequired: followup}, nil
+}
+
+func (r *Feedback) CompleteFollowup(ctx context.Context, userID int64, submissionID string, answers []userfeedback.Answer, now time.Time) (userfeedback.SubmitResult, error) {
+	uid, err := feedbackUserID(userID)
+	if err != nil {
+		return userfeedback.SubmitResult{}, err
+	}
+	sid, err := parseUUID(submissionID)
+	if err != nil {
+		return userfeedback.SubmitResult{}, err
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	owner, err := q.GetFeedbackSubmissionOwner(ctx, sid)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && owner.UserID != uid) {
+		return userfeedback.SubmitResult{}, userfeedback.ErrNotFound
+	}
+	if err != nil {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	p, err := lockOwnPrompt(ctx, q, uid, owner.PromptID)
+	if err != nil {
+		return userfeedback.SubmitResult{}, err
+	}
+	sub, err := q.LockFeedbackSubmission(ctx, sid)
+	if err != nil {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	if sub.Status == string(userfeedback.SubmissionCompleted) {
+		return userfeedback.SubmitResult{SubmissionID: uuidText(sid), Status: userfeedback.SubmissionCompleted}, nil
+	}
+	if p.Status != string(userfeedback.PromptShown) {
+		return userfeedback.SubmitResult{}, userfeedback.ErrConflict
+	}
+	form, err := r.formByID(ctx, q, sub.FormID)
+	if err != nil {
+		return userfeedback.SubmitResult{}, err
+	}
+	overall, err := q.GetFeedbackAnswerScore(ctx, dbgen.GetFeedbackAnswerScoreParams{SubmissionID: sid, QuestionID: form.Root().ID})
+	if err != nil {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	if err := userfeedback.ValidateFollowup(form, overall, answers); err != nil {
+		return userfeedback.SubmitResult{}, err
+	}
+	for _, a := range answers {
+		if err := q.InsertFeedbackAnswer(ctx, dbgen.InsertFeedbackAnswerParams{SubmissionID: sid, FormID: sub.FormID, QuestionID: a.QuestionID, Score: a.Score}); err != nil {
+			return userfeedback.SubmitResult{}, errFeedback
+		}
+	}
+	if err := q.CompleteFeedbackSubmission(ctx, dbgen.CompleteFeedbackSubmissionParams{ID: sid, CompletedAt: ts(now)}); err != nil {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	if err := q.MarkFeedbackPromptSubmitted(ctx, dbgen.MarkFeedbackPromptSubmittedParams{ID: owner.PromptID, FinishedAt: ts(now)}); err != nil {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return userfeedback.SubmitResult{}, errFeedback
+	}
+	return userfeedback.SubmitResult{SubmissionID: uuidText(sid), Status: userfeedback.SubmissionCompleted}, nil
+}
+
+func (r *Feedback) Dismiss(ctx context.Context, userID int64, promptID string, now time.Time) (userfeedback.PromptSummary, error) {
+	uid, err := feedbackUserID(userID)
+	if err != nil {
+		return userfeedback.PromptSummary{}, err
+	}
+	pid, err := parseUUID(promptID)
+	if err != nil {
+		return userfeedback.PromptSummary{}, err
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return userfeedback.PromptSummary{}, errFeedback
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.q.WithTx(tx)
+	p, err := lockOwnPrompt(ctx, q, uid, pid)
+	if err != nil {
+		return userfeedback.PromptSummary{}, err
+	}
+	out := userfeedback.PromptSummary{ID: uuidText(pid), Status: userfeedback.PromptDismissed, Stage: userfeedback.Stage(p.Stage), ShownAt: p.ShownAt.Time}
+	switch userfeedback.PromptStatus(p.Status) {
+	case userfeedback.PromptDismissed:
+		return out, nil
+	case userfeedback.PromptSubmitted:
+		return userfeedback.PromptSummary{}, userfeedback.ErrConflict
+	}
+	if err := q.MarkFeedbackPromptDismissed(ctx, dbgen.MarkFeedbackPromptDismissedParams{ID: pid, FinishedAt: ts(now)}); err != nil {
+		return userfeedback.PromptSummary{}, errFeedback
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return userfeedback.PromptSummary{}, errFeedback
+	}
+	return out, nil
+}
+
+func (r *Feedback) DeleteExpired(ctx context.Context, before time.Time, limit int32) (int64, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return 0, errFeedback
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SET LOCAL statement_timeout = '2s'`); err != nil {
+		return 0, errFeedback
+	}
+	n, err := r.q.WithTx(tx).DeleteExpiredFeedbackPrompts(ctx, dbgen.DeleteExpiredFeedbackPromptsParams{Before: ts(before), BatchSize: limit})
+	if err != nil {
+		return 0, errFeedback
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, errFeedback
+	}
+	return n, nil
+}
