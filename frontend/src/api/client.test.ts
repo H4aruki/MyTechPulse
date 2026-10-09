@@ -59,6 +59,15 @@ describe('request', () => {
     expect(init.body).toBe('{"username":"a"}')
   })
 
+  test('PUTにもCSRF対策のヘッダーを付ける', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
+    const { request } = await loadClient()
+    await request('PUT', '/x', { a: 1 })
+    const init = fetchMock.mock.calls.at(-1)![1] as RequestInit
+    expect(init.method).toBe('PUT')
+    expect(init.headers).toMatchObject({ 'X-MTP-CSRF': '1', 'Content-Type': 'application/json' })
+  })
+
   test('204は本文を読まずundefinedを返す', async () => {
     const { request } = await loadClient()
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
