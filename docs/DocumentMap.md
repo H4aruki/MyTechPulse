@@ -19,7 +19,8 @@ docs/
 │                                           … Goバックエンド移行設計
 ├── superpowers/plans/                    … 承認済み設計を実行する手順
 │   ├── 2026-09-14-go-migration-index.md  … #118〜#129の順序・承認・網羅表
-│   └── 2026-09-14-issue-*.md             … IssueごとのTDD実装計画
+│   ├── 2026-09-14-issue-*.md             … IssueごとのTDD実装計画
+│   └── 2026-10-09-user-feedback.md       … アンケート機能の実装計画（#84）
 ├── adr/                                  … 変更しにくい設計判断と理由
 │   ├── 0001-use-go-modular-monolith.md   … Goモジュラーモノリスの採用
 │   ├── 0002-use-server-side-sessions.md  … サーバー側認証セッションの採用
@@ -71,6 +72,10 @@ PythonバックエンドをGo製モジュラーモノリスへ移行するため
 ### superpowers/plans/2026-09-14-go-migration-index.md
 
 Go移行Issue #118〜#129の実装計画への入口。依存順、設計書の網羅表、削除・外部保存・本番公開など実行時に改めて必要な承認をまとめ、各Issueの詳細計画へリンクしている。
+
+### superpowers/plans/2026-10-09-user-feedback.md
+
+アンケート（利用者フィードバック）機能の実装計画。DBの表、判定と保存の処理、5つの窓口、画面の部品と記事一覧への組み込み、資料の更新を11のタスクに分け、試験・実装・確認・コミットの手順を書いている。
 
 ### adr/
 
