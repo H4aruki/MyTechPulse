@@ -35,7 +35,7 @@ docker run -d --name "$DB" --network "$NET" \
   -e POSTGRES_PASSWORD="$SYNTH_PASSWORD" -e POSTGRES_DB=mtp_imgcheck \
   postgres:17 >/dev/null
 for i in $(seq 1 30); do
-  if docker exec "$DB" pg_isready -U postgres -d mtp_imgcheck >/dev/null 2>&1; then
+  if docker exec "$DB" pg_isready -h 127.0.0.1 -U postgres -d mtp_imgcheck >/dev/null 2>&1; then
     break
   fi
   if [ "$i" -eq 30 ]; then
