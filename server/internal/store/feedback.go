@@ -21,6 +21,8 @@ type Feedback struct {
 
 var errFeedback = errors.New("store: 利用者フィードバックを処理できません")
 
+var _ userfeedback.Repository = (*Feedback)(nil)
+
 func NewFeedback(pool *pgxpool.Pool) *Feedback { return &Feedback{pool: pool, q: dbgen.New(pool)} }
 
 func parseUUID(s string) (pgtype.UUID, error) {
