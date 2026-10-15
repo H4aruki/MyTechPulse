@@ -85,6 +85,8 @@ services:
       # メンテナンス応答（503）にしたいときは ops/caddy/Caddyfile.maintenance を指定する。
       # 先頭に ./ を付けるのは、./ や / が無いと、composeがfileでなく名前付きvolumeと解釈するため
       - ./${MTP_CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
+      # Cloudflareの接続元IP範囲（#74）。Caddyfile が import する。メンテナンス用の設定では使わない
+      - ./ops/caddy/cloudflare-ips.caddy:/etc/caddy/cloudflare-ips.caddy:ro
       # 取得済み証明書の保存先。消すと再取得になりレート制限に近づくので消さない
       - caddy_data:/data
       - caddy_config:/config

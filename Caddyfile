@@ -9,7 +9,24 @@
 # メンテナンス応答（503）にしたいときは、docker-compose.yml の MTP_CADDYFILE で
 # ops/caddy/Caddyfile.maintenance を選ぶ。
 
+# グローバル設定は、Caddyfileの先頭に置く決まり
+{
+	servers {
+		# Cloudflareが付けた X-Forwarded-For を信頼し、client_ip を本当の利用者のIPにする
+		import cloudflare_trusted
+	}
+}
+
+# Cloudflare経由の要求にだけ答える（#74）。範囲は ops/caddy/cloudflare-ips.caddy（生成物）にあり、
+# docker-compose.yml が /etc/caddy/ へ置く。更新は scripts/update-cloudflare-ips.mjs。
+import /etc/caddy/cloudflare-ips.caddy
+
 {$API_DOMAIN} {
+	# 接続元がCloudflareでない要求は、中継の前に本文なしの403で返す。
+	# 証明書のHTTP-01チャレンジ（/.well-known/acme-challenge/）は、Caddy自身がサイトの
+	# 各処理より前に応答するので、この403には当たらず、証明書の取得・更新は止まらない。
+	import cloudflare_only
+
 	reverse_proxy api-go:8001
 
 	# HTTPSでしか繋がせない。ブラウザは一度アクセスすると以後HTTPを試さなくなる
