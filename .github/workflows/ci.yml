@@ -147,6 +147,7 @@ jobs:
       - name: 形式・静的解析・テスト・build
         working-directory: server
         run: |
+          set -euo pipefail
           test -z "$(gofmt -l .)"
           go vet ./...
           go test ./... -race -cover | tee ../go-test.log
