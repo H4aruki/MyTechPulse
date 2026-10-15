@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/H4aruki/MyTechPulse/server/internal/auth"
+	"github.com/H4aruki/MyTechPulse/server/internal/interest"
 	"github.com/H4aruki/MyTechPulse/server/internal/store/dbgen"
 )
 
@@ -109,9 +110,14 @@ func (a *Auth) CreateWithInterestsAndSession(ctx context.Context, username, pass
 			continue
 		}
 		linked[tag.TagID] = true
-		if err := q.CreateInitialRecommendation(ctx, dbgen.CreateInitialRecommendationParams{UserID: created.UserID, TagID: tag.TagID}); err != nil {
+		if err := q.CreateInitialRecommendation(ctx, dbgen.CreateInitialRecommendationParams{UserID: created.UserID, TagID: tag.TagID, MatchInt: int32(interest.InitialSelected)}); err != nil {
 			return auth.User{}, errors.New("store: 初期の興味度を作成できません")
 		}
+	}
+	if err := q.CreateUnselectedRecommendations(ctx, dbgen.CreateUnselectedRecommendationsParams{
+		UserID: created.UserID, MatchInt: int32(interest.InitialUnselected),
+	}); err != nil {
+		return auth.User{}, errors.New("store: 初期の興味度を作成できません")
 	}
 
 	if err := q.CreateSession(ctx, dbgen.CreateSessionParams{

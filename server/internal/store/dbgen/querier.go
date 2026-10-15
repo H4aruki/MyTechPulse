@@ -15,6 +15,9 @@ type Querier interface {
 	CreateInitialRecommendation(ctx context.Context, arg CreateInitialRecommendationParams) error
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateTag(ctx context.Context, tagName string) (Tag, error)
+	// 登録時に選ばなかったタグ(tagテーブルにある全タグのうち、選んだタグと正規化後の名前が同じものを除く)に、
+	// 同じ重みを一括で入れる。選んだタグの保存が終わったあとで呼ぶ。
+	CreateUnselectedRecommendations(ctx context.Context, arg CreateUnselectedRecommendationsParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	// 保持期限（終了日時、未終了なら表示日時）の古い順に、上限件数まで消す。回答などは連鎖して消える
 	DeleteExpiredFeedbackPrompts(ctx context.Context, arg DeleteExpiredFeedbackPromptsParams) (int64, error)

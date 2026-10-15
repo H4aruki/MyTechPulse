@@ -20,6 +20,10 @@ func TestInterestRepositoryConcurrentClicksAreSerialized(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 初期値のままだと上限1.0に張り付いて直列化を検出できないので、低い値から始める
+	if _, err := pool.Exec(ctx, `UPDATE recommend SET match_int=1 WHERE "user_ID"=$1`, user.ID); err != nil {
+		t.Fatal(err)
+	}
 	repo := store.NewInterest(pool)
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
@@ -66,7 +70,7 @@ func TestInterestRepositoryCollisionDoesNotChangeRows(t *testing.T) {
 	if _, err := repo.UpdateForClick(ctx, user.ID, []string{"go"}); !errors.Is(err, interest.ErrNormalizedTagCollision) {
 		t.Fatalf("Update error = %v", err)
 	}
-	if n := queryInt(t, pool, `SELECT count(*) FROM recommend WHERE "user_ID"=$1 AND match_int IN (1,1725)`, user.ID); n != 2 {
+	if n := queryInt(t, pool, `SELECT count(*) FROM recommend WHERE "user_ID"=$1 AND match_int IN (10000,1725)`, user.ID); n != 2 {
 		t.Fatalf("rows changed after collision: %d", n)
 	}
 }

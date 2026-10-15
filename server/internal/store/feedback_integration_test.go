@@ -234,7 +234,7 @@ func TestFeedbackLowScoreFollowupAndSnapshot(t *testing.T) {
 		names = append(names, name)
 	}
 	rows.Close()
-	if len(names) != 5 || names[0] != "A" || names[1] != "B" || names[2] != "C" || names[4] != "E" {
+	if len(names) != 5 || names[0] != "Go" || names[1] != "A" || names[2] != "B" || names[3] != "C" || names[4] != "D" {
 		t.Fatalf("snapshot = %v", names)
 	}
 	answers := []userfeedback.Answer{}

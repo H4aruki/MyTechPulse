@@ -10,16 +10,17 @@ import (
 )
 
 const createInitialRecommendation = `-- name: CreateInitialRecommendation :exec
-INSERT INTO recommend ("user_ID", "tag_ID", match_int) VALUES ($1, $2, 1)
+INSERT INTO recommend ("user_ID", "tag_ID", match_int) VALUES ($1, $2, $3)
 `
 
 type CreateInitialRecommendationParams struct {
-	UserID int32
-	TagID  int32
+	UserID   int32
+	TagID    int32
+	MatchInt int32
 }
 
 func (q *Queries) CreateInitialRecommendation(ctx context.Context, arg CreateInitialRecommendationParams) error {
-	_, err := q.db.Exec(ctx, createInitialRecommendation, arg.UserID, arg.TagID)
+	_, err := q.db.Exec(ctx, createInitialRecommendation, arg.UserID, arg.TagID, arg.MatchInt)
 	return err
 }
 
@@ -32,6 +33,30 @@ func (q *Queries) CreateTag(ctx context.Context, tagName string) (Tag, error) {
 	var i Tag
 	err := row.Scan(&i.TagID, &i.TagName)
 	return i, err
+}
+
+const createUnselectedRecommendations = `-- name: CreateUnselectedRecommendations :exec
+INSERT INTO recommend ("user_ID", "tag_ID", match_int)
+SELECT DISTINCT ON (lower(btrim(t.tag_name))) $1::int, t."tag_ID", $2::int
+FROM tag t
+WHERE NOT EXISTS (
+  SELECT 1 FROM recommend r JOIN tag st ON st."tag_ID" = r."tag_ID"
+  WHERE r."user_ID" = $1::int
+    AND lower(btrim(st.tag_name)) = lower(btrim(t.tag_name))
+)
+ORDER BY lower(btrim(t.tag_name)), t."tag_ID"
+`
+
+type CreateUnselectedRecommendationsParams struct {
+	UserID   int32
+	MatchInt int32
+}
+
+// 登録時に選ばなかったタグ(tagテーブルにある全タグのうち、選んだタグと正規化後の名前が同じものを除く)に、
+// 同じ重みを一括で入れる。選んだタグの保存が終わったあとで呼ぶ。
+func (q *Queries) CreateUnselectedRecommendations(ctx context.Context, arg CreateUnselectedRecommendationsParams) error {
+	_, err := q.db.Exec(ctx, createUnselectedRecommendations, arg.UserID, arg.MatchInt)
+	return err
 }
 
 const findTagByNormalizedName = `-- name: FindTagByNormalizedName :one

@@ -103,10 +103,12 @@ func TestAuthRepositorySignupCreatesUserInterestsAndSession(t *testing.T) {
 	if n := queryInt(t, pool, `SELECT count(*) FROM tag`); n != 3 {
 		t.Fatalf("tag count = %d", n)
 	}
+	// 選んだタグは10000(1.0)
 	if n := queryInt(t, pool, `SELECT count(*) FROM recommend r JOIN tag t USING ("tag_ID")
-		WHERE r."user_ID" = $1 AND r.match_int = 1 AND t.tag_name IN ('Go', 'Rust')`, user.ID); n != 2 {
-		t.Fatalf("initial recommendations = %d", n)
+		WHERE r."user_ID" = $1 AND r.match_int = 10000 AND t.tag_name IN ('Go', 'Rust')`, user.ID); n != 2 {
+		t.Fatalf("selected recommendations = %d", n)
 	}
+	// 選んだタグと同じ名前の重複タグ(GO)は、選ばなかったタグとして扱わない
 	if n := queryInt(t, pool, `SELECT count(*) FROM recommend WHERE "user_ID" = $1`, user.ID); n != 2 {
 		t.Fatalf("recommend rows = %d", n)
 	}
@@ -121,6 +123,32 @@ func TestAuthRepositorySignupCreatesUserInterestsAndSession(t *testing.T) {
 	}
 	if _, err := repo.FindByUsername(ctx, "nobody"); !errors.Is(err, auth.ErrNotFound) {
 		t.Fatalf("missing user must be ErrNotFound: %v", err)
+	}
+}
+
+func TestAuthRepositorySignupGivesUnselectedTagsEightThousand(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewAuth(pool)
+	// 既存の全タグ。Python/PYTHON は表記違いの重複で、1件だけ入る。
+	if _, err := pool.Exec(ctx, `INSERT INTO tag(tag_name) VALUES ('Go'), ('Python'), ('PYTHON'), ('Java')`); err != nil {
+		t.Fatal(err)
+	}
+	user, err := repo.CreateWithInterestsAndSession(ctx, "bob", "hash", auth.RoleMember,
+		[]string{"go", "Rust"}, hashOf(2), fixedNow.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]int{"Go": 10000, "Rust": 10000, "Python": 8000, "Java": 8000} {
+		got := queryInt(t, pool, `SELECT r.match_int FROM recommend r JOIN tag t USING ("tag_ID")
+			WHERE r."user_ID" = $1 AND t.tag_name = $2`, user.ID, name)
+		if got != want {
+			t.Errorf("%s match_int = %d, want %d", name, got, want)
+		}
+	}
+	// Go, Rust, Python, Java の4件。PYTHON は入らない。
+	if n := queryInt(t, pool, `SELECT count(*) FROM recommend WHERE "user_ID" = $1`, user.ID); n != 4 {
+		t.Fatalf("recommend rows = %d", n)
 	}
 }
 
