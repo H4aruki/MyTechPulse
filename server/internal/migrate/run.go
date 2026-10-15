@@ -24,3 +24,11 @@ func Run(ctx context.Context, db *sql.DB, migrationFS fs.FS) error {
 	}
 	return goose.UpContext(ctx, db, ".")
 }
+
+// Version はDBに適用済みのマイグレーションの版を返す。goose_db_versionが無ければ0。
+func Version(ctx context.Context, db *sql.DB) (int64, error) {
+	if err := goose.SetDialect("postgres"); err != nil {
+		return 0, err
+	}
+	return goose.GetDBVersionContext(ctx, db)
+}

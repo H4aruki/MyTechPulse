@@ -86,7 +86,7 @@ FAKE
   # 入れ替える前に動いているのは、直前の箱
   printf '%s' "$PREV_IMAGE" >"$FAKE_STATE/running"
   : >"$FX_TMP/all.log"
-  unset FAKE_NO_GO FAKE_BACKUP_FAIL FAKE_VERIFY_FAIL FAKE_PULL_FAIL FAKE_MIGRATE_FAIL FAKE_SWAP_FAIL FAKE_NEW_UNHEALTHY \
+  unset FAKE_NO_GO FAKE_BACKUP_FAIL FAKE_VERIFY_FAIL FAKE_PULL_FAIL FAKE_MIGRATE_FAIL FAKE_VERSION_FAIL FAKE_VERSION_OUT FAKE_SWAP_FAIL FAKE_NEW_UNHEALTHY \
     FAKE_PUBLIC_FAIL FAKE_ALL_UNHEALTHY FAKE_ROLLBACK_START_FAIL
   setup_fakes
 }
@@ -102,6 +102,7 @@ case "$args" in
   "inspect --format {{.Config.Image}} cid-go") echo "$FAKE_PREV_IMAGE" ;;
   "inspect --format {{index .Config.Labels \"com.docker.compose.project.working_dir\"}} cid-go") echo "$FAKE_PREV_DIR" ;;
   *"--profile go-preview pull api-go"*) [ "${FAKE_PULL_FAIL:-}" != 1 ] || exit 1 ;;
+  *"run --rm migrate-go -version"*) [ "${FAKE_VERSION_FAIL:-}" != 1 ] || exit 1; echo "${FAKE_VERSION_OUT-20261001}" ;;
   *"run --rm migrate-go"*) [ "${FAKE_MIGRATE_FAIL:-}" != 1 ] || exit 1 ;;
   *"--profile go-preview up -d --no-deps api-go"*)
     if [ "${FAKE_SWAP_FAIL:-}" = 1 ] && [ "${GO_API_IMAGE:-}" = "$FAKE_NEW_IMAGE" ]; then exit 1; fi
@@ -192,6 +193,7 @@ case_deploy_succeeds_in_order() {
     "image=${FX_IMAGE}] .*run --rm migrate-go" "image=${FX_IMAGE}] .*up -d --no-deps api-go" 'curl http://local.test/health/ready -> 200' \
     'curl http://base.test/health/ready -> 200'
   [ "$(running_now)" = "$FX_IMAGE" ] || fail "新しい箱が動いていない"
+  out_has 'deploy: migrate version=20261001' || fail "移行後のDBの版が表示されていない"
   out_has "新しい箱: $FX_IMAGE" || fail "新しい箱が表示されていない"
   out_has "直前の箱（戻し先）: $PREV_IMAGE" || fail "戻し先が表示されていない"
   local release_dir
@@ -258,6 +260,19 @@ case_migration_failure_keeps_the_running_version() {
   nothing_swapped
 }
 
+case_unreadable_db_version_only_warns() {
+  FAKE_VERSION_FAIL=1 expect 0
+  out_has 'deploy: ok' || fail "版を読めなくても反映は続くはず"
+  out_has '警告: 移行後のDBの版を読めませんでした' || fail "警告が表示されていない"
+  expect_lacks 'migrate version='
+}
+
+case_non_numeric_db_version_only_warns() {
+  FAKE_VERSION_OUT='postgresql://x:secret@db/y' expect 0
+  out_has '警告: 移行後のDBの版を読めませんでした' || fail "警告が表示されていない"
+  expect_lacks 'secret'
+}
+
 case_no_running_go_version_stops_before_anything() {
   FAKE_NO_GO=1 expect 1
   out_has 'current .*failed' || fail "失敗した工程が表示されていない"
@@ -316,7 +331,7 @@ case_failed_deploy_never_rolls_back_the_database() {
   FAKE_NEW_UNHEALTHY=1 expect 1
   expect_lacks 'pg_restore|dropdb|DROP |volume |goose.* down|migrate.* down'
   # 移行は1回だけ（戻すときに、移行を戻す操作はしない）
-  [ "$(grep -c 'run --rm migrate-go' "$FAKE_CALLS")" -eq 1 ] || fail "移行が複数回実行された"
+  [ "$(grep -c 'run --rm migrate-go$' "$FAKE_CALLS")" -eq 1 ] || fail "移行が複数回実行された"
 }
 
 # ---- 入力の拒否 ----
