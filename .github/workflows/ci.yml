@@ -123,7 +123,7 @@ jobs:
     services:
       # DB結合テスト用の使い捨てDB。接続先は検査専用の合成値で、本番とは無関係
       postgres:
-        image: postgres:17
+        image: postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
