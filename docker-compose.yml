@@ -38,6 +38,7 @@ services:
       QIITA_ACCESS_TOKEN: ${QIITA_ACCESS_TOKEN:-}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-}
     # サーバー再起動後に自動で復帰させる。止めたときは止まったままになる
     restart: unless-stopped
     # 外部への公開は caddy が443で受けて中継する。ここはローカルからの疎通確認用に

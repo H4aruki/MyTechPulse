@@ -61,8 +61,8 @@ func onlyCookie(t *testing.T, rec *httptest.ResponseRecorder) *http.Cookie {
 }
 
 const (
-	signupBody = `{"username":"synthetic-user","password":"synthetic-pass","favorite_tags":["go","react"]}`
-	loginBody  = `{"username":"synthetic-user","password":"synthetic-pass"}`
+	signupBody = `{"username":"synthetic-user","password":"synthetic-pass-12","favorite_tags":["go","react"]}`
+	loginBody  = `{"username":"synthetic-user","password":"synthetic-pass-12"}`
 )
 
 func decode(t *testing.T, rec *httptest.ResponseRecorder, v any) {
@@ -160,12 +160,12 @@ func TestHandlerSignupConflictAndValidation(t *testing.T) {
 	secret := strings.Repeat("p", 73)
 	cases := map[string]string{
 		"password over 72 bytes": `{"username":"u","password":"` + secret + `","favorite_tags":["go"]}`,
-		"blank username":         `{"username":"   ","password":"pw","favorite_tags":["go"]}`,
-		"no tags":                `{"username":"u","password":"pw","favorite_tags":[]}`,
-		"tag too long":           `{"username":"u","password":"pw","favorite_tags":["` + strings.Repeat("t", 51) + `"]}`,
+		"blank username":         `{"username":"   ","password":"long-enough-pw-1","favorite_tags":["go"]}`,
+		"no tags":                `{"username":"u","password":"long-enough-pw-1","favorite_tags":[]}`,
+		"tag too long":           `{"username":"u","password":"long-enough-pw-1","favorite_tags":["` + strings.Repeat("t", 51) + `"]}`,
 		"missing field":          `{"username":"u","favorite_tags":["go"]}`,
-		"wrong type":             `{"username":5,"password":"pw","favorite_tags":["go"]}`,
-		"unknown property":       `{"username":"u","password":"pw","favorite_tags":["go"],"role":"admin"}`,
+		"wrong type":             `{"username":5,"password":"long-enough-pw-1","favorite_tags":["go"]}`,
+		"unknown property":       `{"username":"u","password":"long-enough-pw-1","favorite_tags":["go"],"role":"admin"}`,
 		"empty password":         `{"username":"u","password":"","favorite_tags":["go"]}`,
 	}
 	for name, body := range cases {
@@ -217,7 +217,7 @@ func TestHandlerLoginFailuresAreIdentical(t *testing.T) {
 	a := newAPIHarness("mtp_session", false)
 	a.do(http.MethodPost, "/api/v1/auth/signup", signupBody)
 
-	missing := a.do(http.MethodPost, "/api/v1/auth/login", `{"username":"nobody","password":"synthetic-pass"}`)
+	missing := a.do(http.MethodPost, "/api/v1/auth/login", `{"username":"nobody","password":"synthetic-pass-12"}`)
 	wrong := a.do(http.MethodPost, "/api/v1/auth/login", `{"username":"synthetic-user","password":"wrong-password"}`)
 	assertProblem(t, missing, http.StatusUnauthorized, "invalid_credentials")
 	assertProblem(t, wrong, http.StatusUnauthorized, "invalid_credentials")
@@ -314,7 +314,7 @@ func TestHandlerOpenAPIContract(t *testing.T) {
 		statuses []string
 	}{
 		"/api/v1/auth/signup": {"post", []string{"201", "409", "422"}},
-		"/api/v1/auth/login":  {"post", []string{"200", "401", "422"}},
+		"/api/v1/auth/login":  {"post", []string{"200", "401", "422", "429"}},
 		"/api/v1/auth/me":     {"get", []string{"200", "401"}},
 		"/api/v1/auth/logout": {"post", []string{"204"}},
 	}
