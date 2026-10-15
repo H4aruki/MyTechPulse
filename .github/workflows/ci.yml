@@ -234,21 +234,26 @@ jobs:
     name: 本番への反映が要るか
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.GO_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
+    # 過去の実行とそのジョブを読むだけ（scripts/deploy-base.mjs）
+    permissions:
+      contents: read
+      actions: read
     outputs:
       needed: ${{ steps.check.outputs.needed }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # 文書・試験だけの変更では、同じ箱を入れ替え直さない。比較できないときは、安全側に倒して反映する
+      # 比較の起点は、直前の push ではなく「Go版の本番への反映」が成功した最後の main の commit（#212）
       - name: 変更されたファイルから判定
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
-          BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if ! [[ "$BEFORE" =~ ^[0-9a-f]{40}$ ]] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+          BEFORE="$(node scripts/deploy-base.mjs "$GITHUB_REPOSITORY" | sed -n 's/^base=//p')"
+          if ! [[ "$BEFORE" =~ ^[0-9a-f]{40}$ ]]; then
             echo "needed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
