@@ -53,8 +53,8 @@ type item struct {
 // 一覧APIは記事本来のトピックを返さないため、記事のタグには検索に使ったトピックだけを入れる。
 // 期間での絞り込みは、古い候補をフォールバックに残すため呼び出し側（推薦処理）で行う。
 func (c Client) Search(ctx context.Context, tag string) ([]article.Article, error) {
-	// Zennのtopicnameは小文字でないとヒットしない。
-	topic := strings.ToLower(strings.TrimSpace(tag))
+	// Zennのtopicnameは小文字でないとヒットしない。空白もないため、"Spring Boot" は "springboot" にする。
+	topic := strings.ToLower(strings.Join(strings.Fields(tag), ""))
 	count := c.Count
 	if count == 0 {
 		count = defaultCount

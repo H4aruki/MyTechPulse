@@ -105,6 +105,21 @@ func TestCurrentAPIContractProductionURLWithoutNetwork(t *testing.T) {
 	}
 }
 
+// 空白を含むタグは、空白を除き小文字にして問い合わせる。
+func TestSearchStripsWhitespaceFromTopic(t *testing.T) {
+	var gotQuery url.Values
+	srv, _ := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		_, _ = io.WriteString(w, `{"articles":[]}`)
+	})
+	if _, err := newClient(srv).Search(context.Background(), " Spring Boot "); err != nil {
+		t.Fatal(err)
+	}
+	if gotQuery.Get("topicname") != "springboot" {
+		t.Errorf("topicname = %q, want springboot", gotQuery.Get("topicname"))
+	}
+}
+
 func TestCurrentAPIContractDefaultEndpoint(t *testing.T) {
 	c := New(provider.JSONFetcher{})
 	if c.Endpoint != "https://zenn.dev/api/articles" || c.Count != 5 {

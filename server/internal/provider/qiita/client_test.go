@@ -100,14 +100,16 @@ func TestSearchRequestContractAndConversion(t *testing.T) {
 
 func TestSearchEscapesTagAsSinglePathSegment(t *testing.T) {
 	tags := map[string]string{
-		"Sass/SCSS": "Sass%2FSCSS",
-		"../":       "..%2F",
-		"C#":        "C%23",
-		"C++":       "C++",
-		"a b":       "a%20b",
-		"日本語":       "%E6%97%A5%E6%9C%AC%E8%AA%9E",
-		"a?b=c":     "a%3Fb=c",
-		"%2e%2e":    "%252e%252e",
+		"Sass/SCSS":   "Sass%2FSCSS",
+		"../":         "..%2F",
+		"C#":          "C%23",
+		"C++":         "C++",
+		"a b":         "ab",
+		"Spring Boot": "SpringBoot",
+		" Vue　.js ":   "Vue.js",
+		"日本語":         "%E6%97%A5%E6%9C%AC%E8%AA%9E",
+		"a?b=c":       "a%3Fb=c",
+		"%2e%2e":      "%252e%252e",
 	}
 	for tag, wantSegment := range tags {
 		t.Run(tag, func(t *testing.T) {
