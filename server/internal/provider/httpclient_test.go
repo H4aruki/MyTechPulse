@@ -305,13 +305,12 @@ func TestJSONFetcherTimeoutIsRetriedOnceAndClassified(t *testing.T) {
 }
 
 func TestJSONFetcherRealClientTimeout(t *testing.T) {
+	release := make(chan struct{})
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-r.Context().Done():
-		case <-time.After(2 * time.Second):
-		}
+		<-release
 	}))
 	defer srv.Close()
+	defer close(release)
 	f := tlsFetcher(srv, 64)
 	c := NewHTTPClient(30 * time.Millisecond)
 	c.Transport = srv.Client().Transport
