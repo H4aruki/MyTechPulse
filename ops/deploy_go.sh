@@ -249,6 +249,14 @@ step_backup() {
 step_migrate() {
   GO_API_IMAGE="$(state_get new_image)" dc --profile go-migrate run --rm migrate-go >/dev/null 2>&1 ||
     fail_step migrate "migrationに失敗した（入れ替えは行わない。DBは追加分だけの状態で、動いているGo版はそのまま）"
+  # 移行後のDBの版を記録する。読めなくても反映は止めない（警告だけ）
+  local ver
+  if ver="$(GO_API_IMAGE="$(state_get new_image)" dc --profile go-migrate run --rm migrate-go -version 2>/dev/null)" &&
+    ver="$(printf '%s' "$ver" | tail -n 1 | tr -d '[:space:]')" && [[ "$ver" =~ ^[0-9]+$ ]]; then
+    echo "deploy: migrate version=$ver"
+  else
+    echo "deploy: 警告: 移行後のDBの版を読めませんでした（反映は続けます）" >&2
+  fi
 }
 
 # ---- 7・8. 入れ替えと疎通確認 ----

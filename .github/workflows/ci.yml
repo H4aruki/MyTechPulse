@@ -253,16 +253,17 @@ jobs:
         run: |
           set -euo pipefail
           BEFORE="$(node scripts/deploy-base.mjs "$GITHUB_REPOSITORY" | sed -n 's/^base=//p')"
+          echo "deploy-base: base=${BEFORE:-（なし）} after=${AFTER}"
           if ! [[ "$BEFORE" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "needed=true" | tee -a "$GITHUB_OUTPUT"
             exit 0
           fi
           if files="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BEFORE}...${AFTER}" --paginate --jq '.files[].filename')" &&
             [ "$(printf '%s\n' "$files" | grep -c .)" -lt 300 ]; then
-            printf '%s\n' "$files" | node scripts/deploy-needed.mjs >> "$GITHUB_OUTPUT"
+            printf '%s\n' "$files" | node scripts/deploy-needed.mjs | tee -a "$GITHUB_OUTPUT"
           else
             # 取得できない、または一覧が切り詰められている可能性がある
-            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "needed=true" | tee -a "$GITHUB_OUTPUT"
           fi
 
   go-release:
