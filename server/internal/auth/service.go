@@ -28,6 +28,8 @@ type Service struct {
 	DummyHash string
 	// Logger は清掃失敗などの警告用。nilなら標準のslogを使う。パスワードやトークンは渡さない。
 	Logger *slog.Logger
+	// Limiter はログイン失敗の回数制限。nilなら制限しない。
+	Limiter *LoginLimiter
 }
 
 func (s Service) logger() *slog.Logger {
@@ -90,7 +92,7 @@ func invalid(fields ...*FieldError) error {
 // Signup は利用者を member として登録し、最初のセッションの平文トークンと期限を返す。
 func (s Service) Signup(ctx context.Context, in SignupInput) (User, string, time.Time, error) {
 	username, userErr := validateUsername(in.Username)
-	passErr := validatePassword(in.Password)
+	passErr := validateNewPassword(in.Password, username)
 	tags, tagErr := normalizeTags(in.FavoriteTags)
 	if err := invalid(userErr, passErr, tagErr); err != nil {
 		return User{}, "", time.Time{}, err
@@ -120,6 +122,13 @@ func (s Service) Login(ctx context.Context, username, password string) (User, st
 		return User{}, "", time.Time{}, err
 	}
 
+	ip := clientIPFrom(ctx)
+	if s.Limiter != nil {
+		if err := s.Limiter.Check(name, ip); err != nil {
+			return User{}, "", time.Time{}, err
+		}
+	}
+
 	found, err := s.Users.FindByUsername(ctx, name)
 	hash := found.PasswordHash
 	switch {
@@ -131,9 +140,15 @@ func (s Service) Login(ctx context.Context, username, password string) (User, st
 	}
 	compareErr := s.Passwords.Compare(hash, password)
 	if err != nil || compareErr != nil {
+		if s.Limiter != nil {
+			s.Limiter.Failure(name, ip)
+		}
 		return User{}, "", time.Time{}, ErrInvalidCredentials
 	}
 
+	if s.Limiter != nil {
+		s.Limiter.Success(name)
+	}
 	now := s.Clock.Now()
 	if err := s.Sessions.DeleteExpired(ctx, now); err != nil {
 		// 清掃だけの失敗でログインは止めない

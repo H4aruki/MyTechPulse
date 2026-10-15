@@ -23,6 +23,8 @@ type Config struct {
 	SwaggerEnabled   bool
 	CookieName       string
 	CookieSecure     bool
+	// ClientIPHeader はログイン試行の制限に使う接続元IPを読むヘッダー名。空なら接続元アドレス。
+	ClientIPHeader string
 }
 
 // Load は lookup から設定を読む。エラーに入力値は含めない。
@@ -83,6 +85,7 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 		SwaggerEnabled:   swagger,
 		CookieName:       cookieName,
 		CookieSecure:     cookieSecure,
+		ClientIPHeader:   strings.TrimSpace(getDefault(lookup, "CLIENT_IP_HEADER", "")),
 	}, nil
 }
 

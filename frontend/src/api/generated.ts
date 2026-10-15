@@ -15,7 +15,7 @@ export interface paths {
         put?: never;
         /**
          * ログイン
-         * @description 利用者が存在しない場合と、パスワードが違う場合は、区別できない同じ401を返す。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
+         * @description 利用者が存在しない場合と、パスワードが違う場合は、区別できない同じ401を返す。利用者名ごと(15分に5回失敗で、1分から最大15分まで倍々に伸びる締め出し)と接続元IPごと(15分に20回失敗で、窓が終わるまで)に失敗を数え、超えると429と `Retry-After`(秒)を返す。成功すると利用者名の数えは戻る。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
          */
         post: operations["auth-login"];
         delete?: never;
@@ -438,7 +438,7 @@ export interface components {
              */
             favorite_tags: string[] | null;
             /**
-             * @description パスワード。1文字以上、UTF-8で72バイト以内
+             * @description パスワード。12文字以上、UTF-8で72バイト以内。よく使われるパスワードと、利用者名と同じ文字列は使えない
              * @example synthetic-password
              */
             password: string;
@@ -522,6 +522,15 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
