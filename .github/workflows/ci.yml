@@ -103,11 +103,27 @@ jobs:
       - name: 仕掛けの確認
         run: node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/agent-harness/**/*.test.mjs"
 
+      # 本番の入口（Caddy）の設定を、本番と同じ版のcaddyで検証する。書き間違いは
+      # 反映後に入口が落ちて初めて分かるため。イメージはダイジェストで固定する
+      - name: Caddyfileの検証
+        env:
+          CADDY_IMAGE: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+          API_DOMAIN: example.com
+        run: |
+          docker run --rm -e API_DOMAIN \
+            -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -v "$PWD/ops/caddy/cloudflare-ips.caddy:/etc/caddy/cloudflare-ips.caddy:ro" \
+            -v "$PWD/ops/caddy/cloudflare-trusted-proxies.caddy:/etc/caddy/cloudflare-trusted-proxies.caddy:ro" \
+            "$CADDY_IMAGE" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          docker run --rm -e API_DOMAIN \
+            -v "$PWD/ops/caddy/Caddyfile.maintenance:/etc/caddy/Caddyfile:ro" \
+            "$CADDY_IMAGE" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
       # 外部actionが40桁のcommit SHAで固定されているか、自動デプロイが意図した条件でだけ動くか、
       # 文書の相対リンクが切れていないか、現行の説明に旧構成の言葉が混ざっていないかを確かめる（どれもNode標準機能だけで動く）
       - name: 外部actionの固定・自動デプロイの条件・文書の整合を確認
         run: |
-          node --test scripts/verify-actions-pinned.test.mjs scripts/coverage-report.test.mjs scripts/cutover-frontend.test.mjs scripts/deploy-needed.test.mjs scripts/verify-go-deploy-gated.test.mjs scripts/check-doc-links.test.mjs scripts/check-current-docs.test.mjs
+          node --test scripts/verify-actions-pinned.test.mjs scripts/coverage-report.test.mjs scripts/cutover-frontend.test.mjs scripts/deploy-needed.test.mjs scripts/verify-go-deploy-gated.test.mjs scripts/check-doc-links.test.mjs scripts/check-current-docs.test.mjs scripts/update-cloudflare-ips.test.mjs
           node scripts/verify-actions-pinned.mjs
           node scripts/check-doc-links.mjs
           node scripts/check-current-docs.mjs

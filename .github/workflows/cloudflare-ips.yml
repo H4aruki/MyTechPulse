@@ -1,0 +1,27 @@
+name: Cloudflare IP範囲の点検
+
+# 本番の入口はCloudflare経由の要求だけに絞っている（#74）。Cloudflareが範囲を変えたのに
+# ops/caddy/cloudflare-ips.caddy が古いままだと、正規の要求が403になる。
+# 週に1回、最新の範囲と比べる。違えば失敗し、オーナーにGitHubの失敗通知が届く。
+# 自動でコミットはしない（本番の入口を変える内容なので、人がPRで確かめる）。
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Cloudflare IP範囲が最新か確認
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: 最新の範囲と比べる
+        run: node scripts/update-cloudflare-ips.mjs --check

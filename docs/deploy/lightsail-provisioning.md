@@ -85,8 +85,14 @@ Lightsail コンソール → Networking → **Create static IP** → 作成し�
 | アプリケーション | プロトコル | ポート | 用途 |
 |---|---|---|---|
 | SSH | TCP | 22 | 既定で開いている |
-| HTTP | TCP | 80 | Let's Encrypt の証明書取得（HTTP-01）に必須 |
-| HTTPS | TCP | 443 | API 本番 |
+| HTTP | TCP | 80 | Let's Encrypt の証明書取得（HTTP-01）に必須。Cloudflareの範囲だけに絞る |
+| HTTPS | TCP | 443 | API 本番。Cloudflareの範囲だけに絞る |
+
+80/443 は、**IPv4 と IPv6 の両方**のファイアウォールで「Restrict to IP address」を使い、Cloudflareの範囲だけを許可する（22 は下記のとおり変えない）。範囲は `ops/caddy/cloudflare-ips.caddy` にあり、Caddy も同じ範囲以外には 403 を返す（#74）。証明書の取得（HTTP-01）は、Cloudflareのプロキシ（オレンジの雲）を通っても成功する。
+
+範囲の更新: Cloudflareが範囲を変えると、毎週の点検（`.github/workflows/cloudflare-ips.yml`）が失敗する。`node scripts/update-cloudflare-ips.mjs` を実行して差分をPRにし、マージ後にLightsailのルールも新しい範囲へ直す。
+
+戻し方: 該当のCaddyfileのコミットをrevertして反映し、Lightsailの80/443を元の「Any IP address」に戻す。
 
 SSH は「Restrict to IP address」で自分の IP に絞れるが、**固定回線でないなら絞らない**（IP が変わると自分が締め出される）。SSH の防御は、手順 6 のスクリプトが行う鍵認証の強制と fail2ban で担保する。
 
