@@ -101,8 +101,9 @@ func TestLegacyBaselineCreatesEmptyDatabase(t *testing.T) {
 	assertLegacySchema(t, db)
 	// 新規作成したスキーマでも、自動採番とCASCADEが動くこと
 	mustExec(t, db, `INSERT INTO "user"(user_name, password) VALUES ('a', 'h')`)
-	mustExec(t, db, `INSERT INTO tag(tag_name) VALUES ('Go')`)
-	mustExec(t, db, `INSERT INTO recommend VALUES (1, 1, 5000)`)
+	// 会員登録用のタグ（00006）が入っているため、そこにない名前で試す
+	mustExec(t, db, `INSERT INTO tag(tag_name) VALUES ('Zig')`)
+	mustExec(t, db, `INSERT INTO recommend SELECT 1, "tag_ID", 5000 FROM tag WHERE tag_name = 'Zig'`)
 	mustExec(t, db, `DELETE FROM "user" WHERE "user_ID" = 1`)
 	if n := count(t, db, `SELECT count(*) FROM recommend`); n != 0 {
 		t.Fatalf("recommend must cascade on user delete, got %d rows", n)
