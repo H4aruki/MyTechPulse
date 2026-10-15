@@ -13,13 +13,24 @@ export function SiteHeader({ authenticated = false, onLogout }: SiteHeaderProps)
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2">
-        <Link
-          to={authenticated ? '/articles' : '/login'}
-          className="flex items-center gap-2 font-display text-base font-bold text-ink sm:text-lg"
-        >
-          <img src="/img/mytechpulse-logo2.png" alt="" className="h-8 w-8 object-contain" />
-          MyTechPulse
-        </Link>
+        {/* LP（/）はSPAの外にあるため、未ログイン時は通常のリンクでページごと移動する */}
+        {authenticated ? (
+          <Link
+            to="/articles"
+            className="flex items-center gap-2 font-display text-base font-bold text-ink sm:text-lg"
+          >
+            <img src="/img/mytechpulse-logo2.png" alt="" className="h-8 w-8 object-contain" />
+            MyTechPulse
+          </Link>
+        ) : (
+          <a
+            href="/"
+            className="flex items-center gap-2 font-display text-base font-bold text-ink sm:text-lg"
+          >
+            <img src="/img/mytechpulse-logo2.png" alt="" className="h-8 w-8 object-contain" />
+            MyTechPulse
+          </a>
+        )}
 
         {/* スマホでは、ロゴを大きく見せるため、2段目に回す */}
         <nav
