@@ -48,6 +48,10 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 		t.Fatal(err)
 	}
 	err = migrate.Run(context.Background(), db, migrations.FS)
+	if err == nil {
+		// 移行(00006)が入れる会員登録用のタグを消し、各試験が空のtag表から始められるようにする
+		_, err = db.Exec(`DELETE FROM tag`)
+	}
 	db.Close()
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
