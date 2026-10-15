@@ -12,4 +12,17 @@ WHERE lower(btrim(tag_name)) = lower(btrim($1::text)) ORDER BY "tag_ID" LIMIT 1;
 INSERT INTO tag (tag_name) VALUES ($1) RETURNING "tag_ID", tag_name;
 
 -- name: CreateInitialRecommendation :exec
-INSERT INTO recommend ("user_ID", "tag_ID", match_int) VALUES ($1, $2, 1);
+INSERT INTO recommend ("user_ID", "tag_ID", match_int) VALUES ($1, $2, $3);
+
+-- 登録時に選ばなかったタグ(tagテーブルにある全タグのうち、選んだタグと正規化後の名前が同じものを除く)に、
+-- 同じ重みを一括で入れる。選んだタグの保存が終わったあとで呼ぶ。
+-- name: CreateUnselectedRecommendations :exec
+INSERT INTO recommend ("user_ID", "tag_ID", match_int)
+SELECT DISTINCT ON (lower(btrim(t.tag_name))) sqlc.arg(user_id)::int, t."tag_ID", sqlc.arg(match_int)::int
+FROM tag t
+WHERE NOT EXISTS (
+  SELECT 1 FROM recommend r JOIN tag st ON st."tag_ID" = r."tag_ID"
+  WHERE r."user_ID" = sqlc.arg(user_id)::int
+    AND lower(btrim(st.tag_name)) = lower(btrim(t.tag_name))
+)
+ORDER BY lower(btrim(t.tag_name)), t."tag_ID";
