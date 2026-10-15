@@ -52,7 +52,8 @@ type itemTag struct {
 
 // Search は tag を持つ記事を、Qiitaが返す順のまま最大 PerPage 件返す。
 func (c Client) Search(ctx context.Context, tag string) ([]article.Article, error) {
-	tag = strings.TrimSpace(tag)
+	// Qiitaのタグ名には空白がないため、"Spring Boot" は "SpringBoot" で問い合わせる。
+	tag = strings.Join(strings.Fields(tag), "")
 	perPage := c.PerPage
 	if perPage == 0 {
 		perPage = defaultPerPage
