@@ -12,8 +12,9 @@
 # グローバル設定は、Caddyfileの先頭に置く決まり
 {
 	servers {
-		# Cloudflareが付けた X-Forwarded-For を信頼し、client_ip を本当の利用者のIPにする
-		import cloudflare_trusted
+		# Cloudflareが付けた X-Forwarded-For を信頼し、client_ip を本当の利用者のIPにする。
+		# グローバル設定の時点ではスニペットが未定義で使えないため、パスで import する
+		import /etc/caddy/cloudflare-trusted-proxies.caddy
 	}
 }
 
