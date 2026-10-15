@@ -138,7 +138,7 @@ func newHarness() *harness {
 }
 
 func validSignup() SignupInput {
-	return SignupInput{Username: "alice", Password: "pass-word", FavoriteTags: []string{"Go"}}
+	return SignupInput{Username: "alice", Password: "pass-word-long-ok", FavoriteTags: []string{"Go"}}
 }
 
 func TestServiceSignupValidation(t *testing.T) {
@@ -198,7 +198,7 @@ func TestServiceSignupValidation(t *testing.T) {
 
 func TestServiceSignupNormalizesAndCreatesMember(t *testing.T) {
 	h := newHarness()
-	in := SignupInput{Username: "  alice  ", Password: "pass-word", FavoriteTags: []string{" Go ", "go", "GO", "Rust", "rust "}}
+	in := SignupInput{Username: "  alice  ", Password: "pass-word-long-ok", FavoriteTags: []string{" Go ", "go", "GO", "Rust", "rust "}}
 	user, plain, exp, err := h.svc.Signup(context.Background(), in)
 	if err != nil {
 		t.Fatal(err)
@@ -216,7 +216,7 @@ func TestServiceSignupNormalizesAndCreatesMember(t *testing.T) {
 		t.Fatalf("expires = %v, want %v", exp, want)
 	}
 	// 保存されているのはハッシュ化済みパスワードとトークンのハッシュだけ
-	if h.store.users["alice"].hash != "hash:pass-word" {
+	if h.store.users["alice"].hash != "hash:pass-word-long-ok" {
 		t.Fatal("password must be stored hashed")
 	}
 	if _, ok := h.store.sessions[HashToken(plain)]; !ok {
@@ -245,7 +245,7 @@ func TestServiceLoginFailuresAreIndistinguishable(t *testing.T) {
 	}
 
 	h.pw.compareCalls = nil
-	_, _, _, missingErr := h.svc.Login(context.Background(), "nobody", "pass-word")
+	_, _, _, missingErr := h.svc.Login(context.Background(), "nobody", "pass-word-long-ok")
 	missingCalls := h.pw.compareCalls
 
 	h.pw.compareCalls = nil
@@ -262,7 +262,7 @@ func TestServiceLoginFailuresAreIndistinguishable(t *testing.T) {
 	if !reflect.DeepEqual(missingCalls, []string{"dummy-hash"}) {
 		t.Fatalf("missing user compare calls = %v", missingCalls)
 	}
-	if !reflect.DeepEqual(wrongCalls, []string{"hash:pass-word"}) {
+	if !reflect.DeepEqual(wrongCalls, []string{"hash:pass-word-long-ok"}) {
 		t.Fatalf("wrong password compare calls = %v", wrongCalls)
 	}
 	if len(h.store.sessions) != 1 {
@@ -273,8 +273,8 @@ func TestServiceLoginFailuresAreIndistinguishable(t *testing.T) {
 func TestServiceLoginValidation(t *testing.T) {
 	h := newHarness()
 	for name, c := range map[string][2]string{
-		"empty username":   {"", "pass-word"},
-		"blank username":   {"   ", "pass-word"},
+		"empty username":   {"", "pass-word-long-ok"},
+		"blank username":   {"   ", "pass-word-long-ok"},
 		"empty password":   {"alice", ""},
 		"password 73 byte": {"alice", strings.Repeat("a", 73)},
 	} {
@@ -295,7 +295,7 @@ func TestServiceLoginSuccessAndMultipleDevices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	user, tokenA, exp, err := h.svc.Login(context.Background(), " alice ", "pass-word")
+	user, tokenA, exp, err := h.svc.Login(context.Background(), " alice ", "pass-word-long-ok")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func TestServiceLoginSuccessAndMultipleDevices(t *testing.T) {
 	if want := h.clock.now.Add(24 * time.Hour); !exp.Equal(want) {
 		t.Fatalf("expires = %v, want %v", exp, want)
 	}
-	_, tokenB, _, err := h.svc.Login(context.Background(), "alice", "pass-word")
+	_, tokenB, _, err := h.svc.Login(context.Background(), "alice", "pass-word-long-ok")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +377,7 @@ func TestServiceLoginCleansExpiredSessionsButToleratesFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.clock.now = exp.Add(time.Minute)
-	if _, _, _, err := h.svc.Login(context.Background(), "alice", "pass-word"); err != nil {
+	if _, _, _, err := h.svc.Login(context.Background(), "alice", "pass-word-long-ok"); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := h.store.sessions[HashToken(oldTok)]; ok {
@@ -389,7 +389,7 @@ func TestServiceLoginCleansExpiredSessionsButToleratesFailure(t *testing.T) {
 
 	// 清掃が失敗してもログインできる。警告にはパスワードやトークンを含めない
 	h.store.cleanupErr = errors.New("boom: secret-detail")
-	_, tok, _, err := h.svc.Login(context.Background(), "alice", "pass-word")
+	_, tok, _, err := h.svc.Login(context.Background(), "alice", "pass-word-long-ok")
 	if err != nil {
 		t.Fatalf("cleanup failure must not fail login: %v", err)
 	}
@@ -397,7 +397,7 @@ func TestServiceLoginCleansExpiredSessionsButToleratesFailure(t *testing.T) {
 	if !strings.Contains(logs, "WARN") {
 		t.Fatal("a warning must be logged")
 	}
-	for _, secret := range []string{"pass-word", tok, "secret-detail"} {
+	for _, secret := range []string{"pass-word-long-ok", tok, "secret-detail"} {
 		if strings.Contains(logs, secret) {
 			t.Fatalf("log must not contain %q: %s", secret, logs)
 		}

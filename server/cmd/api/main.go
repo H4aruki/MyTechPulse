@@ -91,6 +91,7 @@ func newAuthService(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) 
 		SessionTTL: cfg.SessionTTL,
 		DummyHash:  dummy,
 		Logger:     logger,
+		Limiter:    auth.NewLoginLimiter(auth.SystemClock{}),
 	}, nil
 }
 

@@ -11,9 +11,11 @@ import { TAG_CATEGORIES } from '@/constants/tags'
 import { authQueryKey } from '@/lib/auth'
 import { clearFeedbackState } from '@/lib/feedbackTracker'
 
-// サーバー側の入力規則（利用者名は前後の空白を除いて1〜50文字、パスワードはUTF-8で1〜72バイト、
+// サーバー側の入力規則（利用者名は前後の空白を除いて1〜50文字、パスワードは12文字以上でUTF-8の72バイト以内、
 // タグは1〜128件で各1〜50文字）と同じ範囲を画面でも先に確認する。
+// よく使われるパスワードかどうかはサーバーだけが判定し、その文言を画面に出す。
 const USERNAME_MAX_LENGTH = 50
+const PASSWORD_MIN_CHARS = 12
 const PASSWORD_MAX_BYTES = 72
 const TAGS_MAX_COUNT = 128
 const TAG_MAX_LENGTH = 50
@@ -29,6 +31,10 @@ const accountSchema = z.object({
   password: z
     .string()
     .min(1, 'パスワードを入力してください')
+    .refine(
+      (value) => Array.from(value).length >= PASSWORD_MIN_CHARS,
+      `パスワードは${PASSWORD_MIN_CHARS}文字以上で入力してください`,
+    )
     .refine(
       (value) => new TextEncoder().encode(value).length <= PASSWORD_MAX_BYTES,
       `パスワードは${PASSWORD_MAX_BYTES}バイト以内で入力してください`,
@@ -80,8 +86,13 @@ export function SignupPage() {
       if (status === 409) {
         setFormError('このユーザー名は既に使用されています。別のユーザー名でお試しください。')
       } else if (status === 422) {
+        const passwordMessage =
+          error instanceof ApiError
+            ? error.problem.errors?.find((e) => e.field === 'password')?.message
+            : undefined
         setFormError(
-          '入力内容に誤りがあります。ユーザー名・パスワード・タグを確認して、もう一度お試しください。',
+          passwordMessage ??
+            '入力内容に誤りがあります。ユーザー名・パスワード・タグを確認して、もう一度お試しください。',
         )
       } else {
         setFormError(error.message)
@@ -165,8 +176,12 @@ export function SignupPage() {
                   {...register('password')}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
                 />
-                {errors.password && (
+                {errors.password ? (
                   <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+                ) : (
+                  <p className="mt-1 text-sm text-slate-500">
+                    {PASSWORD_MIN_CHARS}文字以上。よく使われるパスワードは使えません。
+                  </p>
                 )}
               </div>
 

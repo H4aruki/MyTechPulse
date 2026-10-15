@@ -41,7 +41,7 @@ func New(cfg config.Config, deps Dependencies) (http.Handler, *huma.OpenAPI) {
 	api := humago.New(mux, hc)
 	health.Register(api, deps.Ready)
 	if deps.Auth != nil {
-		auth.Handler{Service: *deps.Auth, CookieName: cfg.CookieName, CookieSecure: cfg.CookieSecure}.Register(api)
+		auth.Handler{Service: *deps.Auth, CookieName: cfg.CookieName, CookieSecure: cfg.CookieSecure, ClientIPHeader: cfg.ClientIPHeader}.Register(api)
 	}
 	if deps.Auth != nil && deps.Recommendation != nil {
 		recommendation.Handler{Service: *deps.Recommendation, Auth: *deps.Auth, CookieName: cfg.CookieName}.Register(api)

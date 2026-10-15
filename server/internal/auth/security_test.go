@@ -64,7 +64,7 @@ func TestLoginUnknownUserAndWrongPasswordAreIdenticalWithBcrypt(t *testing.T) {
 	}
 	sessionsBefore := len(h.store.sessions)
 
-	uMissing, tokMissing, expMissing, errMissing := h.svc.Login(context.Background(), "nobody", "pass-word")
+	uMissing, tokMissing, expMissing, errMissing := h.svc.Login(context.Background(), "nobody", "pass-word-long-ok")
 	uWrong, tokWrong, expWrong, errWrong := h.svc.Login(context.Background(), "alice", "wrong-pass")
 
 	if errMissing == nil || errWrong == nil {
@@ -89,7 +89,7 @@ func TestHandlerLoginFailureResponsesAreIdenticalIncludingHeaders(t *testing.T) 
 	a := newAPIHarness("mtp_session", false)
 	a.do(http.MethodPost, "/api/v1/auth/signup", signupBody)
 
-	missing := a.do(http.MethodPost, "/api/v1/auth/login", `{"username":"nobody","password":"synthetic-pass"}`)
+	missing := a.do(http.MethodPost, "/api/v1/auth/login", `{"username":"nobody","password":"synthetic-pass-12"}`)
 	wrong := a.do(http.MethodPost, "/api/v1/auth/login", `{"username":"synthetic-user","password":"wrong-password"}`)
 
 	if missing.Code != http.StatusUnauthorized || wrong.Code != missing.Code {
@@ -118,7 +118,7 @@ func TestSessionsAreCreatedWithExpiryAndStoredByTokenHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, loginTok, loginExp, err := h.svc.Login(context.Background(), "alice", "pass-word")
+	_, loginTok, loginExp, err := h.svc.Login(context.Background(), "alice", "pass-word-long-ok")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestExpiredLoginSessionIsRejectedAndFreshLoginStillWorks(t *testing.T) {
 	if _, _, _, err := h.svc.Signup(context.Background(), validSignup()); err != nil {
 		t.Fatal(err)
 	}
-	_, tok, exp, err := h.svc.Login(context.Background(), "alice", "pass-word")
+	_, tok, exp, err := h.svc.Login(context.Background(), "alice", "pass-word-long-ok")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestExpiredLoginSessionIsRejectedAndFreshLoginStillWorks(t *testing.T) {
 		}
 	}
 	// 期限切れの後でも、ログインし直せば新しいセッションが使える
-	_, fresh, _, err := h.svc.Login(ctx, "alice", "pass-word")
+	_, fresh, _, err := h.svc.Login(ctx, "alice", "pass-word-long-ok")
 	if err != nil {
 		t.Fatal(err)
 	}

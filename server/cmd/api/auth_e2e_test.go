@@ -135,7 +135,7 @@ func TestAuthEndToEndWithRealDependencies(t *testing.T) {
 		WHERE u.user_name = 'new-user' AND r.match_int = 10000`).Scan(&n); err != nil || n != 2 {
 		t.Fatalf("initial interests = %d, %v", n, err)
 	}
-	if dup := send(http.MethodPost, "/api/v1/auth/signup", `{"username":"new-user","password":"x","favorite_tags":["go"]}`, nil); dup.Code != http.StatusConflict {
+	if dup := send(http.MethodPost, "/api/v1/auth/signup", `{"username":"new-user","password":"new-password","favorite_tags":["go"]}`, nil); dup.Code != http.StatusConflict {
 		t.Fatalf("duplicate signup = %d", dup.Code)
 	}
 	// 保存されたパスワードはbcryptハッシュで、平文ではない

@@ -75,6 +75,16 @@ describe('LoginPage', () => {
     expect(screen.queryByRole('heading', { name: '記事一覧' })).not.toBeInTheDocument()
   })
 
+  test('429は失敗が続いたため待つよう案内する', async () => {
+    vi.mocked(login).mockRejectedValue(new ApiError({ status: 429, code: 'too_many_requests' }))
+    renderLogin()
+
+    submit('alice', 'secret')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('しばらく操作できません')
+    expect(login).toHaveBeenCalledTimes(1)
+  })
+
   test('401以外の失敗はApiErrorの文言を出し、自動で再送しない', async () => {
     vi.mocked(login).mockRejectedValue(
       new ApiError({ status: 503 }, 'しばらくしてからお試しください。'),

@@ -114,7 +114,7 @@ func post(h http.Handler, path, body string, headers map[string]string, cookies 
 
 var csrfHeaders = map[string]string{"Origin": webOrigin, "X-MTP-CSRF": "1"}
 
-const signupJSON = `{"username":"synthetic-user","password":"synthetic-pass","favorite_tags":["go"]}`
+const signupJSON = `{"username":"synthetic-user","password":"synthetic-pass-12","favorite_tags":["go"]}`
 
 func TestAuthRoutesRejectStateChangesWithoutOriginOrCSRFHeader(t *testing.T) {
 	h := newAuthHandler()

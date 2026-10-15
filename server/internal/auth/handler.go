@@ -3,7 +3,11 @@ package auth
 import (
 	"context"
 	"errors"
+	"math"
+	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -21,12 +25,15 @@ type Handler struct {
 	CookieName string
 	// CookieSecure は本番でtrue。
 	CookieSecure bool
+	// ClientIPHeader は接続元IPを読むヘッダー名（例: CF-Connecting-IP）。空なら接続元アドレスを使う。
+	// 信頼できる中継(Cloudflare等)の裏でだけ設定する。
+	ClientIPHeader string
 }
 
 // SignupRequest は会員登録の入力。
 type SignupRequest struct {
 	Username     string   `json:"username" minLength:"1" example:"synthetic-user" doc:"利用者名。前後の空白を除いて1〜50文字"`
-	Password     string   `json:"password" minLength:"1" example:"synthetic-password" doc:"パスワード。1文字以上、UTF-8で72バイト以内"`
+	Password     string   `json:"password" minLength:"1" example:"synthetic-password" doc:"パスワード。12文字以上、UTF-8で72バイト以内。よく使われるパスワードと、利用者名と同じ文字列は使えない"`
 	FavoriteTags []string `json:"favorite_tags" minItems:"1" maxItems:"128" example:"[\"go\",\"react\"]" doc:"興味のあるタグ。1〜128件、各タグは前後の空白を除いて1〜50文字。大文字小文字を無視して重複を除く"`
 }
 
@@ -85,7 +92,7 @@ func (h Handler) Register(api huma.API) {
 		Description:   "利用者を member として登録し、選んだタグを初期の興味として保存して、そのままログイン状態にする。" + csrfNote,
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusCreated,
-		Errors:        []int{http.StatusConflict},
+		Errors:        []int{http.StatusConflict, http.StatusUnprocessableEntity},
 	}, h.signup)
 
 	huma.Register(api, huma.Operation{
@@ -93,10 +100,11 @@ func (h Handler) Register(api huma.API) {
 		Method:        http.MethodPost,
 		Path:          "/api/v1/auth/login",
 		Summary:       "ログイン",
-		Description:   "利用者が存在しない場合と、パスワードが違う場合は、区別できない同じ401を返す。" + csrfNote,
+		Description:   "利用者が存在しない場合と、パスワードが違う場合は、区別できない同じ401を返す。利用者名ごと(15分に5回失敗で、1分から最大15分まで倍々に伸びる締め出し)と接続元IPごと(15分に20回失敗で、窓が終わるまで)に失敗を数え、超えると429と `Retry-After`(秒)を返す。成功すると利用者名の数えは戻る。" + csrfNote,
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusOK,
-		Errors:        []int{http.StatusUnauthorized},
+		Middlewares:   huma.Middlewares{h.readClientIP},
+		Errors:        []int{http.StatusUnauthorized, http.StatusTooManyRequests},
 	}, h.login)
 
 	huma.Register(api, huma.Operation{
@@ -130,6 +138,26 @@ func (h Handler) readToken(ctx huma.Context, next func(huma.Context)) {
 		token = c.Value
 	}
 	next(huma.WithValue(ctx, tokenKey{}, token))
+}
+
+// readClientIP は接続元IPを取り出して処理の文脈へ渡す。
+func (h Handler) readClientIP(ctx huma.Context, next func(huma.Context)) {
+	value := ""
+	if h.ClientIPHeader != "" {
+		value = ctx.Header(h.ClientIPHeader)
+	}
+	next(huma.WithValue(ctx, clientIPKey{}, clientIP(value, ctx.RemoteAddr())))
+}
+
+// clientIP は信頼するヘッダーに値があればそれを、無ければ接続元アドレスのIPを返す。
+func clientIP(headerValue, remoteAddr string) string {
+	if v := strings.TrimSpace(headerValue); v != "" {
+		return v
+	}
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		return host
+	}
+	return remoteAddr
 }
 
 func tokenFrom(ctx context.Context) string {
@@ -202,7 +230,16 @@ func (h Handler) logout(ctx context.Context, _ *struct{}) (*logoutOutput, error)
 // 内部エラーの原因・SQL・入力値は応答へ出さない。
 func toProblem(err error, needLogin bool) error {
 	var ve *ValidationError
+	var tm *TooManyAttemptsError
 	switch {
+	case errors.As(err, &tm):
+		secs := int(math.Ceil(tm.RetryAfter.Seconds()))
+		if secs < 1 {
+			secs = 1
+		}
+		return huma.ErrorWithHeaders(
+			httpx.NewProblem(http.StatusTooManyRequests, "too_many_requests", "ログインの試行が多すぎます。しばらく待ってからもう一度お試しください"),
+			http.Header{"Retry-After": {strconv.Itoa(secs)}})
 	case errors.As(err, &ve):
 		fields := make([]httpx.FieldError, 0, len(ve.Fields))
 		for _, f := range ve.Fields {

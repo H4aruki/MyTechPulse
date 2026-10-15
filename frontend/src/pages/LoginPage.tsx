@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
-import { UnauthorizedError } from '@/api/client'
+import { ApiError, UnauthorizedError } from '@/api/client'
 import { login } from '@/api/endpoints'
 import { AppLayout } from '@/components/AppLayout'
 import { authQueryKey } from '@/lib/auth'
@@ -43,6 +43,10 @@ export function LoginPage() {
       // 同じ401で返る。表示も1種類に統一する。
       if (error instanceof UnauthorizedError) {
         setFormError('ユーザー名またはパスワードが間違っています。')
+        return
+      }
+      if (error instanceof ApiError && error.problem.status === 429) {
+        setFormError('ログインの失敗が続いたため、しばらく操作できません。時間をおいてからもう一度お試しください。')
         return
       }
       setFormError(error.message)

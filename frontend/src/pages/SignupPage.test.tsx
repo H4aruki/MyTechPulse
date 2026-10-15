@@ -33,7 +33,9 @@ function fillAccount(username: string, password: string) {
   fireEvent.click(screen.getByRole('button', { name: NEXT_BUTTON }))
 }
 
-async function goToTagStep(username = 'bob', password = 'secret') {
+const VALID_PASSWORD = 'secret-pass-123'
+
+async function goToTagStep(username = 'bob', password = VALID_PASSWORD) {
   fillAccount(username, password)
   await screen.findByRole('heading', { name: '興味のあるタグを選択してください' })
 }
@@ -60,7 +62,7 @@ describe('SignupPage', () => {
     vi.mocked(signup).mockResolvedValue({ user })
     const client = renderSignup()
 
-    await goToTagStep(' bob ', 'secret')
+    await goToTagStep(' bob ', VALID_PASSWORD)
     selectTags('Go', 'React')
     clickRegister()
 
@@ -68,7 +70,7 @@ describe('SignupPage', () => {
     // useMutation は第2引数に実行情報も渡すため、送信内容だけを確認する
     expect(vi.mocked(signup).mock.calls[0][0]).toEqual({
       username: 'bob',
-      password: 'secret',
+      password: VALID_PASSWORD,
       favorite_tags: ['Go', 'React'],
     })
     expect(client.getQueryData(authQueryKey)).toEqual(user)
@@ -116,7 +118,7 @@ describe('SignupPage', () => {
   test('空白だけのユーザー名は次の手順へ進めない', async () => {
     renderSignup()
 
-    fillAccount('   ', 'secret')
+    fillAccount('   ', VALID_PASSWORD)
 
     expect(await screen.findByText('ユーザー名を入力してください')).toBeInTheDocument()
   })
@@ -124,7 +126,7 @@ describe('SignupPage', () => {
   test('ユーザー名は51文字以上を受け付けない', async () => {
     renderSignup()
 
-    fillAccount('a'.repeat(51), 'secret')
+    fillAccount('a'.repeat(51), VALID_PASSWORD)
 
     expect(await screen.findByText('ユーザー名は50文字以内で入力してください')).toBeInTheDocument()
   })
@@ -149,6 +151,50 @@ describe('SignupPage', () => {
     expect(
       screen.getByRole('heading', { name: '興味のあるタグを選択してください' }),
     ).toBeInTheDocument()
+  })
+
+  test('パスワードは12文字未満を受け付けない', async () => {
+    renderSignup()
+
+    fillAccount('bob', 'a'.repeat(11))
+
+    expect(
+      await screen.findByText('パスワードは12文字以上で入力してください'),
+    ).toBeInTheDocument()
+    expect(signup).not.toHaveBeenCalled()
+  })
+
+  test('12文字ちょうどのパスワードは受け付ける', async () => {
+    renderSignup()
+
+    await goToTagStep('bob', 'a1b2c3d4e5f6')
+
+    expect(
+      screen.getByRole('heading', { name: '興味のあるタグを選択してください' }),
+    ).toBeInTheDocument()
+  })
+
+  test('422でサーバーがパスワードの問題を返したら、その文言を出す', async () => {
+    vi.mocked(signup).mockRejectedValue(
+      new ApiError({
+        status: 422,
+        code: 'validation_failed',
+        errors: [
+          {
+            field: 'password',
+            message: 'よく使われるパスワードのため使えません。別のパスワードにしてください',
+          },
+        ],
+      }),
+    )
+    renderSignup()
+
+    await goToTagStep()
+    selectTags('Go')
+    clickRegister()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('よく使われるパスワードのため使えません')
+    expect(screen.getByRole('heading', { name: '新規登録' })).toBeInTheDocument()
   })
 
   test('タグが未選択なら登録できない', async () => {
