@@ -325,14 +325,15 @@ func TestJSONFetcherRealClientTimeout(t *testing.T) {
 
 func TestJSONFetcherContextDeadlineIsNotRetried(t *testing.T) {
 	var calls atomic.Int32
+	// ハンドラは何も書かずに待つ。r.Context() の終了で戻ると空の200が
+	// 返り、期限切れとの競合で「不正な応答」になり得るため、テスト終了まで止める。
+	release := make(chan struct{})
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		select {
-		case <-r.Context().Done():
-		case <-time.After(2 * time.Second):
-		}
+		<-release
 	}))
 	defer srv.Close()
+	defer close(release)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
