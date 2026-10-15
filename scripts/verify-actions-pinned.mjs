@@ -6,7 +6,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const USES_LINE = /^\s*(?:-\s+)?uses:\s*(.+?)\s*$/;
-const COMMIT_SHA = /^[0-9a-f]{40}$/;
+const IMAGE_LINE = /^\s*image:\s*(.+?)\s*$/;
+const IMAGE_DIGEST = /@sha256:[0-9a-f]{64}$/;
+const COMMIT_SHA =/^[0-9a-f]{40}$/;
 const DOCKER_DIGEST = /^docker:\/\/.+@sha256:[0-9a-f]{64}$/;
 
 function stripValue(raw) {
@@ -22,6 +24,15 @@ function stripValue(raw) {
 export function findUnpinnedActions(text, file) {
   const violations = [];
   text.split(/\r?\n/).forEach((lineText, index) => {
+    const image = IMAGE_LINE.exec(lineText);
+    if (image) {
+      // services / container の image も、ダイジェストで固定する
+      const value = stripValue(image[1]);
+      if (!IMAGE_DIGEST.test(value)) {
+        violations.push({ file, line: index + 1, action: value.split("@")[0] });
+      }
+      return;
+    }
     const match = USES_LINE.exec(lineText);
     if (!match) return;
     const value = stripValue(match[1]);

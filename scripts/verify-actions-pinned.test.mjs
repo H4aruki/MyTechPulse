@@ -67,6 +67,13 @@ test("docker:// 指定はsha256ダイジェスト固定のときだけ成功す�
   assert.equal(findUnpinnedActions("  - uses: docker://alpine:3.20\n", "a.yml").length, 1);
 });
 
+test("services の image はsha256ダイジェスト固定のときだけ成功する", () => {
+  const digest = "b".repeat(64);
+  assert.deepEqual(findUnpinnedActions(`    services:\n      db:\n        image: postgres:17@sha256:${digest}\n`, "a.yml"), []);
+  const found = findUnpinnedActions("    services:\n      db:\n        image: postgres:17\n", "a.yml");
+  assert.deepEqual(found.map((f) => [f.line, f.action]), [[3, "postgres:17"]]);
+});
+
 test("コメント内のusesや文章中のusesは対象外", () => {
   const text = "# uses: actions/checkout@v4\nname: uses: は説明\nrun: echo 'uses: a/b@v1'\n";
   assert.deepEqual(findUnpinnedActions(text, "a.yml"), []);
