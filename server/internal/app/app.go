@@ -10,6 +10,7 @@ import (
 
 	"github.com/H4aruki/MyTechPulse/server/internal/auth"
 	"github.com/H4aruki/MyTechPulse/server/internal/health"
+	"github.com/H4aruki/MyTechPulse/server/internal/passkey"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/config"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/httpx"
 	"github.com/H4aruki/MyTechPulse/server/internal/recommendation"
@@ -24,6 +25,8 @@ type Dependencies struct {
 	Auth           *auth.Service
 	Recommendation *recommendation.Service
 	UserFeedback   *userfeedback.Service
+	// Passkey が nil のときはパスキーAPIを登録しない。
+	Passkey *passkey.Service
 }
 
 // New はHTTPハンドラーとOpenAPI仕様を返す。
@@ -45,6 +48,9 @@ func New(cfg config.Config, deps Dependencies) (http.Handler, *huma.OpenAPI) {
 	}
 	if deps.Auth != nil && deps.Recommendation != nil {
 		recommendation.Handler{Service: *deps.Recommendation, Auth: *deps.Auth, CookieName: cfg.CookieName}.Register(api)
+	}
+	if deps.Auth != nil && deps.Passkey != nil {
+		passkey.Handler{Service: *deps.Passkey, Auth: *deps.Auth, CookieName: cfg.CookieName, CookieSecure: cfg.CookieSecure}.Register(api)
 	}
 	if deps.Auth != nil && deps.UserFeedback != nil {
 		userfeedback.Handler{Service: deps.UserFeedback, Auth: *deps.Auth, CookieName: cfg.CookieName}.Register(api)

@@ -47,13 +47,21 @@ export function SiteHeader({ authenticated = false, onLogout }: SiteHeaderProps)
 
         <div className="ml-auto flex items-center gap-2 md:ml-0">
           {authenticated ? (
-            <button
+            <>
+              <Link
+                to="/settings"
+                className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold sm:px-4 text-ink-muted transition hover:bg-slate-100"
+              >
+                設定
+              </Link>
+              <button
               type="button"
               onClick={onLogout}
               className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold sm:px-4 text-ink-muted transition hover:bg-slate-100"
             >
               ログアウト
-            </button>
+              </button>
+            </>
           ) : (
             <>
               <Link

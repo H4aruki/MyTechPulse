@@ -12,6 +12,7 @@ import (
 
 	"github.com/H4aruki/MyTechPulse/server/internal/app"
 	"github.com/H4aruki/MyTechPulse/server/internal/auth"
+	"github.com/H4aruki/MyTechPulse/server/internal/passkey"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/config"
 	"github.com/H4aruki/MyTechPulse/server/internal/recommendation"
 	"github.com/H4aruki/MyTechPulse/server/internal/userfeedback"
@@ -36,6 +37,7 @@ func run(path string) error {
 		Auth:           &auth.Service{},
 		Recommendation: &recommendation.Service{},
 		UserFeedback:   &userfeedback.Service{},
+		Passkey:        &passkey.Service{},
 	})
 	data, err := json.MarshalIndent(spec, "", "  ")
 	if err != nil {

@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { ArticlesPage } from '@/pages/ArticlesPage'
 import { LoginPage } from '@/pages/LoginPage'
+import { SettingsPage } from '@/pages/SettingsPage'
 import { SignupPage } from '@/pages/SignupPage'
 
 // LP（/）とアプリ本体（/app/）を分離しているため、SPA側は basename を /app に固定する
@@ -20,6 +21,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <ArticlesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="settings"
+          element={
+            <ProtectedRoute>
+              <SettingsPage />
             </ProtectedRoute>
           }
         />
