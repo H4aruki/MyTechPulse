@@ -458,6 +458,83 @@ func TestHandlerRenameRejectsBlankNamesOfAnyKind(t *testing.T) {
 	}
 }
 
+// 目的: 制御文字・書式文字・見えない文字だけの名前は、名前変更で422(nameの項目エラー)になり、保存先を呼ばないこと。
+func TestHandlerRenameRejectsControlAndInvisibleCharacters(t *testing.T) {
+	e := newPathsEnv(t)
+	id, _ := e.register("tok-alice", "mine")
+	for name, bad := range map[string]string{
+		"NUL":        "a\x00b",
+		"改行":         "a\nb",
+		"タブ":         "a\tb",
+		"ESC":        "a\x1bb",
+		"DEL":        "a\x7fb",
+		"RLO":        "gpj.exe\U0000202Etxt",
+		"ゼロ幅空白":      "a\U0000200Bb",
+		"ゼロ幅空白だけ":    "\U0000200B",
+		"空白+ゼロ幅空白":   " \U0000200B\U00003000",
+		"文字に挟まれたZWJ": "a\U0000200Db",
+		"行区切りだけ":     "\U00002028",
+		"ハングルフィラーだけ": "\U00003164",
+	} {
+		r := e.do(http.MethodPatch, e.passkeyPath(id), "tok-alice", "", map[string]any{"name": bad}, true)
+		if r.Code != http.StatusUnprocessableEntity || r.code() != "validation_failed" {
+			t.Errorf("%s: 名前 %q = %d %s", name, bad, r.Code, r.Body)
+			continue
+		}
+		errs, _ := r.json()["errors"].([]any)
+		if len(errs) != 1 || errs[0].(map[string]any)["field"] != "name" {
+			t.Errorf("%s: どの項目か分からない: %s", name, r.Body)
+		}
+	}
+	if len(e.pk.renameCalls) != 0 {
+		t.Errorf("不正な名前で保存先へ進んだ: %q", e.pk.renameCalls)
+	}
+	if got := e.nameOf(1); len(got) != 1 || got[0] != "mine" {
+		t.Errorf("不正な名前で変わった: %v", got)
+	}
+	// 数えている呼び出し口が生きていること(絵文字の家族は、ZWJを含んでも保存まで進む)
+	family := "\U0001F468\U0000200D\U0001F469\U0000200D\U0001F467"
+	if r := e.do(http.MethodPatch, e.passkeyPath(id), "tok-alice", "", map[string]any{"name": family}, true); r.Code != http.StatusNoContent {
+		t.Fatalf("絵文字の名前 = %d %s", r.Code, r.Body)
+	}
+	if len(e.pk.renameCalls) != 1 || e.pk.renameCalls[0] != family {
+		t.Errorf("保存先の呼び出し = %q", e.pk.renameCalls)
+	}
+}
+
+// 目的: 登録完了でも同じ名前の検査が効き、422(nameの項目エラー)になること。
+// 保存せず、チャレンジも消費しない(入力ミスで手続きをやり直させない)。
+func TestHandlerFinishRejectsControlCharactersInNameWithoutBurningTheChallenge(t *testing.T) {
+	e := newPathsEnv(t)
+	token, pub, _ := e.begin("tok-alice")
+	for name, bad := range map[string]string{
+		"NUL":     "a\x00b",
+		"改行":      "a\nb",
+		"RLO":     "gpj.exe\U0000202Etxt",
+		"ゼロ幅空白だけ": "\U0000200B",
+	} {
+		r := e.finish("tok-alice", token, bad, attest(t, pub, newCredID(), testOrigin))
+		if r.Code != http.StatusUnprocessableEntity || r.code() != "validation_failed" {
+			t.Errorf("%s: 名前 %q = %d %s", name, bad, r.Code, r.Body)
+			continue
+		}
+		errs, _ := r.json()["errors"].([]any)
+		if len(errs) != 1 || errs[0].(map[string]any)["field"] != "name" {
+			t.Errorf("%s: どの項目か分からない: %s", name, r.Body)
+		}
+	}
+	if e.passkeys.count(1) != 0 {
+		t.Fatal("不正な名前で登録された")
+	}
+	if e.ch.consumeCalls != 0 {
+		t.Fatalf("不正な名前でチャレンジを消費した(%d回)", e.ch.consumeCalls)
+	}
+	// 同じチャレンジで、正しい名前の要求はまだ通る
+	if r := e.finish("tok-alice", token, "iPhone", attest(t, pub, newCredID(), testOrigin)); r.Code != http.StatusCreated {
+		t.Fatalf("やり直し = %d %s", r.Code, r.Body)
+	}
+}
+
 func TestHandlerFinishRejectsBadRequestsWithoutBurningTheChallenge(t *testing.T) {
 	e := newPathsEnv(t)
 	token, pub, _ := e.begin("tok-alice")
