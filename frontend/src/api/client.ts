@@ -42,7 +42,7 @@ function isProblem(response: Response): boolean {
  * 状態を変える要求にはCSRF対策のヘッダーを付ける。
  */
 export async function request<T>(
-  method: 'GET' | 'POST' | 'PUT',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<T> {

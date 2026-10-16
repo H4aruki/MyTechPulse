@@ -19,6 +19,7 @@ import (
 
 	"github.com/H4aruki/MyTechPulse/server/internal/app"
 	"github.com/H4aruki/MyTechPulse/server/internal/auth"
+	"github.com/H4aruki/MyTechPulse/server/internal/passkey"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/config"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/logging"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/postgres"
@@ -63,7 +64,11 @@ func run(ctx context.Context, lookup func(string) (string, bool), stdout, stderr
 		FeedTimeout: cfg.FeedTimeout,
 	}
 	feedbackService := &userfeedback.Service{Repo: store.NewFeedback(pool), Clock: auth.SystemClock{}, Logger: logger}
-	handler, _ := app.New(cfg, app.Dependencies{Logger: logger, Ready: pool, Auth: authService, Recommendation: recommendService, UserFeedback: feedbackService})
+	passkeyService, err := newPasskeyService(cfg, pool, logger)
+	if err != nil {
+		return err
+	}
+	handler, _ := app.New(cfg, app.Dependencies{Logger: logger, Ready: pool, Auth: authService, Recommendation: recommendService, UserFeedback: feedbackService, Passkey: passkeyService})
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)
 	if err != nil {
 		return fmt.Errorf("%sで待ち受けできません", cfg.HTTPAddr)
@@ -92,6 +97,21 @@ func newAuthService(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) 
 		DummyHash:  dummy,
 		Logger:     logger,
 		Limiter:    auth.NewLoginLimiter(auth.SystemClock{}),
+	}, nil
+}
+
+// newPasskeyService はパスキーの実依存を組み立てる。RP IDとオリジンが不正なら起動を止める。
+func newPasskeyService(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) (*passkey.Service, error) {
+	w, err := passkey.NewWebAuthn(passkey.Config{RPID: cfg.WebAuthnRPID, RPDisplayName: cfg.WebAuthnRPName, Origins: cfg.WebAuthnOrigins})
+	if err != nil {
+		return nil, err
+	}
+	return &passkey.Service{
+		WebAuthn:   w,
+		Passkeys:   store.NewPasskey(pool),
+		Challenges: store.NewPasskeyChallenge(pool),
+		Clock:      auth.SystemClock{},
+		Logger:     logger,
 	}, nil
 }
 

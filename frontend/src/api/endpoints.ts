@@ -9,6 +9,10 @@ import type {
   FeedbackSubmissionResponse,
   FeedResponse,
   LoginRequest,
+  PasskeyItem,
+  PasskeyListResponse,
+  RegisterBeginResponse,
+  RegisterFinishRequest,
   SignupRequest,
   User,
 } from './types'
@@ -67,4 +71,26 @@ export function dismissFeedback(promptId: string) {
   return request<FeedbackDismissalResponse>('POST', '/api/v1/user-feedback/dismissals', {
     prompt_id: promptId,
   })
+}
+
+/** 自分のパスキーを登録順に取得する */
+export function fetchPasskeys() {
+  return request<PasskeyListResponse>('GET', '/api/v1/auth/passkeys')
+}
+
+/** パスキー登録の開始。端末へ渡す設定を受け取り、チャレンジはHttpOnly Cookieで結び付く */
+export function beginPasskeyRegistration() {
+  return request<RegisterBeginResponse>('POST', '/api/v1/auth/passkeys/register/begin')
+}
+
+export function finishPasskeyRegistration(body: RegisterFinishRequest) {
+  return request<PasskeyItem>('POST', '/api/v1/auth/passkeys/register/finish', body)
+}
+
+export function renamePasskey(id: number, name: string) {
+  return request<void>('PATCH', `/api/v1/auth/passkeys/${id}`, { name })
+}
+
+export function deletePasskey(id: number) {
+  return request<void>('DELETE', `/api/v1/auth/passkeys/${id}`)
 }
