@@ -19,6 +19,14 @@ export class PasskeyLoginCancelledError extends Error {
   }
 }
 
+/** 画面側が自分で中止した（AbortController）。利用者の取り消しと同じく静かに扱うため、派生クラスにする */
+export class PasskeyLoginAbortedError extends PasskeyLoginCancelledError {
+  constructor() {
+    super()
+    this.name = 'PasskeyLoginAbortedError'
+  }
+}
+
 /** この端末のパスキーがすでに登録されている */
 export class PasskeyAlreadyRegisteredError extends Error {
   constructor() {
@@ -132,14 +140,44 @@ export function assertionToJSON(credential: PublicKeyCredential): Record<string,
   return json
 }
 
+/**
+ * ブラウザが conditional UI（利用者名欄の autofill にパスキーを出す）に対応しているか。
+ * 関数が無い・false・reject はどれも false にする
+ */
+export async function isConditionalPasskeyLoginAvailable(): Promise<boolean> {
+  if (!isPasskeyLoginSupported()) return false
+  const check = (window.PublicKeyCredential as { isConditionalMediationAvailable?: () => Promise<boolean> })
+    .isConditionalMediationAvailable
+  if (typeof check !== 'function') return false
+  try {
+    return (await check.call(window.PublicKeyCredential)) === true
+  } catch {
+    return false
+  }
+}
+
+export interface PasskeyAssertionOptions {
+  signal?: AbortSignal
+  /** 省略時は端末の確認画面を直接出す（modal） */
+  mediation?: 'conditional'
+}
+
 /** 端末の本人確認を開始してログイン用の応答を得て、サーバーへ送る形で返す */
 export async function getPasskeyAssertion(
   publicKey: Record<string, unknown>,
+  options: PasskeyAssertionOptions = {},
 ): Promise<Record<string, unknown>> {
+  const { signal, mediation } = options
   let credential: Credential | null
   try {
-    credential = await navigator.credentials.get({ publicKey: toRequestOptions(publicKey) })
+    credential = await navigator.credentials.get({
+      publicKey: toRequestOptions(publicKey),
+      ...(mediation ? { mediation } : {}),
+      ...(signal ? { signal } : {}),
+    })
   } catch (error) {
+    // 新しいブラウザは signal.reason をそのまま投げるため、エラー名ではなく signal で判定する
+    if (signal?.aborted) throw new PasskeyLoginAbortedError()
     if (
       error instanceof DOMException &&
       (error.name === 'NotAllowedError' || error.name === 'AbortError')
@@ -148,6 +186,8 @@ export async function getPasskeyAssertion(
     }
     throw error
   }
+  // 解決と中止が競合した場合も、中止を優先して結果を使わせない
+  if (signal?.aborted) throw new PasskeyLoginAbortedError()
   if (!credential) throw new PasskeyLoginCancelledError()
   return assertionToJSON(credential as PublicKeyCredential)
 }
