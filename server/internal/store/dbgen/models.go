@@ -8,11 +8,42 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AuthPasskey struct {
+	ID             int64
+	UserID         int32
+	CredentialID   []byte
+	PublicKey      []byte
+	SignCount      int64
+	Transports     []string
+	Aaguid         []byte
+	BackupEligible bool
+	BackupState    bool
+	Name           string
+	CreatedAt      pgtype.Timestamptz
+	LastUsedAt     pgtype.Timestamptz
+}
+
 type AuthSession struct {
 	TokenHash []byte
 	UserID    int32
 	ExpiresAt pgtype.Timestamptz
 	CreatedAt pgtype.Timestamptz
+}
+
+type AuthWebauthnChallenge struct {
+	ID          []byte
+	Purpose     string
+	UserID      pgtype.Int4
+	SessionData []byte
+	ExpiresAt   pgtype.Timestamptz
+	UsedAt      pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+}
+
+type AuthWebauthnUser struct {
+	UserID     int32
+	UserHandle []byte
+	CreatedAt  pgtype.Timestamptz
 }
 
 type FeedbackAnswer struct {

@@ -12,20 +12,29 @@ import (
 
 type Querier interface {
 	CompleteFeedbackSubmission(ctx context.Context, arg CompleteFeedbackSubmissionParams) error
+	// 未使用かつ期限内のときだけ、使用済みにして返す(1回限り。同時に呼ばれても1回しか成功しない)。
+	ConsumeWebAuthnChallenge(ctx context.Context, arg ConsumeWebAuthnChallengeParams) (ConsumeWebAuthnChallengeRow, error)
+	CountPasskeysByUser(ctx context.Context, userID int32) (int64, error)
 	CreateInitialRecommendation(ctx context.Context, arg CreateInitialRecommendationParams) error
+	CreatePasskey(ctx context.Context, arg CreatePasskeyParams) (AuthPasskey, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateTag(ctx context.Context, tagName string) (Tag, error)
 	// 登録時に選ばなかったタグ(tagテーブルにある全タグのうち、選んだタグと正規化後の名前が同じものを除く)に、
 	// 同じ重みを一括で入れる。選んだタグの保存が終わったあとで呼ぶ。
 	CreateUnselectedRecommendations(ctx context.Context, arg CreateUnselectedRecommendationsParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	CreateWebAuthnChallenge(ctx context.Context, arg CreateWebAuthnChallengeParams) error
 	// 保持期限（終了日時、未終了なら表示日時）の古い順に、上限件数まで消す。回答などは連鎖して消える
 	DeleteExpiredFeedbackPrompts(ctx context.Context, arg DeleteExpiredFeedbackPromptsParams) (int64, error)
 	DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error
+	DeleteExpiredWebAuthnChallenges(ctx context.Context, expiresAt pgtype.Timestamptz) error
+	DeletePasskey(ctx context.Context, arg DeletePasskeyParams) (int64, error)
 	DeleteSession(ctx context.Context, tokenHash []byte) error
+	FindPasskeyByCredentialID(ctx context.Context, credentialID []byte) (AuthPasskey, error)
 	FindSessionUser(ctx context.Context, arg FindSessionUserParams) (FindSessionUserRow, error)
 	FindTagByNormalizedName(ctx context.Context, dollar_1 string) (Tag, error)
 	FindUserByUsername(ctx context.Context, userName string) (User, error)
+	FindUserIDByWebAuthnHandle(ctx context.Context, userHandle []byte) (int32, error)
 	GetActiveFeedbackForm(ctx context.Context) (GetActiveFeedbackFormRow, error)
 	GetFeedbackAnswerScore(ctx context.Context, arg GetFeedbackAnswerScoreParams) (int32, error)
 	GetFeedbackFormByID(ctx context.Context, id int64) (GetFeedbackFormByIDRow, error)
@@ -39,6 +48,7 @@ type Querier interface {
 	LastFeedbackPrompt(ctx context.Context, arg LastFeedbackPromptParams) (LastFeedbackPromptRow, error)
 	ListFeedbackQuestions(ctx context.Context, formID int64) ([]ListFeedbackQuestionsRow, error)
 	ListFeedbackSnapshotSource(ctx context.Context, userID int32) ([]ListFeedbackSnapshotSourceRow, error)
+	ListPasskeysByUser(ctx context.Context, userID int32) ([]AuthPasskey, error)
 	ListRecommendations(ctx context.Context, userID int32) ([]ListRecommendationsRow, error)
 	LockFeedbackPrompt(ctx context.Context, id pgtype.UUID) (LockFeedbackPromptRow, error)
 	LockFeedbackSubmission(ctx context.Context, id pgtype.UUID) (LockFeedbackSubmissionRow, error)
@@ -47,11 +57,16 @@ type Querier interface {
 	LockNormalizedTag(ctx context.Context, dollar_1 string) error
 	// 同じ利用者・同じフォームの表示判定を1つずつ行う（まだ表示記録が無い初回でも効く）
 	LockUserFeedbackForm(ctx context.Context, lockKey string) error
+	LockUserForPasskey(ctx context.Context, userID int32) (int32, error)
 	LockUserForRecommendation(ctx context.Context, userID int32) (int32, error)
 	MarkFeedbackPromptDismissed(ctx context.Context, arg MarkFeedbackPromptDismissedParams) error
 	MarkFeedbackPromptFollowup(ctx context.Context, id pgtype.UUID) error
 	MarkFeedbackPromptSubmitted(ctx context.Context, arg MarkFeedbackPromptSubmittedParams) error
+	RenamePasskey(ctx context.Context, arg RenamePasskeyParams) (int64, error)
+	UpdatePasskeyUsage(ctx context.Context, arg UpdatePasskeyUsageParams) (int64, error)
 	UpsertRecommendation(ctx context.Context, arg UpsertRecommendationParams) error
+	// 初回だけ乱数のハンドルを保存し、2回目以降は保存済みの値を返す(同時に呼ばれても1つに決まる)。
+	UpsertWebAuthnUser(ctx context.Context, arg UpsertWebAuthnUserParams) ([]byte, error)
 }
 
 var _ Querier = (*Queries)(nil)
