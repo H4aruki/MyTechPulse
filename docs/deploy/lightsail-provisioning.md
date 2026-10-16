@@ -188,7 +188,8 @@ chmod 600 ~/mytechpulse-production.env
 
 - 項目の意味と、ローカル開発との違いは、[`server/.env.example`](../../server/.env.example) と [`.env.example`](../../.env.example) のコメントにまとまっている。
 - パスキー用の `WEBAUTHN_RP_ID`・`WEBAUTHN_RP_NAME`・`WEBAUTHN_ORIGINS` は、本番では書かなくてよい。空のままなら、APIが本番の既定値（`mytechpulse.net` と `https://mytechpulse.net`）を使う。`WEBAUTHN_RP_ID` は公開後に変えない（変えると、登録済みのパスキーがすべて使えなくなる）。本番では、`localhost`・IPアドレス・httpのURLを入れると起動に失敗する。
-- `docker-compose.yml` が API に渡す項目は、上の表のうち `APP_ENV`・`QIITA_ACCESS_TOKEN`・`CORS_ALLOWED_ORIGINS`・`SWAGGER_ENABLED` と、パスキー用の3項目、`POSTGRES_PASSWORD` から作る接続先。セッションの有効期間などの調整項目は、渡しておらず、既定値で動く。
+- ログイン試行の制限に使う接続元IPのヘッダー名 `CLIENT_IP_HEADER` は、本番では通常、書かなくてよい。空のままなら、`docker-compose.yml` が `CF-Connecting-IP`（Cloudflare が付けるヘッダー）に置き換える。別のヘッダー名にするときは、英数字とハイフンだけで書く。本番では、API が空の値を受け取ると起動に失敗する（空だと、全員が同じIPに見え、ログイン試行の制限が全員で1つの枠になるため）。
+- `docker-compose.yml` が API に渡す項目は、上の表のうち `APP_ENV`・`QIITA_ACCESS_TOKEN`・`CORS_ALLOWED_ORIGINS`・`SWAGGER_ENABLED` と、パスキー用の3項目、`CLIENT_IP_HEADER`、`POSTGRES_PASSWORD` から作る接続先。セッションの有効期間などの調整項目は、渡しておらず、既定値で動く。
 
 ## 8. 最初のGo版を起動する（初回だけの手作業）
 

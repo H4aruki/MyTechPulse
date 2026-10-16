@@ -24,7 +24,7 @@ type Config struct {
 	SwaggerEnabled   bool
 	CookieName       string
 	CookieSecure     bool
-	// ClientIPHeader はログイン試行の制限に使う接続元IPを読むヘッダー名。空なら接続元アドレス。
+	// ClientIPHeader はログイン試行の制限に使う接続元IPを読むヘッダー名。productionでは必須。local/testで空なら接続元アドレス。
 	ClientIPHeader string
 	// パスキー(WebAuthn)。RPIDは登録済みのパスキーに結び付くため、公開後は変えない。
 	WebAuthnRPID    string
@@ -77,6 +77,10 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 	if environment == "production" && swagger {
 		return Config{}, errors.New("productionではSWAGGER_ENABLEDをtrueにできません")
 	}
+	clientIPHeader, err := parseClientIPHeader(lookup, environment)
+	if err != nil {
+		return Config{}, err
+	}
 	cookieName, cookieSecure := "mtp_session", false
 	if environment == "production" {
 		cookieName, cookieSecure = "__Host-mtp_session", true
@@ -94,7 +98,7 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 		SwaggerEnabled:   swagger,
 		CookieName:       cookieName,
 		CookieSecure:     cookieSecure,
-		ClientIPHeader:   strings.TrimSpace(getDefault(lookup, "CLIENT_IP_HEADER", "")),
+		ClientIPHeader:   clientIPHeader,
 		WebAuthnRPID:     rpID,
 		WebAuthnRPName:   rpName,
 		WebAuthnOrigins:  rpOrigins,
@@ -165,6 +169,33 @@ func parseOrigins(key, raw string) ([]string, error) {
 		origins = append(origins, u.Scheme+"://"+u.Host)
 	}
 	return origins, nil
+}
+
+// parseClientIPHeader はCLIENT_IP_HEADERを読んで検証する。
+// 本番で空だと、中継(Cloudflare/Caddy)の裏では全員が同じIPに見え、ログイン試行の制限が全員で1つの枠になるため、必須にする。
+func parseClientIPHeader(lookup func(string) (string, bool), environment string) (string, error) {
+	value, _ := lookup("CLIENT_IP_HEADER")
+	value = strings.TrimSpace(value)
+	if value == "" {
+		if environment == "production" {
+			return "", errors.New("productionではCLIENT_IP_HEADERが必須です(例: CF-Connecting-IP)。空だと全員が同じ接続元に見え、ログイン試行の制限が全員で共有されます")
+		}
+		return "", nil
+	}
+	if !validHeaderName(value) {
+		return "", errors.New("CLIENT_IP_HEADERはHTTPヘッダー名(英数字とハイフンのみ)で指定してください")
+	}
+	return value, nil
+}
+
+// validHeaderName はHTTPヘッダー名として、英数字とハイフンだけでできているかを確かめる。
+func validHeaderName(name string) bool {
+	for _, r := range name {
+		if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') && r != '-' {
+			return false
+		}
+	}
+	return name != ""
 }
 
 // parseWebAuthn はパスキーの設定を読んで検証する。未設定または空のときは、環境ごとの既定値を使う。
