@@ -81,6 +81,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/passkeys/login/begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * パスキーでのログインの開始
+         * @description 利用者名なしでパスキーを選ばせる設定を返し、チャレンジを結び付ける短命のHttpOnly Cookieを発行する。チャレンジは5分で失効し、1回しか使えない。開始は失敗として数えないが、締め出し中のIPには429を返す。開始そのものもIPごとに15分で60回まで数え(失敗とは別の枠。成功・失敗で戻さない)、超えると429と `Retry-After`(秒)を返す。接続元IPごと(15分に20回失敗で、窓が終わるまで)に失敗を数え、超えると429と `Retry-After`(秒)を返す。数えるのはパスワードのログインと同じ窓。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
+         */
+        post: operations["auth-passkey-login-begin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/passkeys/login/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * パスキーでのログインの完了
+         * @description 端末の応答を検証し、成功すればパスワードのログインと同じ属性のセッションCookieを発行する。チャレンジは検証の成否にかかわらず、この呼び出しで使い切る。チャレンジの不正・期限切れ・再利用、未知のパスキー、署名やオリジンの不一致、認証回数の巻き戻りなど、失敗の原因は区別できない同じ401を返す。接続元IPごと(15分に20回失敗で、窓が終わるまで)に失敗を数え、超えると429と `Retry-After`(秒)を返す。数えるのはパスワードのログインと同じ窓。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
+         */
+        post: operations["auth-passkey-login-finish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/passkeys/register/begin": {
         parameters: {
             query?: never;
@@ -528,6 +568,18 @@ export interface components {
             /** @description 登録順 */
             passkeys: components["schemas"]["PasskeyItem"][] | null;
         };
+        PasskeyLoginBeginResponse: {
+            /** @description navigator.credentials.get() の publicKey に渡す値(WebAuthnのJSON形式。binary項目はbase64url文字列)。利用者名なしで選ばせるため allowCredentials は空 */
+            publicKey: {
+                [key: string]: unknown;
+            };
+        };
+        PasskeyLoginFinishRequest: {
+            /** @description navigator.credentials.get() の結果(PublicKeyCredentialのJSON表現。binary項目はbase64url文字列) */
+            credential: {
+                [key: string]: unknown;
+            };
+        };
         ReadyOutputBody: {
             /**
              * @description 正常時は常にok
@@ -767,6 +819,108 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "auth-passkey-login-begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyLoginBeginResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "auth-passkey-login-finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyLoginFinishRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

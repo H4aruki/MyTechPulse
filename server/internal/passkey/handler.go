@@ -20,7 +20,8 @@ const (
 	challengeCookieBase = "mtp_passkey_challenge"
 )
 
-// Handler は /api/v1/auth/passkeys/* の経路。すべてログイン済みの利用者だけが使える。
+// Handler は /api/v1/auth/passkeys/* と /api/v1/auth/passkeys/login/* の経路。
+// 登録・一覧・名前変更・削除はログイン済みの利用者だけが使え、ログイン(login/begin と login/finish)は未ログインで使う。
 type Handler struct {
 	Service Service
 	Auth    auth.Service
@@ -28,6 +29,8 @@ type Handler struct {
 	CookieName string
 	// CookieSecure は本番でtrue。チャレンジCookieの名前と属性が変わる。
 	CookieSecure bool
+	// ClientIPHeader は接続元IPを読むヘッダー名。パスワードログインと同じ値を渡す。
+	ClientIPHeader string
 }
 
 // PasskeyItem は登録済みのパスキー1件。公開鍵や認証情報IDは返さない。
@@ -54,6 +57,16 @@ type RegisterFinishRequest struct {
 	Credential map[string]any `json:"credential" doc:"navigator.credentials.create() の結果(PublicKeyCredentialのJSON表現。binary項目はbase64url文字列)"`
 }
 
+// PasskeyLoginBeginResponse は端末へ渡すログインの設定。
+type PasskeyLoginBeginResponse struct {
+	PublicKey map[string]any `json:"publicKey" doc:"navigator.credentials.get() の publicKey に渡す値(WebAuthnのJSON形式。binary項目はbase64url文字列)。利用者名なしで選ばせるため allowCredentials は空"`
+}
+
+// PasskeyLoginFinishRequest はログインの完了の入力。
+type PasskeyLoginFinishRequest struct {
+	Credential map[string]any `json:"credential" doc:"navigator.credentials.get() の結果(PublicKeyCredentialのJSON表現。binary項目はbase64url文字列)"`
+}
+
 // RenameRequest は名前変更の入力。
 type RenameRequest struct {
 	Name string `json:"name" minLength:"1" maxLength:"64" example:"仕事用PC" doc:"新しい名前。前後の空白を除いて1〜64文字"`
@@ -68,6 +81,17 @@ type finishInput struct{ Body RegisterFinishRequest }
 type finishOutput struct {
 	SetCookie http.Cookie `header:"Set-Cookie" doc:"チャレンジCookieを破棄する指示"`
 	Body      PasskeyItem
+}
+type loginBeginOutput struct {
+	CacheControl string      `header:"Cache-Control"`
+	SetCookie    http.Cookie `header:"Set-Cookie" doc:"ログインの途中経過を結び付ける短命のCookie(HttpOnly、5分)"`
+	Body         PasskeyLoginBeginResponse
+}
+type loginFinishInput struct{ Body PasskeyLoginFinishRequest }
+type loginFinishOutput struct {
+	CacheControl string        `header:"Cache-Control"`
+	SetCookie    []http.Cookie `header:"Set-Cookie" doc:"セッションCookie(HttpOnly、SameSite=Lax)と、チャレンジCookieを破棄する指示"`
+	Body         auth.AuthResponse
 }
 type listOutput struct {
 	CacheControl string `header:"Cache-Control"`
@@ -117,6 +141,26 @@ func (h Handler) Register(api huma.API) {
 		Tags:        tags, Security: security, Middlewares: mw, DefaultStatus: http.StatusCreated,
 		Errors: []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusConflict, http.StatusUnprocessableEntity},
 	}, h.registerFinish)
+
+	// ログインは未ログインの利用者が使うので、セキュリティ要件は付けない
+	loginMW := huma.Middlewares{h.readCookies, auth.ClientIPMiddleware(h.ClientIPHeader)}
+	const loginNote = "接続元IPごと(15分に20回失敗で、窓が終わるまで)に失敗を数え、超えると429と `Retry-After`(秒)を返す。数えるのはパスワードのログインと同じ窓。"
+
+	huma.Register(api, huma.Operation{
+		OperationID: "auth-passkey-login-begin", Method: http.MethodPost, Path: "/api/v1/auth/passkeys/login/begin",
+		Summary:     "パスキーでのログインの開始",
+		Description: "利用者名なしでパスキーを選ばせる設定を返し、チャレンジを結び付ける短命のHttpOnly Cookieを発行する。チャレンジは5分で失効し、1回しか使えない。開始は失敗として数えないが、締め出し中のIPには429を返す。開始そのものもIPごとに15分で60回まで数え(失敗とは別の枠。成功・失敗で戻さない)、超えると429と `Retry-After`(秒)を返す。" + loginNote + csrfNote,
+		Tags:        tags, Middlewares: loginMW, DefaultStatus: http.StatusOK,
+		Errors: []int{http.StatusTooManyRequests},
+	}, h.loginBegin)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "auth-passkey-login-finish", Method: http.MethodPost, Path: "/api/v1/auth/passkeys/login/finish",
+		Summary:     "パスキーでのログインの完了",
+		Description: "端末の応答を検証し、成功すればパスワードのログインと同じ属性のセッションCookieを発行する。チャレンジは検証の成否にかかわらず、この呼び出しで使い切る。チャレンジの不正・期限切れ・再利用、未知のパスキー、署名やオリジンの不一致、認証回数の巻き戻りなど、失敗の原因は区別できない同じ401を返す。" + loginNote + csrfNote,
+		Tags:        tags, Middlewares: loginMW, DefaultStatus: http.StatusOK,
+		Errors: []int{http.StatusUnauthorized, http.StatusTooManyRequests},
+	}, h.loginFinish)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-passkey-list", Method: http.MethodGet, Path: "/api/v1/auth/passkeys",
@@ -233,6 +277,56 @@ func (h Handler) registerFinish(ctx context.Context, in *finishInput) (*finishOu
 	return &finishOutput{SetCookie: h.challengeCookie("", -1, time.Unix(0, 0)), Body: toItem(saved)}, nil
 }
 
+func (h Handler) loginBegin(ctx context.Context, _ *struct{}) (*loginBeginOutput, error) {
+	token, assertion, err := h.Service.BeginLogin(ctx, auth.ClientIPFrom(ctx))
+	if err != nil {
+		return nil, loginProblem(err)
+	}
+	raw, err := json.Marshal(assertion)
+	if err != nil {
+		return nil, loginProblem(err)
+	}
+	var body PasskeyLoginBeginResponse
+	if err := json.Unmarshal(raw, &body); err != nil || body.PublicKey == nil {
+		return nil, loginProblem(errors.New("passkey: ログインの設定を作れません"))
+	}
+	ttl := int(ChallengeTTL.Seconds())
+	return &loginBeginOutput{
+		CacheControl: noStore,
+		SetCookie:    h.challengeCookie(token, ttl, time.Now().Add(ChallengeTTL)),
+		Body:         body,
+	}, nil
+}
+
+func (h Handler) loginFinish(ctx context.Context, in *loginFinishInput) (*loginFinishOutput, error) {
+	ip := auth.ClientIPFrom(ctx)
+	token, _ := ctx.Value(challengeKey{}).(string)
+	raw, err := json.Marshal(in.Body.Credential)
+	if err != nil {
+		return nil, loginProblem(h.Service.rejectLogin(ip, "parse"))
+	}
+	userID, err := h.Service.FinishLogin(ctx, ip, token, raw)
+	if err != nil {
+		return nil, loginProblem(err)
+	}
+	user, session, expires, err := h.Auth.StartSession(ctx, userID)
+	if errors.Is(err, auth.ErrInvalidCredentials) {
+		// 検証の後で利用者が居なくなっていた。他の失敗と同じ応答にする
+		err = h.Service.rejectLogin(ip, "user")
+	}
+	if err != nil {
+		return nil, loginProblem(err)
+	}
+	return &loginFinishOutput{
+		CacheControl: noStore,
+		SetCookie: []http.Cookie{
+			auth.SessionCookie(h.CookieName, h.CookieSecure, h.Auth.SessionTTL, session, expires),
+			h.challengeCookie("", -1, time.Unix(0, 0)),
+		},
+		Body: auth.AuthResponse{User: user},
+	}, nil
+}
+
 func (h Handler) list(ctx context.Context, _ *struct{}) (*listOutput, error) {
 	user, err := h.user(ctx)
 	if err != nil {
@@ -269,6 +363,20 @@ func (h Handler) delete(ctx context.Context, in *deleteInput) (*struct{}, error)
 		return nil, problem(err)
 	}
 	return nil, nil
+}
+
+// loginProblem はパスキーのログインのエラーをProblem Detailsへ変換する。
+// 失敗は原因によらず、本文までバイト単位で同じ401にする。締め出しは429と Retry-After。それ以外は500。
+func loginProblem(err error) error {
+	var tooMany *auth.TooManyAttemptsError
+	switch {
+	case errors.As(err, &tooMany):
+		return auth.LoginProblem(err)
+	case errors.Is(err, ErrLoginFailed), errors.Is(err, auth.ErrInvalidCredentials):
+		return httpx.NewProblem(http.StatusUnauthorized, "invalid_credentials", "パスキーでログインできませんでした。もう一度お試しください")
+	default:
+		return httpx.NewProblem(http.StatusInternalServerError, "internal_error", "サーバー内部でエラーが発生しました")
+	}
 }
 
 // problem はパスキー用途のエラーをProblem Detailsへ変換する。内部エラーの原因や入力値は応答へ出さない。

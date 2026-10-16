@@ -600,6 +600,34 @@
         ],
         "type": "object"
       },
+      "PasskeyLoginBeginResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "publicKey": {
+            "additionalProperties": {},
+            "description": "navigator.credentials.get() の publicKey に渡す値(WebAuthnのJSON形式。binary項目はbase64url文字列)。利用者名なしで選ばせるため allowCredentials は空",
+            "type": "object"
+          }
+        },
+        "required": [
+          "publicKey"
+        ],
+        "type": "object"
+      },
+      "PasskeyLoginFinishRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "credential": {
+            "additionalProperties": {},
+            "description": "navigator.credentials.get() の結果(PublicKeyCredentialのJSON表現。binary項目はbase64url文字列)",
+            "type": "object"
+          }
+        },
+        "required": [
+          "credential"
+        ],
+        "type": "object"
+      },
       "ReadyOutputBody": {
         "additionalProperties": false,
         "properties": {
@@ -1000,6 +1028,146 @@
           }
         ],
         "summary": "パスキーの一覧",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/passkeys/login/begin": {
+      "post": {
+        "description": "利用者名なしでパスキーを選ばせる設定を返し、チャレンジを結び付ける短命のHttpOnly Cookieを発行する。チャレンジは5分で失効し、1回しか使えない。開始は失敗として数えないが、締め出し中のIPには429を返す。開始そのものもIPごとに15分で60回まで数え(失敗とは別の枠。成功・失敗で戻さない)、超えると429と `Retry-After`(秒)を返す。接続元IPごと(15分に20回失敗で、窓が終わるまで)に失敗を数え、超えると429と `Retry-After`(秒)を返す。数えるのはパスワードのログインと同じ窓。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。",
+        "operationId": "auth-passkey-login-begin",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyLoginBeginResponse"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "schema": {
+                  "description": "ログインの途中経過を結び付ける短命のCookie(HttpOnly、5分)",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "パスキーでのログインの開始",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/passkeys/login/finish": {
+      "post": {
+        "description": "端末の応答を検証し、成功すればパスワードのログインと同じ属性のセッションCookieを発行する。チャレンジは検証の成否にかかわらず、この呼び出しで使い切る。チャレンジの不正・期限切れ・再利用、未知のパスキー、署名やオリジンの不一致、認証回数の巻き戻りなど、失敗の原因は区別できない同じ401を返す。接続元IPごと(15分に20回失敗で、窓が終わるまで)に失敗を数え、超えると429と `Retry-After`(秒)を返す。数えるのはパスワードのログインと同じ窓。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。",
+        "operationId": "auth-passkey-login-finish",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyLoginFinishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Set-Cookie": {
+                "schema": {
+                  "description": "セッションCookie(HttpOnly、SameSite=Lax)と、チャレンジCookieを破棄する指示",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "パスキーでのログインの完了",
         "tags": [
           "auth"
         ]

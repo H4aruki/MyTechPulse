@@ -33,6 +33,7 @@ type Querier interface {
 	FindPasskeyByCredentialID(ctx context.Context, credentialID []byte) (AuthPasskey, error)
 	FindSessionUser(ctx context.Context, arg FindSessionUserParams) (FindSessionUserRow, error)
 	FindTagByNormalizedName(ctx context.Context, dollar_1 string) (Tag, error)
+	FindUserByID(ctx context.Context, userID int32) (FindUserByIDRow, error)
 	FindUserByUsername(ctx context.Context, userName string) (User, error)
 	FindUserIDByWebAuthnHandle(ctx context.Context, userHandle []byte) (int32, error)
 	GetActiveFeedbackForm(ctx context.Context) (GetActiveFeedbackFormRow, error)
@@ -63,6 +64,7 @@ type Querier interface {
 	MarkFeedbackPromptFollowup(ctx context.Context, id pgtype.UUID) error
 	MarkFeedbackPromptSubmitted(ctx context.Context, arg MarkFeedbackPromptSubmittedParams) error
 	RenamePasskey(ctx context.Context, arg RenamePasskeyParams) (int64, error)
+	// 認証回数が増えたときだけ更新する(巻き戻りと同時ログインの競合を、DBの側で止める)。0のまま変わらない認証器(同期パスキー)だけは許す。
 	UpdatePasskeyUsage(ctx context.Context, arg UpdatePasskeyUsageParams) (int64, error)
 	UpsertRecommendation(ctx context.Context, arg UpsertRecommendationParams) error
 	// 初回だけ乱数のハンドルを保存し、2回目以降は保存済みの値を返す(同時に呼ばれても1つに決まる)。

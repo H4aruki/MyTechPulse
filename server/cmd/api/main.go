@@ -64,7 +64,8 @@ func run(ctx context.Context, lookup func(string) (string, bool), stdout, stderr
 		FeedTimeout: cfg.FeedTimeout,
 	}
 	feedbackService := &userfeedback.Service{Repo: store.NewFeedback(pool), Clock: auth.SystemClock{}, Logger: logger}
-	passkeyService, err := newPasskeyService(cfg, pool, logger)
+	// パスワードとパスキーで、同じ制限器を共有する(失敗を合算して数える)
+	passkeyService, err := newPasskeyService(cfg, pool, logger, authService.Limiter)
 	if err != nil {
 		return err
 	}
@@ -101,7 +102,7 @@ func newAuthService(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) 
 }
 
 // newPasskeyService はパスキーの実依存を組み立てる。RP IDとオリジンが不正なら起動を止める。
-func newPasskeyService(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) (*passkey.Service, error) {
+func newPasskeyService(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger, limiter passkey.IPLimiter) (*passkey.Service, error) {
 	w, err := passkey.NewWebAuthn(passkey.Config{RPID: cfg.WebAuthnRPID, RPDisplayName: cfg.WebAuthnRPName, Origins: cfg.WebAuthnOrigins})
 	if err != nil {
 		return nil, err
@@ -112,6 +113,7 @@ func newPasskeyService(cfg config.Config, pool *pgxpool.Pool, logger *slog.Logge
 		Challenges: store.NewPasskeyChallenge(pool),
 		Clock:      auth.SystemClock{},
 		Logger:     logger,
+		Limiter:    limiter,
 	}, nil
 }
 

@@ -142,11 +142,20 @@ func (h Handler) readToken(ctx huma.Context, next func(huma.Context)) {
 
 // readClientIP は接続元IPを取り出して処理の文脈へ渡す。
 func (h Handler) readClientIP(ctx huma.Context, next func(huma.Context)) {
-	value := ""
-	if h.ClientIPHeader != "" {
-		value = ctx.Header(h.ClientIPHeader)
+	ClientIPMiddleware(h.ClientIPHeader)(ctx, next)
+}
+
+// ClientIPMiddleware は接続元IPを処理の文脈へ載せるミドルウェアを返す。
+// header が空でなければ、そのヘッダーの値を優先する(信頼できる中継の裏でだけ設定する)。
+// パスキーのログインも、パスワードログインと同じ規則でIPを決めるために使う。
+func ClientIPMiddleware(header string) func(huma.Context, func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		value := ""
+		if header != "" {
+			value = ctx.Header(header)
+		}
+		next(huma.WithValue(ctx, clientIPKey{}, clientIP(value, ctx.RemoteAddr())))
 	}
-	next(huma.WithValue(ctx, clientIPKey{}, clientIP(value, ctx.RemoteAddr())))
 }
 
 // clientIP は信頼するヘッダーに値があればそれを、無ければ接続元アドレスのIPを返す。
@@ -166,14 +175,20 @@ func tokenFrom(ctx context.Context) string {
 }
 
 func (h Handler) sessionCookie(token string, expires time.Time) http.Cookie {
+	return SessionCookie(h.CookieName, h.CookieSecure, h.Service.SessionTTL, token, expires)
+}
+
+// SessionCookie はセッションCookieを作る(HttpOnly、SameSite=Lax、Path=/)。
+// パスワードとパスキーのログインで、同じ属性のCookieを発行するために共有する。
+func SessionCookie(name string, secure bool, ttl time.Duration, token string, expires time.Time) http.Cookie {
 	return http.Cookie{
-		Name:     h.CookieName,
+		Name:     name,
 		Value:    token,
 		Path:     "/",
 		Expires:  expires,
-		MaxAge:   int(h.Service.SessionTTL.Seconds()),
+		MaxAge:   int(ttl.Seconds()),
 		HttpOnly: true,
-		Secure:   h.CookieSecure,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
 }
@@ -225,6 +240,10 @@ func (h Handler) logout(ctx context.Context, _ *struct{}) (*logoutOutput, error)
 	}
 	return &logoutOutput{SetCookie: h.deleteCookie()}, nil
 }
+
+// LoginProblem はログイン用途のエラーをProblem Detailsへ変換する。
+// 締め出しは429と Retry-After(秒)、認証の失敗は401 invalid_credentials にする。
+func LoginProblem(err error) error { return toProblem(err, false) }
 
 // toProblem は認証用途のエラーをHTTPのProblem Detailsへ変換する。
 // 内部エラーの原因・SQL・入力値は応答へ出さない。

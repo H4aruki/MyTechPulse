@@ -64,6 +64,15 @@ func (f *fakeStore) FindByUsername(_ context.Context, name string) (UserWithPass
 	return UserWithPassword{User: u.User, PasswordHash: u.hash}, nil
 }
 
+func (f *fakeStore) FindByID(_ context.Context, id int64) (User, error) {
+	for _, u := range f.users {
+		if u.ID == id {
+			return u.User, nil
+		}
+	}
+	return User{}, ErrNotFound
+}
+
 func (f *fakeStore) CreateWithInterestsAndSession(_ context.Context, name, hash string, role Role,
 	tags []string, token [32]byte, exp time.Time) (User, error) {
 	if _, ok := f.users[name]; ok {

@@ -18,6 +18,7 @@ var errDB = errors.New("db: connection refused secret-detail")
 type faultyStore struct {
 	*fakeStore
 	findByUsernameErr error
+	findByIDErr       error
 	createUserErr     error
 	createSessionErr  error
 	findUserErr       error
@@ -30,6 +31,13 @@ func (f *faultyStore) FindByUsername(ctx context.Context, name string) (UserWith
 		return UserWithPassword{}, f.findByUsernameErr
 	}
 	return f.fakeStore.FindByUsername(ctx, name)
+}
+
+func (f *faultyStore) FindByID(ctx context.Context, id int64) (User, error) {
+	if f.findByIDErr != nil {
+		return User{}, f.findByIDErr
+	}
+	return f.fakeStore.FindByID(ctx, id)
 }
 
 func (f *faultyStore) CreateWithInterestsAndSession(ctx context.Context, name, hash string, role Role,

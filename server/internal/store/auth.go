@@ -73,6 +73,22 @@ func (a *Auth) FindByUsername(ctx context.Context, username string) (auth.UserWi
 	}, nil
 }
 
+// FindByID は利用者IDで利用者を探す。無ければ auth.ErrNotFound。
+func (a *Auth) FindByID(ctx context.Context, id int64) (auth.User, error) {
+	uid, err := userID32(id)
+	if err != nil {
+		return auth.User{}, err
+	}
+	row, err := a.q.FindUserByID(ctx, uid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return auth.User{}, auth.ErrNotFound
+	}
+	if err != nil {
+		return auth.User{}, errors.New("store: 利用者を取得できません")
+	}
+	return toUser(row.UserID, row.UserName, row.Role), nil
+}
+
 // CreateWithInterestsAndSession は利用者・初期興味度・セッションを1つのトランザクションで作る。
 // どこかで失敗した場合は何も残さない。同名の利用者は auth.ErrUsernameTaken。
 func (a *Auth) CreateWithInterestsAndSession(ctx context.Context, username, passwordHash string, role auth.Role,

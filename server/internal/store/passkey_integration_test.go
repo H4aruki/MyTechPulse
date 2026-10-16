@@ -283,3 +283,119 @@ func TestPasskeyRowsCascadeWithUser(t *testing.T) {
 		t.Fatalf("rows must cascade, got %d", n)
 	}
 }
+
+func TestPasskeyRecordUseRefusesToMoveTheSignCountBackwards(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewPasskey(pool)
+	alice := newPasskeyUser(t, pool, "alice")
+	if _, err := repo.Create(ctx, credential(alice, 1)); err != nil { // 保存の認証回数は3
+		t.Fatal(err)
+	}
+	id := []byte{1, 1}
+	later := fixedNow.Add(time.Hour)
+
+	for _, recv := range []uint32{0, 2, 3} {
+		if err := repo.RecordUse(ctx, id, recv, true, later); !errors.Is(err, passkey.ErrNotFound) {
+			t.Fatalf("3 → %d は更新しない(ErrNotFound): %v", recv, err)
+		}
+	}
+	got, _ := repo.FindByCredentialID(ctx, id)
+	if got.SignCount != 3 || got.BackupState || got.LastUsedAt != nil {
+		t.Fatalf("拒否した更新で値が変わった: %+v", got)
+	}
+
+	if err := repo.RecordUse(ctx, id, 4, true, later); err != nil {
+		t.Fatalf("3 → 4 は更新する: %v", err)
+	}
+	got, _ = repo.FindByCredentialID(ctx, id)
+	if got.SignCount != 4 || !got.BackupState || got.LastUsedAt == nil || !got.LastUsedAt.Equal(later) {
+		t.Fatalf("3 → 4 の後: %+v", got)
+	}
+	if err := repo.RecordUse(ctx, id, 4, false, later.Add(time.Hour)); !errors.Is(err, passkey.ErrNotFound) {
+		t.Fatalf("4 → 4 は更新しない: %v", err)
+	}
+}
+
+func TestPasskeyRecordUseAllowsAuthenticatorsThatAlwaysReportZero(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewPasskey(pool)
+	alice := newPasskeyUser(t, pool, "alice")
+	synced := credential(alice, 2)
+	synced.SignCount = 0 // 同期パスキーは、認証回数を0のまま返すことがある
+	if _, err := repo.Create(ctx, synced); err != nil {
+		t.Fatal(err)
+	}
+	id := synced.CredentialID
+
+	for i, now := range []time.Time{fixedNow, fixedNow.Add(time.Hour)} {
+		if err := repo.RecordUse(ctx, id, 0, true, now); err != nil {
+			t.Fatalf("0 → 0 (%d回目)は更新する: %v", i+1, err)
+		}
+		got, _ := repo.FindByCredentialID(ctx, id)
+		if got.SignCount != 0 || !got.BackupState || got.LastUsedAt == nil || !got.LastUsedAt.Equal(now) {
+			t.Fatalf("0 → 0 の後: %+v", got)
+		}
+	}
+	if err := repo.RecordUse(ctx, id, 1, true, fixedNow); err != nil {
+		t.Fatalf("0 → 1 は更新する: %v", err)
+	}
+	if err := repo.RecordUse(ctx, id, 0, true, fixedNow); !errors.Is(err, passkey.ErrNotFound) {
+		t.Fatalf("1 → 0 は更新しない: %v", err)
+	}
+	if err := repo.RecordUse(ctx, id, 4294967295, true, fixedNow); err != nil {
+		t.Fatalf("uint32の最大値も保存できる: %v", err)
+	}
+	if got, _ := repo.FindByCredentialID(ctx, id); got.SignCount != 4294967295 {
+		t.Fatalf("SignCount = %d", got.SignCount)
+	}
+}
+
+func TestPasskeyRecordUseSucceedsForOnlyOneOfConcurrentLogins(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewPasskey(pool)
+	alice := newPasskeyUser(t, pool, "alice")
+	if _, err := repo.Create(ctx, credential(alice, 1)); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	var ok, conflict atomic.Int32
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			switch err := repo.RecordUse(ctx, []byte{1, 1}, 10, false, fixedNow); {
+			case err == nil:
+				ok.Add(1)
+			case errors.Is(err, passkey.ErrNotFound):
+				conflict.Add(1)
+			default:
+				t.Errorf("unexpected error: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	if ok.Load() != 1 || conflict.Load() != 7 {
+		t.Fatalf("同じ認証回数での同時更新は1つだけ成功する: ok=%d conflict=%d", ok.Load(), conflict.Load())
+	}
+}
+
+func TestPasskeyRecordUseOnDeletedPasskeyIsNotFound(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewPasskey(pool)
+	alice := newPasskeyUser(t, pool, "alice")
+	created, err := repo.Create(ctx, credential(alice, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Delete(ctx, alice, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.RecordUse(ctx, []byte{1, 1}, 99, false, fixedNow); !errors.Is(err, passkey.ErrNotFound) {
+		t.Fatalf("削除済みは ErrNotFound: %v", err)
+	}
+}

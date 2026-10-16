@@ -15,7 +15,7 @@ APIの資料は役割ごとに次のように分けている。このファイ�
 | --- | --- |
 | ApiList.md（このファイル） | 窓口の一覧と、各資料への案内 |
 | [ApiCommonRules.md](ApiCommonRules.md) | すべての窓口に共通する決まりごと（送り方・結果の表し方・本人確認・全体の流れ） |
-| [Details/Auth.md](Details/Auth.md) | 会員登録・ログイン・ログアウト・ログイン中の利用者の確認の詳細 |
+| [Details/Auth.md](Details/Auth.md) | 会員登録・ログイン・ログアウト・ログイン中の利用者の確認・パスキー（登録・管理・ログイン）の詳細 |
 | [Details/News.md](Details/News.md) | おすすめ記事の取得の詳細 |
 | [Details/Article.md](Details/Article.md) | 記事クリックの記録の詳細 |
 | [Details/UserFeedback.md](Details/UserFeedback.md) | 利用者アンケートの詳細 |
@@ -31,6 +31,13 @@ APIの資料は役割ごとに次のように分けている。このファイ�
 | A-2-2 | ログイン | POST | `/api/v1/auth/login` | 不要 | F-2-4, F-2-5, F-2-6 | 実装済み | [Auth.md](Details/Auth.md#2-a-2-2-ログイン) |
 | A-2-3 | ログイン中の利用者の確認 | GET | `/api/v1/auth/me` | 必要 | F-2-6, F-2-7 | 実装済み | [Auth.md](Details/Auth.md#3-a-2-3-ログイン中の利用者の確認) |
 | A-2-4 | ログアウト | POST | `/api/v1/auth/logout` | 不要（あれば失効する） | F-2-8 | 実装済み | [Auth.md](Details/Auth.md#4-a-2-4-ログアウト) |
+| A-2-5 | パスキー登録の開始 | POST | `/api/v1/auth/passkeys/register/begin` | 必要 | ― | 実装済み | [Auth.md](Details/Auth.md#5-a-2-5-パスキー登録の開始) |
+| A-2-6 | パスキー登録の完了 | POST | `/api/v1/auth/passkeys/register/finish` | 必要 | ― | 実装済み | [Auth.md](Details/Auth.md#6-a-2-6-パスキー登録の完了) |
+| A-2-7 | パスキーの一覧 | GET | `/api/v1/auth/passkeys` | 必要 | ― | 実装済み | [Auth.md](Details/Auth.md#7-a-2-7-パスキーの一覧) |
+| A-2-8 | パスキーの名前変更 | PATCH | `/api/v1/auth/passkeys/{id}` | 必要 | ― | 実装済み | [Auth.md](Details/Auth.md#8-a-2-8-パスキーの名前変更) |
+| A-2-9 | パスキーの削除 | DELETE | `/api/v1/auth/passkeys/{id}` | 必要 | ― | 実装済み | [Auth.md](Details/Auth.md#9-a-2-9-パスキーの削除) |
+| A-2-10 | パスキーでのログインの開始 | POST | `/api/v1/auth/passkeys/login/begin` | 不要 | ― | 実装済み | [Auth.md](Details/Auth.md#10-a-2-10-パスキーでのログインの開始) |
+| A-2-11 | パスキーでのログインの完了 | POST | `/api/v1/auth/passkeys/login/finish` | 不要 | ― | 実装済み | [Auth.md](Details/Auth.md#11-a-2-11-パスキーでのログインの完了) |
 | A-4-1 | おすすめ記事の取得 | GET | `/api/v1/feed` | 必要 | F-4-1〜F-4-4, F-4-7 | 実装済み | [News.md](Details/News.md) |
 | A-5-1 | 記事クリックの記録 | POST | `/api/v1/feedback/article-clicks` | 必要 | F-5-1〜F-5-3 | 実装済み | [Article.md](Details/Article.md) |
 | A-7-1 | アンケートの表示可否の確認 | GET | `/api/v1/user-feedback/status` | 必要 | F-7-2 | 実装済み | [UserFeedback.md](Details/UserFeedback.md#1-a-7-1-アンケートの表示可否の確認) |
@@ -39,7 +46,7 @@ APIの資料は役割ごとに次のように分けている。このファイ�
 | A-7-4 | 追加質問の回答の保存 | PUT | `/api/v1/user-feedback/submissions/{submission_id}` | 必要 | F-7-2 | 実装済み | [UserFeedback.md](Details/UserFeedback.md#4-a-7-4-追加質問の回答の保存) |
 | A-7-5 | 回答せず閉じたことの保存 | POST | `/api/v1/user-feedback/dismissals` | 必要 | F-7-2 | 実装済み | [UserFeedback.md](Details/UserFeedback.md#5-a-7-5-回答せず閉じたことの保存) |
 
-現在の窓口は以上の13個。
+現在の窓口は以上の20個。
 
 ## 3. 補足
 

@@ -31,6 +31,15 @@ func (m *memStore) FindByUsername(_ context.Context, name string) (auth.UserWith
 	return u, nil
 }
 
+func (m *memStore) FindByID(_ context.Context, id int64) (auth.User, error) {
+	for _, u := range m.users {
+		if u.ID == id {
+			return u.User, nil
+		}
+	}
+	return auth.User{}, auth.ErrNotFound
+}
+
 func (m *memStore) CreateWithInterestsAndSession(_ context.Context, name, hash string, role auth.Role,
 	_ []string, token [32]byte, exp time.Time) (auth.User, error) {
 	if _, ok := m.users[name]; ok {
