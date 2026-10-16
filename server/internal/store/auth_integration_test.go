@@ -298,3 +298,24 @@ func TestAuthRepositoryStoresOnlyTokenHash(t *testing.T) {
 		t.Fatal("hash must be stored")
 	}
 }
+
+func TestAuthRepositoryFindByID(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewAuth(pool)
+	created, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember, []string{"go"}, hashOf(1), fixedNow.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := repo.FindByID(ctx, created.ID)
+	if err != nil || got != created || got.Username != "alice" || got.Role != auth.RoleMember {
+		t.Fatalf("FindByID = %+v, %v (created %+v)", got, err, created)
+	}
+	// 無い・範囲外のIDは ErrNotFound(DB障害と区別する)
+	for _, id := range []int64{created.ID + 1000, 0, -1, 1 << 40} {
+		if _, err := repo.FindByID(ctx, id); !errors.Is(err, auth.ErrNotFound) {
+			t.Errorf("FindByID(%d) must be ErrNotFound: %v", id, err)
+		}
+	}
+}

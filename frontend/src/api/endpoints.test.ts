@@ -86,4 +86,20 @@ describe('endpoints', () => {
     await e.dismissFeedback(id)
     expect(lastCall()).toEqual({ url: `${BASE}/api/v1/user-feedback/dismissals`, method: 'POST', body: `{"prompt_id":"${id}"}` })
   })
+
+  test('パスキーのログインは、beginは本文なし・finishはcredentialを、POSTで送る', async () => {
+    const e = await loadEndpoints()
+    await e.beginPasskeyLogin()
+    expect(lastCall()).toEqual({ url: `${BASE}/api/v1/auth/passkeys/login/begin`, method: 'POST', body: undefined })
+    await e.finishPasskeyLogin({ credential: { id: 'abc' } })
+    expect(lastCall()).toEqual({
+      url: `${BASE}/api/v1/auth/passkeys/login/finish`,
+      method: 'POST',
+      body: '{"credential":{"id":"abc"}}',
+    })
+    // 更新系の要求なので、CSRF対策のヘッダーと、Cookieの送信を付ける
+    const [, init] = fetchMock.mock.calls.at(-1)!
+    expect(init.headers['X-MTP-CSRF']).toBe('1')
+    expect(init.credentials).toBe('include')
+  })
 })

@@ -38,6 +38,9 @@ var (
 	ErrCredentialExists = errors.New("passkey: すでに登録されています")
 	// ErrChallengeInvalid はチャレンジが無い・期限切れ・使用済みのいずれかであること。区別して返さない。
 	ErrChallengeInvalid = errors.New("passkey: チャレンジが無効です")
+	// ErrLoginFailed はパスキーでのログインに失敗したこと。チャレンジ・認証情報・署名・オリジン・認証回数などの
+	// 原因は区別して返さない(区別できると、登録の有無や仕組みの探りに使われるため)。
+	ErrLoginFailed = errors.New("passkey: ログインできません")
 )
 
 // Credential は登録済みのパスキー。

@@ -26,6 +26,8 @@ type Clock interface {
 type UserRepository interface {
 	// FindByUsername は無ければ ErrNotFound を返す。
 	FindByUsername(ctx context.Context, username string) (UserWithPassword, error)
+	// FindByID は利用者IDで探す。無ければ ErrNotFound を返す。
+	FindByID(ctx context.Context, id int64) (User, error)
 	// CreateWithInterestsAndSession は利用者・初期興味度・セッションを同一トランザクションで作る。
 	// 同名の利用者がいれば ErrUsernameTaken を返し、何も残さない。
 	CreateWithInterestsAndSession(ctx context.Context, username, passwordHash string, role Role,

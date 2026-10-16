@@ -50,7 +50,7 @@ func New(cfg config.Config, deps Dependencies) (http.Handler, *huma.OpenAPI) {
 		recommendation.Handler{Service: *deps.Recommendation, Auth: *deps.Auth, CookieName: cfg.CookieName}.Register(api)
 	}
 	if deps.Auth != nil && deps.Passkey != nil {
-		passkey.Handler{Service: *deps.Passkey, Auth: *deps.Auth, CookieName: cfg.CookieName, CookieSecure: cfg.CookieSecure}.Register(api)
+		passkey.Handler{Service: *deps.Passkey, Auth: *deps.Auth, CookieName: cfg.CookieName, CookieSecure: cfg.CookieSecure, ClientIPHeader: cfg.ClientIPHeader}.Register(api)
 	}
 	if deps.Auth != nil && deps.UserFeedback != nil {
 		userfeedback.Handler{Service: deps.UserFeedback, Auth: *deps.Auth, CookieName: cfg.CookieName}.Register(api)

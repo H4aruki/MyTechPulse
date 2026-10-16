@@ -247,7 +247,8 @@ func (q *Queries) RenamePasskey(ctx context.Context, arg RenamePasskeyParams) (i
 }
 
 const updatePasskeyUsage = `-- name: UpdatePasskeyUsage :execrows
-UPDATE auth_passkey SET sign_count = $2, backup_state = $3, last_used_at = $4 WHERE credential_id = $1
+UPDATE auth_passkey SET sign_count = $2, backup_state = $3, last_used_at = $4
+WHERE credential_id = $1 AND (sign_count < $2 OR (sign_count = 0 AND $2 = 0))
 `
 
 type UpdatePasskeyUsageParams struct {
@@ -257,6 +258,7 @@ type UpdatePasskeyUsageParams struct {
 	LastUsedAt   pgtype.Timestamptz
 }
 
+// 認証回数が増えたときだけ更新する(巻き戻りと同時ログインの競合を、DBの側で止める)。0のまま変わらない認証器(同期パスキー)だけは許す。
 func (q *Queries) UpdatePasskeyUsage(ctx context.Context, arg UpdatePasskeyUsageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updatePasskeyUsage,
 		arg.CredentialID,

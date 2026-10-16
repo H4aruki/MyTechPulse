@@ -11,6 +11,8 @@ import type {
   LoginRequest,
   PasskeyItem,
   PasskeyListResponse,
+  PasskeyLoginBeginResponse,
+  PasskeyLoginFinishRequest,
   RegisterBeginResponse,
   RegisterFinishRequest,
   SignupRequest,
@@ -85,6 +87,16 @@ export function beginPasskeyRegistration() {
 
 export function finishPasskeyRegistration(body: RegisterFinishRequest) {
   return request<PasskeyItem>('POST', '/api/v1/auth/passkeys/register/finish', body)
+}
+
+/** パスキーでのログイン開始（利用者名なし）。端末へ渡す設定を受け取り、チャレンジはHttpOnly Cookieで結び付く */
+export function beginPasskeyLogin() {
+  return request<PasskeyLoginBeginResponse>('POST', '/api/v1/auth/passkeys/login/begin')
+}
+
+/** 端末の応答を送ってログインする。成功時はパスワードログインと同じくセッションCookieが発行される */
+export function finishPasskeyLogin(body: PasskeyLoginFinishRequest) {
+  return request<AuthResponse>('POST', '/api/v1/auth/passkeys/login/finish', body)
 }
 
 export function renamePasskey(id: number, name: string) {

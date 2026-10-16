@@ -149,6 +149,32 @@ func (s Service) Login(ctx context.Context, username, password string) (User, st
 	if s.Limiter != nil {
 		s.Limiter.Success(name)
 	}
+	plain, expires, err := s.startSession(ctx, found.ID)
+	if err != nil {
+		return User{}, "", time.Time{}, err
+	}
+	return found.User, plain, expires, nil
+}
+
+// StartSession は、パスワード以外の方法(パスキー)で本人確認が済んだ利用者に、Login と同じ手順でセッションを発行する。
+// 利用者が居なければ ErrInvalidCredentials を返す。
+func (s Service) StartSession(ctx context.Context, userID int64) (User, string, time.Time, error) {
+	user, err := s.Users.FindByID(ctx, userID)
+	if errors.Is(err, ErrNotFound) {
+		return User{}, "", time.Time{}, ErrInvalidCredentials
+	}
+	if err != nil {
+		return User{}, "", time.Time{}, err
+	}
+	plain, expires, err := s.startSession(ctx, user.ID)
+	if err != nil {
+		return User{}, "", time.Time{}, err
+	}
+	return user, plain, expires, nil
+}
+
+// startSession は期限切れセッションを清掃し、新しいトークンのセッションを保存して、平文トークンと期限を返す。
+func (s Service) startSession(ctx context.Context, userID int64) (string, time.Time, error) {
 	now := s.Clock.Now()
 	if err := s.Sessions.DeleteExpired(ctx, now); err != nil {
 		// 清掃だけの失敗でログインは止めない
@@ -156,13 +182,13 @@ func (s Service) Login(ctx context.Context, username, password string) (User, st
 	}
 	plain, tokenHash, err := s.Tokens.New()
 	if err != nil {
-		return User{}, "", time.Time{}, errors.New("auth: セッションを作成できません")
+		return "", time.Time{}, errors.New("auth: セッションを作成できません")
 	}
 	expires := now.Add(s.SessionTTL)
-	if err := s.Sessions.Create(ctx, tokenHash, found.ID, expires); err != nil {
-		return User{}, "", time.Time{}, err
+	if err := s.Sessions.Create(ctx, tokenHash, userID, expires); err != nil {
+		return "", time.Time{}, err
 	}
-	return found.User, plain, expires, nil
+	return plain, expires, nil
 }
 
 // Authenticate はCookieの値から有効なセッションを探す。無い・期限切れは ErrInvalidCredentials。

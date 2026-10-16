@@ -41,6 +41,8 @@ type memPasskeys struct {
 	nextID  int64
 	handles map[int64][]byte
 	creds   []passkey.Credential
+	// 障害の注入。非nilなら、その操作がDB障害として失敗する
+	findErr, handleErr, recordErr error
 }
 
 func newMemPasskeys() *memPasskeys { return &memPasskeys{handles: map[int64][]byte{}} }
@@ -55,7 +57,17 @@ func (m *memPasskeys) UserHandle(_ context.Context, userID int64, fresh []byte) 
 	return fresh, nil
 }
 
-func (m *memPasskeys) UserIDByHandle(context.Context, []byte) (int64, error) {
+func (m *memPasskeys) UserIDByHandle(_ context.Context, handle []byte) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.handleErr != nil {
+		return 0, m.handleErr
+	}
+	for id, h := range m.handles {
+		if len(handle) > 0 && bytes.Equal(h, handle) {
+			return id, nil
+		}
+	}
 	return 0, passkey.ErrNotFound
 }
 
@@ -93,11 +105,48 @@ func (m *memPasskeys) ListByUser(_ context.Context, userID int64) ([]passkey.Cre
 	return out, nil
 }
 
-func (m *memPasskeys) FindByCredentialID(context.Context, []byte) (passkey.Credential, error) {
+func (m *memPasskeys) FindByCredentialID(_ context.Context, credentialID []byte) (passkey.Credential, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.findErr != nil {
+		return passkey.Credential{}, m.findErr
+	}
+	for _, c := range m.creds {
+		if bytes.Equal(c.CredentialID, credentialID) {
+			return c, nil
+		}
+	}
 	return passkey.Credential{}, passkey.ErrNotFound
 }
 
-func (m *memPasskeys) RecordUse(context.Context, []byte, uint32, bool, time.Time) error { return nil }
+// RecordUse はDBの UpdatePasskeyUsage と同じ条件で更新する: 認証回数が増えたとき、または0のまま変わらないときだけ。
+func (m *memPasskeys) RecordUse(_ context.Context, credentialID []byte, signCount uint32, backupState bool, now time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.recordErr != nil {
+		return m.recordErr
+	}
+	for i := range m.creds {
+		c := &m.creds[i]
+		if bytes.Equal(c.CredentialID, credentialID) && (c.SignCount < signCount || (c.SignCount == 0 && signCount == 0)) {
+			c.SignCount, c.BackupState = signCount, backupState
+			used := now
+			c.LastUsedAt = &used
+			return nil
+		}
+	}
+	return passkey.ErrNotFound
+}
+
+// byCredentialID は保存されている状態を返す(試験の確認用)。
+func (m *memPasskeys) byCredentialID(t *testing.T, credentialID []byte) passkey.Credential {
+	t.Helper()
+	c, err := m.FindByCredentialID(context.Background(), credentialID)
+	if err != nil {
+		t.Fatalf("保存されたパスキーが無い: %v", err)
+	}
+	return c
+}
 
 func (m *memPasskeys) Rename(_ context.Context, userID, id int64, name string) error {
 	m.mu.Lock()
@@ -139,6 +188,8 @@ type memChallenge struct {
 type memChallenges struct {
 	mu   sync.Mutex
 	rows map[[32]byte]*memChallenge
+	// 非nilなら Consume がDB障害として失敗する
+	consumeErr error
 }
 
 func (m *memChallenges) Create(_ context.Context, id [32]byte, p passkey.Purpose, userID *int64, data []byte, exp time.Time) error {
@@ -151,6 +202,9 @@ func (m *memChallenges) Create(_ context.Context, id [32]byte, p passkey.Purpose
 func (m *memChallenges) Consume(_ context.Context, id [32]byte, p passkey.Purpose, now time.Time) (passkey.Challenge, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.consumeErr != nil {
+		return passkey.Challenge{}, m.consumeErr
+	}
 	r, ok := m.rows[id]
 	if !ok || r.used || r.purpose != p || !r.expires.After(now) {
 		return passkey.Challenge{}, passkey.ErrChallengeInvalid

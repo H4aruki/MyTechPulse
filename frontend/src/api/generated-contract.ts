@@ -13,7 +13,9 @@ type PasskeyFinish = paths['/api/v1/auth/passkeys/register/finish']['post']
 type PasskeyList = paths['/api/v1/auth/passkeys']['get']
 type PasskeyRename = paths['/api/v1/auth/passkeys/{id}']['patch']
 type PasskeyDelete = paths['/api/v1/auth/passkeys/{id}']['delete']
+type PasskeyLoginBegin = paths['/api/v1/auth/passkeys/login/begin']['post']
+type PasskeyLoginFinish = paths['/api/v1/auth/passkeys/login/finish']['post']
 
 export const generatedContractExists:
-  | [Login, Feed, Click, FeedbackStatus, FeedbackPresent, FeedbackSubmit, FeedbackComplete, FeedbackDismiss, PasskeyBegin, PasskeyFinish, PasskeyList, PasskeyRename, PasskeyDelete]
+  | [Login, Feed, Click, FeedbackStatus, FeedbackPresent, FeedbackSubmit, FeedbackComplete, FeedbackDismiss, PasskeyBegin, PasskeyFinish, PasskeyList, PasskeyRename, PasskeyDelete, PasskeyLoginBegin, PasskeyLoginFinish]
   | null = null

@@ -5,6 +5,17 @@ import (
 	"time"
 )
 
+// IPLimiter は接続元IPごとの失敗回数と開始回数の制限。パスキーのログインは利用者名を受け取らないため、IPだけで数える。
+// *auth.LoginLimiter がこれを満たし、失敗はパスワードログインと同じ数え方(同じ窓)を共有する。
+type IPLimiter interface {
+	// AllowBegin はログイン開始のたびに呼ぶ。失敗とは別の枠で数え、上限なら *auth.TooManyAttemptsError を返す。
+	AllowBegin(ip string) error
+	// CheckIP は締め出し中なら *auth.TooManyAttemptsError を返す。
+	CheckIP(ip string) error
+	// FailureIP は認証に失敗したときに呼ぶ。
+	FailureIP(ip string)
+}
+
 // Repository はパスキーと利用者ハンドルの永続化。
 type Repository interface {
 	// UserHandle は利用者のハンドルを返す。無ければ newHandle を保存して返す(同時に呼ばれても1つに決まる)。

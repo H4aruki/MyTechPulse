@@ -155,6 +155,7 @@ func (p *Passkey) FindByCredentialID(ctx context.Context, credentialID []byte) (
 }
 
 // RecordUse はログイン成功後の認証回数・同期の状態・最後に使った日時を更新する。
+// 認証回数が増えない更新(巻き戻り、同時ログインの競合)と、削除済みのパスキーは 0 行になり、passkey.ErrNotFound を返す。
 func (p *Passkey) RecordUse(ctx context.Context, credentialID []byte, signCount uint32, backupState bool, now time.Time) error {
 	n, err := p.q.UpdatePasskeyUsage(ctx, dbgen.UpdatePasskeyUsageParams{
 		CredentialID: credentialID, SignCount: int64(signCount), BackupState: backupState, LastUsedAt: timestamptz(now),

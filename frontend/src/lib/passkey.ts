@@ -11,6 +11,14 @@ export class PasskeyCancelledError extends Error {
   }
 }
 
+/** ログインの本人確認を、利用者が取り消した、または時間切れになった */
+export class PasskeyLoginCancelledError extends Error {
+  constructor() {
+    super('パスキーでのログインが取り消されたか、時間切れになりました。')
+    this.name = 'PasskeyLoginCancelledError'
+  }
+}
+
 /** この端末のパスキーがすでに登録されている */
 export class PasskeyAlreadyRegisteredError extends Error {
   constructor() {
@@ -26,6 +34,16 @@ export function isPasskeySupported(): boolean {
     typeof window.PublicKeyCredential === 'function' &&
     typeof navigator !== 'undefined' &&
     typeof navigator.credentials?.create === 'function'
+  )
+}
+
+/** ブラウザがパスキーでのログインに対応しているか。非対応ならボタンごと隠す */
+export function isPasskeyLoginSupported(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.PublicKeyCredential === 'function' &&
+    typeof navigator !== 'undefined' &&
+    typeof navigator.credentials?.get === 'function'
   )
 }
 
@@ -80,6 +98,58 @@ export function credentialToJSON(credential: PublicKeyCredential): Record<string
   }
   if (credential.authenticatorAttachment) json.authenticatorAttachment = credential.authenticatorAttachment
   return json
+}
+
+/** サーバーのJSON表現を navigator.credentials.get() の引数へ変える */
+export function toRequestOptions(
+  publicKey: Record<string, unknown>,
+): PublicKeyCredentialRequestOptions {
+  const allow = (publicKey.allowCredentials as DescriptorJSON[] | null | undefined) ?? []
+  return {
+    ...publicKey,
+    challenge: base64urlToBuffer(publicKey.challenge as string),
+    allowCredentials: allow.map((c) => ({ ...c, id: base64urlToBuffer(c.id) })),
+  } as unknown as PublicKeyCredentialRequestOptions
+}
+
+/** 端末のログイン応答を、サーバーへ送るJSON表現へ変える */
+export function assertionToJSON(credential: PublicKeyCredential): Record<string, unknown> {
+  const response = credential.response as AuthenticatorAssertionResponse
+  const json: Record<string, unknown> = {
+    id: credential.id,
+    rawId: bufferToBase64url(credential.rawId),
+    type: credential.type,
+    response: {
+      clientDataJSON: bufferToBase64url(response.clientDataJSON),
+      authenticatorData: bufferToBase64url(response.authenticatorData),
+      signature: bufferToBase64url(response.signature),
+      // 利用者名なしのログインでは利用者の特定に使う。無い応答は、サーバー側で失敗になる
+      ...(response.userHandle ? { userHandle: bufferToBase64url(response.userHandle) } : {}),
+    },
+    clientExtensionResults: credential.getClientExtensionResults(),
+  }
+  if (credential.authenticatorAttachment) json.authenticatorAttachment = credential.authenticatorAttachment
+  return json
+}
+
+/** 端末の本人確認を開始してログイン用の応答を得て、サーバーへ送る形で返す */
+export async function getPasskeyAssertion(
+  publicKey: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  let credential: Credential | null
+  try {
+    credential = await navigator.credentials.get({ publicKey: toRequestOptions(publicKey) })
+  } catch (error) {
+    if (
+      error instanceof DOMException &&
+      (error.name === 'NotAllowedError' || error.name === 'AbortError')
+    ) {
+      throw new PasskeyLoginCancelledError()
+    }
+    throw error
+  }
+  if (!credential) throw new PasskeyLoginCancelledError()
+  return assertionToJSON(credential as PublicKeyCredential)
 }
 
 /** 端末の本人確認を開始してパスキーを作り、サーバーへ送る形で返す */
