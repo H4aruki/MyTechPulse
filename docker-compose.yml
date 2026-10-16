@@ -38,6 +38,10 @@ services:
       QIITA_ACCESS_TOKEN: ${QIITA_ACCESS_TOKEN:-}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      # パスキー。空のままなら、APIが環境(APP_ENV)に合う既定値を使う（本番は mytechpulse.net）
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-}
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-}
+      WEBAUTHN_ORIGINS: ${WEBAUTHN_ORIGINS:-}
       # ログイン試行の制限に使う接続元IPのヘッダー。本番はCloudflare経由のため既定でCF-Connecting-IP。
       # 空だと、Caddyの裏では全員が同じIPに見える。ローカル(go run)の既定は空
       CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-CF-Connecting-IP}

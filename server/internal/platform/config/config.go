@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -25,6 +26,10 @@ type Config struct {
 	CookieSecure     bool
 	// ClientIPHeader はログイン試行の制限に使う接続元IPを読むヘッダー名。空なら接続元アドレス。
 	ClientIPHeader string
+	// パスキー(WebAuthn)。RPIDは登録済みのパスキーに結び付くため、公開後は変えない。
+	WebAuthnRPID    string
+	WebAuthnRPName  string
+	WebAuthnOrigins []string
 }
 
 // Load は lookup から設定を読む。エラーに入力値は含めない。
@@ -41,7 +46,11 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	origins, err := parseOrigins(getDefault(lookup, "CORS_ALLOWED_ORIGINS", "http://localhost:5173"))
+	origins, err := parseOrigins("CORS_ALLOWED_ORIGINS", getDefault(lookup, "CORS_ALLOWED_ORIGINS", "http://localhost:5173"))
+	if err != nil {
+		return Config{}, err
+	}
+	rpID, rpName, rpOrigins, err := parseWebAuthn(lookup, environment)
 	if err != nil {
 		return Config{}, err
 	}
@@ -86,6 +95,9 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 		CookieName:       cookieName,
 		CookieSecure:     cookieSecure,
 		ClientIPHeader:   strings.TrimSpace(getDefault(lookup, "CLIENT_IP_HEADER", "")),
+		WebAuthnRPID:     rpID,
+		WebAuthnRPName:   rpName,
+		WebAuthnOrigins:  rpOrigins,
 	}, nil
 }
 
@@ -133,8 +145,8 @@ func parseBool(lookup func(string) (string, bool), key string, fallback bool) (b
 	return b, nil
 }
 
-func parseOrigins(raw string) ([]string, error) {
-	errInvalid := errors.New("CORS_ALLOWED_ORIGINSはhttp/httpsのorigin(path・query・userinfoなし)をカンマ区切りで指定してください")
+func parseOrigins(key, raw string) ([]string, error) {
+	errInvalid := fmt.Errorf("%sはhttp/httpsのorigin(path・query・userinfoなし)をカンマ区切りで指定してください", key)
 	var origins []string
 	for _, part := range strings.Split(raw, ",") {
 		part = strings.TrimSpace(part)
@@ -153,4 +165,69 @@ func parseOrigins(raw string) ([]string, error) {
 		origins = append(origins, u.Scheme+"://"+u.Host)
 	}
 	return origins, nil
+}
+
+// parseWebAuthn はパスキーの設定を読んで検証する。未設定または空のときは、環境ごとの既定値を使う。
+// 本番は、localhostやIPアドレスを使えず、オリジンはhttpsだけ。オリジンのホストは、RP IDと同じか、その配下に限る。
+func parseWebAuthn(lookup func(string) (string, bool), environment string) (rpID, rpName string, origins []string, err error) {
+	production := environment == "production"
+	defaultID, defaultOrigins := "localhost", "http://localhost:5173"
+	if production {
+		defaultID, defaultOrigins = "mytechpulse.net", "https://mytechpulse.net"
+	}
+	value := func(key, fallback string) string {
+		if v, ok := lookup(key); ok && strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+		return fallback
+	}
+	rpID = strings.ToLower(value("WEBAUTHN_RP_ID", defaultID))
+	rpName = value("WEBAUTHN_RP_NAME", "MyTechPulse")
+	if !validRPID(rpID) || (production && isLocalHost(rpID)) {
+		return "", "", nil, errors.New("WEBAUTHN_RP_IDはドメイン名だけで指定してください(スキーム・ポート・パスなし。本番ではlocalhostとIPアドレスは使えません)")
+	}
+	origins, err = parseOrigins("WEBAUTHN_ORIGINS", value("WEBAUTHN_ORIGINS", defaultOrigins))
+	if err != nil {
+		return "", "", nil, err
+	}
+	for _, origin := range origins {
+		u, _ := url.Parse(origin)
+		host := strings.ToLower(u.Hostname())
+		if host != rpID && !strings.HasSuffix(host, "."+rpID) {
+			return "", "", nil, errors.New("WEBAUTHN_ORIGINSのホストは、WEBAUTHN_RP_IDと同じか、その配下にしてください")
+		}
+		if production && (u.Scheme != "https" || isLocalHost(host)) {
+			return "", "", nil, errors.New("productionのWEBAUTHN_ORIGINSは、localhostを含まないhttpsのoriginにしてください")
+		}
+	}
+	return rpID, rpName, origins, nil
+}
+
+// validRPID はRP IDとして使えるドメイン名か(英数字とハイフンのラベルをドットでつないだもの)を確かめる。
+func validRPID(id string) bool {
+	if id == "" || len(id) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(id, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			if !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') && r != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// isLocalHost はlocalhost(配下を含む)またはIPアドレスらしいホスト名か。
+func isLocalHost(host string) bool {
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	if ip, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil && ip.IsValid() {
+		return true
+	}
+	return false
 }

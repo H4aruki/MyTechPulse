@@ -187,7 +187,8 @@ chmod 600 ~/mytechpulse-production.env
 | `API_DOMAIN` | APIのドメイン（例: `api.mytechpulse.net`） | Caddy が、このドメインの証明書を取る。DNS をこのサーバーの静的IPへ向けておく |
 
 - 項目の意味と、ローカル開発との違いは、[`server/.env.example`](../../server/.env.example) と [`.env.example`](../../.env.example) のコメントにまとまっている。
-- `docker-compose.yml` が API に渡す項目は、上の表のうち `APP_ENV`・`QIITA_ACCESS_TOKEN`・`CORS_ALLOWED_ORIGINS`・`SWAGGER_ENABLED` と、`POSTGRES_PASSWORD` から作る接続先。セッションの有効期間などの調整項目は、渡しておらず、既定値で動く。
+- パスキー用の `WEBAUTHN_RP_ID`・`WEBAUTHN_RP_NAME`・`WEBAUTHN_ORIGINS` は、本番では書かなくてよい。空のままなら、APIが本番の既定値（`mytechpulse.net` と `https://mytechpulse.net`）を使う。`WEBAUTHN_RP_ID` は公開後に変えない（変えると、登録済みのパスキーがすべて使えなくなる）。本番では、`localhost`・IPアドレス・httpのURLを入れると起動に失敗する。
+- `docker-compose.yml` が API に渡す項目は、上の表のうち `APP_ENV`・`QIITA_ACCESS_TOKEN`・`CORS_ALLOWED_ORIGINS`・`SWAGGER_ENABLED` と、パスキー用の3項目、`POSTGRES_PASSWORD` から作る接続先。セッションの有効期間などの調整項目は、渡しておらず、既定値で動く。
 
 ## 8. 最初のGo版を起動する（初回だけの手作業）
 

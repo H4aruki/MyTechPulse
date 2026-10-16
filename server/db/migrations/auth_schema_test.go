@@ -133,7 +133,7 @@ func TestAuthMigrationsDownKeepsLegacyTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	for _, version := range []int64{6, 5, 4, 3, 2} {
+	for _, version := range []int64{7, 6, 5, 4, 3, 2} {
 		if err := goose.DownContext(ctx, db, "."); err != nil {
 			t.Fatalf("down %05d: %v", version, err)
 		}
