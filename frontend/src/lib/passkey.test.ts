@@ -5,10 +5,12 @@ import {
   bufferToBase64url,
   createPasskeyCredential,
   getPasskeyAssertion,
+  isConditionalPasskeyLoginAvailable,
   isPasskeyLoginSupported,
   isPasskeySupported,
   PasskeyAlreadyRegisteredError,
   PasskeyCancelledError,
+  PasskeyLoginAbortedError,
   PasskeyLoginCancelledError,
   toCreationOptions,
   toRequestOptions,
@@ -246,5 +248,95 @@ describe('getPasskeyAssertion', () => {
     const get = vi.fn().mockRejectedValue(error)
     vi.stubGlobal('navigator', { credentials: { get } })
     await expect(getPasskeyAssertion(requestKey)).rejects.toBe(error)
+  })
+
+  test('mediation と signal を credentials.get へ渡す。省略時は渡さない', async () => {
+    const get = vi.fn().mockResolvedValue(fakeAssertion(null))
+    vi.stubGlobal('navigator', { credentials: { get } })
+    const controller = new AbortController()
+
+    await getPasskeyAssertion(requestKey, { mediation: 'conditional', signal: controller.signal })
+    await getPasskeyAssertion(requestKey)
+
+    expect(get.mock.calls[0][0].mediation).toBe('conditional')
+    expect(get.mock.calls[0][0].signal).toBe(controller.signal)
+    expect(Object.keys(get.mock.calls[1][0])).toEqual(['publicKey'])
+  })
+
+  test('signal で中止された失敗は PasskeyLoginAbortedError で、取り消しとしても扱える', async () => {
+    const controller = new AbortController()
+    const get = vi.fn().mockImplementation(async () => {
+      controller.abort()
+      throw new DOMException('x', 'AbortError')
+    })
+    vi.stubGlobal('navigator', { credentials: { get } })
+
+    const result = getPasskeyAssertion(requestKey, { signal: controller.signal })
+
+    await expect(result).rejects.toBeInstanceOf(PasskeyLoginAbortedError)
+    await expect(result).rejects.toBeInstanceOf(PasskeyLoginCancelledError)
+  })
+
+  test('中止の理由（signal.reason）が何であっても、エラー名を見ずに Aborted にする', async () => {
+    const controller = new AbortController()
+    const get = vi.fn().mockImplementation(async () => {
+      controller.abort('任意の理由')
+      throw new Error('ブラウザがそのまま投げた reason')
+    })
+    vi.stubGlobal('navigator', { credentials: { get } })
+
+    await expect(
+      getPasskeyAssertion(requestKey, { signal: controller.signal }),
+    ).rejects.toBeInstanceOf(PasskeyLoginAbortedError)
+  })
+
+  test('結果が返った後でも、中止済みなら結果を使わず Aborted にする', async () => {
+    const controller = new AbortController()
+    const get = vi.fn().mockImplementation(async () => {
+      controller.abort()
+      return fakeAssertion(null)
+    })
+    vi.stubGlobal('navigator', { credentials: { get } })
+
+    await expect(
+      getPasskeyAssertion(requestKey, { signal: controller.signal }),
+    ).rejects.toBeInstanceOf(PasskeyLoginAbortedError)
+  })
+
+  test('signal が中止されていなければ、AbortError は今まで通り取り消し（Aborted ではない）', async () => {
+    const get = vi.fn().mockRejectedValue(new DOMException('x', 'AbortError'))
+    vi.stubGlobal('navigator', { credentials: { get } })
+    const result = getPasskeyAssertion(requestKey, { signal: new AbortController().signal })
+    await expect(result).rejects.toBeInstanceOf(PasskeyLoginCancelledError)
+    await expect(result).rejects.not.toBeInstanceOf(PasskeyLoginAbortedError)
+  })
+})
+
+describe('isConditionalPasskeyLoginAvailable', () => {
+  function support(isConditionalMediationAvailable?: () => Promise<boolean>) {
+    vi.stubGlobal(
+      'PublicKeyCredential',
+      Object.assign(function PublicKeyCredential() {}, { isConditionalMediationAvailable }),
+    )
+    vi.stubGlobal('navigator', { credentials: { get: vi.fn() } })
+  }
+
+  test('PublicKeyCredential が無ければ false', async () => {
+    vi.stubGlobal('PublicKeyCredential', undefined)
+    expect(await isConditionalPasskeyLoginAvailable()).toBe(false)
+  })
+
+  test('isConditionalMediationAvailable が無い・false・reject はどれも false', async () => {
+    support(undefined)
+    expect(await isConditionalPasskeyLoginAvailable()).toBe(false)
+    support(() => Promise.resolve(false))
+    expect(await isConditionalPasskeyLoginAvailable()).toBe(false)
+    support(() => Promise.reject(new Error('x')))
+    expect(await isConditionalPasskeyLoginAvailable()).toBe(false)
+  })
+
+  test('true なら true', async () => {
+    support(() => Promise.resolve(true))
+    expect(await isConditionalPasskeyLoginAvailable()).toBe(true)
   })
 })

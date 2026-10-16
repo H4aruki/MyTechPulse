@@ -5,18 +5,14 @@ import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 import { ApiError, UnauthorizedError } from '@/api/client'
-import { beginPasskeyLogin, finishPasskeyLogin, login } from '@/api/endpoints'
+import { login } from '@/api/endpoints'
 import type { AuthResponse } from '@/api/types'
 import { AppLayout } from '@/components/AppLayout'
 import { authQueryKey } from '@/lib/auth'
 import { clearFeedbackState } from '@/lib/feedbackTracker'
-import {
-  getPasskeyAssertion,
-  isPasskeyLoginSupported,
-  PasskeyLoginCancelledError,
-} from '@/lib/passkey'
-
-const PASSKEY_LOGIN_FAILED = 'パスキーでログインできませんでした。もう一度お試しください。'
+import { isPasskeyLoginSupported } from '@/lib/passkey'
+import { LOGIN_LOCKED } from '@/lib/passkeyLogin'
+import { usePasskeyLogin } from '@/lib/usePasskeyLogin'
 
 const loginSchema = z.object({
   username: z.string().min(1, 'ユーザー名を入力してください'),
@@ -47,6 +43,9 @@ export function LoginPage() {
     navigate('/articles', { replace: true })
   }
 
+  // パスキー（ボタンと、利用者名欄の autofill）の進行。失敗の文言は固定で、取り消しは静か
+  const passkey = usePasskeyLogin({ onLoggedIn, onError: setFormError })
+
   const mutation = useMutation({
     mutationFn: login,
     // 認証失敗を自動で繰り返すと、試行回数制限に余計にかかるため再送しない
@@ -57,50 +56,24 @@ export function LoginPage() {
       // 同じ401で返る。表示も1種類に統一する。
       if (error instanceof UnauthorizedError) {
         setFormError('ユーザー名またはパスワードが間違っています。')
+        passkey.endPassword('failed')
         return
       }
       if (error instanceof ApiError && error.problem.status === 429) {
-        setFormError('ログインの失敗が続いたため、しばらく操作できません。時間をおいてからもう一度お試しください。')
+        setFormError(LOGIN_LOCKED)
+        passkey.endPassword('locked')
         return
       }
       setFormError(error.message)
-    },
-  })
-
-  const passkeyMutation = useMutation({
-    mutationFn: async () => {
-      const { publicKey } = await beginPasskeyLogin()
-      const credential = await getPasskeyAssertion(publicKey)
-      return finishPasskeyLogin({ credential })
-    },
-    retry: false,
-    onSuccess: onLoggedIn,
-    onError: (error: Error) => {
-      // 利用者自身が取り消したので、エラーとして扱わず、パスワードの入力へ戻れるようにする
-      if (error instanceof PasskeyLoginCancelledError) return
-      // 利用者の有無や失敗の理由は区別せず、固定の文言にする
-      if (error instanceof UnauthorizedError) {
-        setFormError(PASSKEY_LOGIN_FAILED)
-        return
-      }
-      if (error instanceof ApiError) {
-        setFormError(
-          error.problem.status === 429
-            ? 'ログインの失敗が続いたため、しばらく操作できません。時間をおいてからもう一度お試しください。'
-            : error.message,
-        )
-        return
-      }
-      // 端末側の想定外の失敗は、内部の文言を出さない
-      setFormError(PASSKEY_LOGIN_FAILED)
+      passkey.endPassword('error')
     },
   })
 
   // 二重送信を防ぐため、どちらかの処理中は両方のボタンを止める
-  const busy = mutation.isPending || passkeyMutation.isPending
+  const busy = passkey.busy || mutation.isPending
 
   const onSubmit = (values: LoginFormValues) => {
-    if (busy) return
+    if (busy || !passkey.startPassword()) return
     setFormError('')
     mutation.mutate(values)
   }
@@ -108,7 +81,7 @@ export function LoginPage() {
   const onPasskeyLogin = () => {
     if (busy) return
     setFormError('')
-    passkeyMutation.mutate()
+    passkey.startExplicit()
   }
 
   return (
@@ -128,7 +101,7 @@ export function LoginPage() {
             <input
               id="username"
               type="text"
-              autoComplete="username"
+              autoComplete="username webauthn"
               {...register('username')}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
             />
@@ -144,7 +117,7 @@ export function LoginPage() {
             <input
               id="password"
               type="password"
-              autoComplete="current-password"
+              autoComplete="current-password webauthn"
               {...register('password')}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
             />
@@ -174,7 +147,7 @@ export function LoginPage() {
               disabled={busy}
               className="w-full rounded-lg border border-brand-500 bg-white px-4 py-2.5 font-bold text-brand-500 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400"
             >
-              {passkeyMutation.isPending ? '確認中…' : 'パスキーでログイン'}
+              {passkey.phase === 'explicit' || passkey.phase === 'finishing' ? '確認中…' : 'パスキーでログイン'}
             </button>
           )}
 
