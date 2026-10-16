@@ -86,6 +86,7 @@ describe('PasskeySettings', () => {
     }
     const create = stubSupported(vi.fn().mockResolvedValue(credential))
     vi.mocked(beginPasskeyRegistration).mockResolvedValue({
+      challengeToken: 'reg-token-1',
       publicKey: { challenge: 'AQID', user: { id: 'BAUG', name: 'a', displayName: 'a' } },
     })
     vi.mocked(finishPasskeyRegistration).mockResolvedValue(item(1, 'iPhone'))
@@ -100,6 +101,8 @@ describe('PasskeySettings', () => {
     expect(create).toHaveBeenCalledOnce()
     const body = vi.mocked(finishPasskeyRegistration).mock.calls[0][0]
     expect(body.name).toBe('iPhone')
+    // begin の応答のトークンを、そのまま finish へ渡す
+    expect(body.challengeToken).toBe('reg-token-1')
     expect(body.credential).toMatchObject({ id: 'Y3JlZA', rawId: 'AQ', type: 'public-key' })
     expect(await screen.findByText('iPhone')).toBeInTheDocument()
   })
@@ -107,6 +110,7 @@ describe('PasskeySettings', () => {
   test('端末で取り消したときは登録せず、メッセージを出す', async () => {
     stubSupported(vi.fn().mockRejectedValue(new DOMException('x', 'NotAllowedError')))
     vi.mocked(beginPasskeyRegistration).mockResolvedValue({
+      challengeToken: 'reg-token-1',
       publicKey: { challenge: 'AQID', user: { id: 'BAUG', name: 'a', displayName: 'a' } },
     })
     renderSettings()

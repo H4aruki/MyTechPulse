@@ -232,7 +232,7 @@ func TestHandlerExpiredSessionIsUnauthorizedEverywhere(t *testing.T) {
 		body         any
 	}{
 		{http.MethodPost, base + "/register/begin", nil},
-		{http.MethodPost, base + "/register/finish", map[string]any{"credential": map[string]any{}}},
+		{http.MethodPost, base + "/register/finish", map[string]any{"challengeToken": "t", "credential": map[string]any{}}},
 		{http.MethodGet, base, nil},
 		{http.MethodPatch, e.passkeyPath(id), map[string]any{"name": "taken-over"}},
 		{http.MethodDelete, e.passkeyPath(id), nil},
@@ -259,7 +259,7 @@ func TestHandlerRejectsForeignOrMissingOrigin(t *testing.T) {
 
 	for _, c := range []struct{ method, path, body string }{
 		{http.MethodPost, base + "/register/begin", ""},
-		{http.MethodPost, base + "/register/finish", `{"credential":{}}`},
+		{http.MethodPost, base + "/register/finish", `{"challengeToken":"t","credential":{}}`},
 		{http.MethodPatch, e.passkeyPath(id), `{"name":"hijack"}`},
 		{http.MethodDelete, e.passkeyPath(id), ""},
 	} {
@@ -291,7 +291,7 @@ func TestHandlerStoreFailuresAreInternalErrorsThatHideTheCause(t *testing.T) {
 	cases := []struct {
 		name    string
 		run     func(e *pathsEnv) resp
-		noToken bool // チャレンジCookieを発行してはいけない
+		noToken bool // チャレンジトークンを返してはいけない
 	}{
 		{"セッションの保存先", func(e *pathsEnv) resp {
 			e.sess.err = boom
@@ -344,9 +344,10 @@ func TestHandlerStoreFailuresAreInternalErrorsThatHideTheCause(t *testing.T) {
 					t.Errorf("応答に原因が出ている(%q): %s", part, r.Body)
 				}
 			}
-			if c.noToken && r.challengeCookie() != nil {
-				t.Error("失敗したのにチャレンジCookieを発行した")
+			if _, ok := r.json()["challengeToken"]; c.noToken && ok {
+				t.Error("失敗したのにチャレンジトークンを返した")
 			}
+			r.noCookies(t, c.name)
 			// パスキーのService用ロガーと、アプリ本体(アクセスログ等)のロガーの両方を調べる
 			for name, out := range map[string]*bytes.Buffer{"パスキー": e.logs, "アプリ本体": e.appLogs} {
 				if strings.Contains(out.String(), "10.0.0.5") {
@@ -538,8 +539,8 @@ func TestHandlerFinishRejectsControlCharactersInNameWithoutBurningTheChallenge(t
 func TestHandlerFinishRejectsBadRequestsWithoutBurningTheChallenge(t *testing.T) {
 	e := newPathsEnv(t)
 	token, pub, _ := e.begin("tok-alice")
-	cookie := &http.Cookie{Name: "mtp_passkey_challenge", Value: token}
 	finishPath := base + "/register/finish"
+	tok := `"challengeToken":"` + token + `"`
 
 	// 形の不正は、チャレンジを消費する前に拒否する(入力ミスで手続きをやり直させない)
 	for name, c := range map[string]struct {
@@ -548,12 +549,16 @@ func TestHandlerFinishRejectsBadRequestsWithoutBurningTheChallenge(t *testing.T)
 		code   string
 	}{
 		"壊れたJSON":        {`{`, http.StatusBadRequest, "bad_request"},
-		"credentialが無い":  {`{"name":"x"}`, http.StatusUnprocessableEntity, "validation_failed"},
-		"credentialが文字列": {`{"credential":"x"}`, http.StatusUnprocessableEntity, "validation_failed"},
-		"名前が長すぎる":        {`{"credential":{},"name":"` + strings.Repeat("あ", 65) + `"}`, http.StatusUnprocessableEntity, "validation_failed"},
-		"名前が数値":          {`{"credential":{},"name":5}`, http.StatusUnprocessableEntity, "validation_failed"},
+		"credentialが無い":  {`{` + tok + `,"name":"x"}`, http.StatusUnprocessableEntity, "validation_failed"},
+		"credentialが文字列": {`{` + tok + `,"credential":"x"}`, http.StatusUnprocessableEntity, "validation_failed"},
+		"名前が長すぎる":        {`{` + tok + `,"credential":{},"name":"` + strings.Repeat("あ", 65) + `"}`, http.StatusUnprocessableEntity, "validation_failed"},
+		"名前が数値":          {`{` + tok + `,"credential":{},"name":5}`, http.StatusUnprocessableEntity, "validation_failed"},
+		"トークンが無い":        {`{"credential":{}}`, http.StatusUnprocessableEntity, "validation_failed"},
+		"トークンが空":         {`{"challengeToken":"","credential":{}}`, http.StatusUnprocessableEntity, "validation_failed"},
+		"トークンが長すぎる":      {`{"challengeToken":"` + strings.Repeat("a", 129) + `","credential":{}}`, http.StatusUnprocessableEntity, "validation_failed"},
+		"トークンが数値":        {`{"challengeToken":5,"credential":{}}`, http.StatusUnprocessableEntity, "validation_failed"},
 	} {
-		r := e.rawDo(http.MethodPost, finishPath, c.body, jsonWrite, alice(), cookie)
+		r := e.rawDo(http.MethodPost, finishPath, c.body, jsonWrite, alice())
 		if r.Code != c.status || r.code() != c.code {
 			t.Errorf("%s = %d %s(期待 %d %s)", name, r.Code, r.Body, c.status, c.code)
 		}
@@ -614,7 +619,7 @@ func TestHandlerBeginStoresOnlyTheHashAndExpiresInFiveMinutes(t *testing.T) {
 	}
 	c := e.ch.created[0]
 	if c.id != passkey.HashChallengeToken(token) {
-		t.Error("保存するidは、Cookieの値のSHA-256であること")
+		t.Error("保存するidは、トークンのSHA-256であること")
 	}
 	if c.purpose != passkey.PurposeRegister || c.userID == nil || *c.userID != 1 {
 		t.Errorf("用途と利用者が違う: %v %v", c.purpose, c.userID)
@@ -622,9 +627,9 @@ func TestHandlerBeginStoresOnlyTheHashAndExpiresInFiveMinutes(t *testing.T) {
 	if !c.expires.Equal(e.clock.now.Add(passkey.ChallengeTTL)) {
 		t.Errorf("期限 = %v、現在 = %v", c.expires, e.clock.now)
 	}
-	// 手続きの中身(WebAuthnのセッション)に、Cookieの平文を入れない
+	// 手続きの中身(WebAuthnのセッション)に、トークンの平文を入れない
 	if bytes.Contains(c.data, []byte(token)) {
-		t.Error("保存するセッションデータにCookieの平文が入っている")
+		t.Error("保存するセッションデータにトークンの平文が入っている")
 	}
 	// 端末へ渡すチャレンジは、保存するセッションデータの中にある(完了時の照合に使う)
 	if !bytes.Contains(c.data, []byte(pub["challenge"].(string))) {

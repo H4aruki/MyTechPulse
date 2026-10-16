@@ -80,7 +80,7 @@ export function fetchPasskeys() {
   return request<PasskeyListResponse>('GET', '/api/v1/auth/passkeys')
 }
 
-/** パスキー登録の開始。端末へ渡す設定を受け取り、チャレンジはHttpOnly Cookieで結び付く */
+/** パスキー登録の開始。端末へ渡す設定と、手続きを結び付ける challengeToken を受け取る（finish へそのまま渡す） */
 export function beginPasskeyRegistration() {
   return request<RegisterBeginResponse>('POST', '/api/v1/auth/passkeys/register/begin')
 }
@@ -89,7 +89,7 @@ export function finishPasskeyRegistration(body: RegisterFinishRequest) {
   return request<PasskeyItem>('POST', '/api/v1/auth/passkeys/register/finish', body)
 }
 
-/** パスキーでのログイン開始（利用者名なし）。端末へ渡す設定を受け取り、チャレンジはHttpOnly Cookieで結び付く */
+/** パスキーでのログイン開始（利用者名なし）。端末へ渡す設定と、手続きを結び付ける challengeToken を受け取る（finish へそのまま渡す） */
 export function beginPasskeyLogin() {
   return request<PasskeyLoginBeginResponse>('POST', '/api/v1/auth/passkeys/login/begin')
 }

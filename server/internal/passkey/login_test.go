@@ -262,8 +262,16 @@ type reqOpts struct {
 	noCSRF                         bool
 }
 
+// post は要求を1つ送る。o.challenge が空でなければ、本文(map)の challengeToken に入れる。Cookieはセッションだけを送る。
 func (e *loginEnv) post(path string, body any, o reqOpts) resp {
 	e.t.Helper()
+	if m, ok := body.(map[string]any); ok && o.challenge != "" {
+		withToken := map[string]any{"challengeToken": o.challenge}
+		for k, v := range m {
+			withToken[k] = v
+		}
+		body = withToken
+	}
 	var rd io.Reader
 	if body != nil {
 		b, _ := json.Marshal(body)
@@ -286,9 +294,6 @@ func (e *loginEnv) post(path string, body any, o reqOpts) resp {
 	if o.session != "" {
 		req.AddCookie(&http.Cookie{Name: "mtp_session", Value: o.session})
 	}
-	if o.challenge != "" {
-		req.AddCookie(&http.Cookie{Name: "mtp_passkey_challenge", Value: o.challenge})
-	}
 	rec := httptest.NewRecorder()
 	e.h.ServeHTTP(rec, req)
 	return resp{rec}
@@ -303,19 +308,19 @@ func (e *loginEnv) me(session string) resp {
 	return resp{rec}
 }
 
-// begin はログインを開始し、チャレンジCookieの値と端末へ渡す設定を返す。
+// begin はログインを開始し、本文のチャレンジトークンと端末へ渡す設定を返す。
 func (e *loginEnv) begin(o reqOpts) (string, map[string]any, resp) {
 	e.t.Helper()
 	r := e.post(loginBase+"/begin", nil, o)
 	if r.Code != http.StatusOK {
 		return "", nil, r
 	}
-	c := r.challengeCookie()
-	if c == nil || c.Value == "" {
-		e.t.Fatal("チャレンジCookieが無い")
+	token, _ := r.json()["challengeToken"].(string)
+	if token == "" {
+		e.t.Fatal("本文にチャレンジトークンが無い")
 	}
 	pub, _ := r.json()["publicKey"].(map[string]any)
-	return c.Value, pub, r
+	return token, pub, r
 }
 
 func (e *loginEnv) finish(o reqOpts, cred map[string]any) resp {
@@ -366,9 +371,7 @@ func TestLoginSucceedsAndMatchesPasswordLoginSession(t *testing.T) {
 	if br.Header().Get("Cache-Control") != "no-store" {
 		t.Error("beginの応答はキャッシュさせない")
 	}
-	if c := br.challengeCookie(); !c.HttpOnly || c.MaxAge != 300 || c.Path != "/" || c.SameSite != http.SameSiteStrictMode {
-		t.Errorf("チャレンジCookieの属性が想定と違う: %+v", c)
-	}
+	br.noCookies(t, "begin")
 	if pub["rpId"] != testRPID || pub["userVerification"] != "required" {
 		t.Errorf("publicKey = %v", pub)
 	}
@@ -376,7 +379,7 @@ func TestLoginSucceedsAndMatchesPasswordLoginSession(t *testing.T) {
 		t.Errorf("利用者名なしなので allowCredentials は空: %v", ac)
 	}
 	if token == pub["challenge"] {
-		t.Error("Cookieの値とWebAuthnのチャレンジは別物")
+		t.Error("トークンとWebAuthnのチャレンジは別物")
 	}
 
 	fr := e.finish(reqOpts{challenge: token}, a.assertion(pub, 6).json(t))
@@ -390,8 +393,9 @@ func TestLoginSucceedsAndMatchesPasswordLoginSession(t *testing.T) {
 	if user["username"] != "alice" || user["id"] != float64(1) || user["role"] != "member" {
 		t.Errorf("user = %v", user)
 	}
-	if got := fr.challengeCookie(); got == nil || got.Value != "" || got.MaxAge >= 0 {
-		t.Errorf("完了時にチャレンジCookieを破棄する: %+v", got)
+	// 設定するCookieはセッションだけ(チャレンジのCookieは無い)
+	if cookies := fr.Result().Cookies(); len(cookies) != 1 || cookies[0].Name != "mtp_session" {
+		t.Errorf("Set-Cookie はセッションの1つだけのはず: %v", fr.Header().Values("Set-Cookie"))
 	}
 
 	// セッションCookieは、パスワードログインと同じ属性で発行される
@@ -570,13 +574,21 @@ func directChallenge(t *testing.T, e *loginEnv, userID *int64, sessionData []byt
 func failureCases() []failureCase {
 	otherKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	return []failureCase{
-		{"チャレンジCookieなし", func(t *testing.T, e *loginEnv) resp {
-			a, _, pub := prepared(t, e)
-			return e.finish(reqOpts{}, a.assertion(pub, 6).json(t))
-		}},
-		{"偽のチャレンジCookie", func(t *testing.T, e *loginEnv) resp {
+		{"偽のチャレンジトークン", func(t *testing.T, e *loginEnv) resp {
 			a, _, pub := prepared(t, e)
 			return e.finish(reqOpts{challenge: "forged-token"}, a.assertion(pub, 6).json(t))
+		}},
+		{"形式の違うチャレンジトークン", func(t *testing.T, e *loginEnv) resp {
+			a, _, pub := prepared(t, e)
+			return e.finish(reqOpts{challenge: "!! not base64url / \\u0000 !!"}, a.assertion(pub, 6).json(t))
+		}},
+		{"空白だけのチャレンジトークン", func(t *testing.T, e *loginEnv) resp {
+			a, _, pub := prepared(t, e)
+			return e.finish(reqOpts{challenge: "   "}, a.assertion(pub, 6).json(t))
+		}},
+		{"上限ちょうど長のチャレンジトークン", func(t *testing.T, e *loginEnv) resp {
+			a, _, pub := prepared(t, e)
+			return e.finish(reqOpts{challenge: strings.Repeat("a", 128)}, a.assertion(pub, 6).json(t))
 		}},
 		{"期限切れ", func(t *testing.T, e *loginEnv) resp {
 			a, token, pub := prepared(t, e)
@@ -606,7 +618,8 @@ func failureCases() []failureCase {
 				t.Fatalf("register/begin = %d %s", rb.Code, rb.Body)
 			}
 			pub, _ := rb.json()["publicKey"].(map[string]any)
-			return e.finish(reqOpts{challenge: rb.challengeCookie().Value}, a.assertion(pub, 6).json(t))
+			regToken, _ := rb.json()["challengeToken"].(string)
+			return e.finish(reqOpts{challenge: regToken}, a.assertion(pub, 6).json(t))
 		}},
 		{"未知の認証情報ID", func(t *testing.T, e *loginEnv) resp {
 			a, token, pub := prepared(t, e)
@@ -856,9 +869,10 @@ func TestLoginBeginIsLimitedPerIPWithItsOwnQuota(t *testing.T) {
 	if got := r.Header().Get("Retry-After"); got != "660" {
 		t.Errorf("Retry-After = %q, want 660", got)
 	}
-	if r.challengeCookie() != nil {
-		t.Error("429にチャレンジCookieを付けてはいけない")
+	if r.json()["challengeToken"] != nil {
+		t.Error("429にチャレンジトークンを含めてはいけない")
 	}
+	r.noCookies(t, "429")
 	e.ch.mu.Lock()
 	after := len(e.ch.rows)
 	e.ch.mu.Unlock()
@@ -1078,9 +1092,10 @@ func TestLoginLogsRecordEventsWithoutSecrets(t *testing.T) {
 		"WebAuthnのチャレンジ1":   pub["challenge"].(string),
 		"WebAuthnのチャレンジ2":   pub2["challenge"].(string),
 		"WebAuthnのチャレンジ3":   pub3["challenge"].(string),
-		"チャレンジCookie1":      token,
-		"チャレンジCookie2":      token2,
-		"偽のチャレンジCookie":     "forged-cookie-value",
+		"チャレンジトークン1":        token,
+		"チャレンジトークン2":        token2,
+		"チャレンジトークン3":        token3,
+		"偽のチャレンジトークン":       "forged-cookie-value",
 		"セッションCookie":       session,
 		"接続元IP":             ip,
 		"利用者名":              "alice",
@@ -1107,15 +1122,15 @@ func TestLoginBeginStoreFailures(t *testing.T) {
 		if r.Code != http.StatusInternalServerError || r.code() != "internal_error" || strings.Contains(r.Body.String(), "SECRET-DETAIL") {
 			t.Fatalf("begin = %d %s", r.Code, r.Body)
 		}
-		if r.challengeCookie() != nil {
-			t.Error("保存できなかったチャレンジのCookieを渡してはいけない")
+		if r.json()["challengeToken"] != nil {
+			t.Error("保存できなかったチャレンジのトークンを渡してはいけない")
 		}
 	})
 	t.Run("清掃だけの失敗ではログインを止めない", func(t *testing.T) {
 		e := newPathsEnv(t)
 		e.ch.errDeleteExpired = errors.New("db down: SECRET-DETAIL")
 		r := e.do(http.MethodPost, loginBase+"/begin", "", "", nil, true)
-		if r.Code != http.StatusOK || r.challengeCookie() == nil {
+		if token, _ := r.json()["challengeToken"].(string); r.Code != http.StatusOK || token == "" {
 			t.Fatalf("begin = %d %s", r.Code, r.Body)
 		}
 		logs := e.logs.String()
@@ -1175,14 +1190,14 @@ func cookieNamed(r resp, name string) *http.Cookie {
 	return nil
 }
 
-func TestLoginInProductionUsesHostPrefixedSecureCookies(t *testing.T) {
-	const sessionName, challengeName = "__Host-mtp_session", "__Host-mtp_passkey_challenge"
+func TestLoginInProductionSetsOnlyTheSessionCookie(t *testing.T) {
+	const sessionName = "__Host-mtp_session"
 	e := newLoginEnvWith(t, config.Config{
 		Environment: "production", CookieName: sessionName, CookieSecure: true,
 		CORSOrigins: []string{testOrigin}, ClientIPHeader: loginClientIPHd,
 	})
 	a := e.enroll(1, 5, true, false)
-	do := func(path, challengeCookieName, challenge string, body any) resp {
+	do := func(path string, body any) resp {
 		t.Helper()
 		var rd io.Reader
 		if body != nil {
@@ -1196,51 +1211,33 @@ func TestLoginInProductionUsesHostPrefixedSecureCookies(t *testing.T) {
 		req.Header.Set("Origin", testOrigin)
 		req.Header.Set("X-MTP-CSRF", "1")
 		req.Header.Set(loginClientIPHd, "203.0.113.80")
-		if challenge != "" {
-			req.AddCookie(&http.Cookie{Name: challengeCookieName, Value: challenge})
-		}
 		rec := httptest.NewRecorder()
 		e.h.ServeHTTP(rec, req)
 		return resp{rec}
 	}
 
-	br := do(loginBase+"/begin", "", "", nil)
+	br := do(loginBase+"/begin", nil)
 	if br.Code != http.StatusOK {
 		t.Fatalf("begin = %d %s", br.Code, br.Body)
 	}
-	cc := cookieNamed(br, challengeName)
-	if cc == nil || cc.Value == "" || !cc.Secure || !cc.HttpOnly || cc.Path != "/" || cc.Domain != "" {
-		t.Fatalf("本番のチャレンジCookie = %+v (%v)", cc, br.Header().Values("Set-Cookie"))
-	}
-	if br.challengeCookie() != nil {
-		t.Error("本番で __Host- の付かない名前のチャレンジCookieを出してはいけない")
+	// 本番でも、チャレンジはCookieで運ばず、本文のトークンで渡す
+	br.noCookies(t, "本番のbegin")
+	token, _ := br.json()["challengeToken"].(string)
+	if token == "" {
+		t.Fatalf("本文にチャレンジトークンが無い: %s", br.Body)
 	}
 	pub, _ := br.json()["publicKey"].(map[string]any)
-	cred := a.assertion(pub, 6).json(t)
-
-	// __Host- の付かない名前のチャレンジCookieでは、完了できない
-	if r := do(loginBase+"/finish", "mtp_passkey_challenge", cc.Value, map[string]any{"credential": cred}); r.Code != http.StatusUnauthorized {
-		t.Fatalf("本番で素の名前のチャレンジCookie = %d %s", r.Code, r.Body)
-	}
-	// 上の失敗でもチャレンジは使い切られるので、開始からやり直す
-	br = do(loginBase+"/begin", "", "", nil)
-	cc = cookieNamed(br, challengeName)
-	pub, _ = br.json()["publicKey"].(map[string]any)
-	fr := do(loginBase+"/finish", challengeName, cc.Value, map[string]any{"credential": a.assertion(pub, 7).json(t)})
+	fr := do(loginBase+"/finish", map[string]any{"challengeToken": token, "credential": a.assertion(pub, 6).json(t)})
 	if fr.Code != http.StatusOK {
 		t.Fatalf("finish = %d %s", fr.Code, fr.Body)
 	}
 
-	if cookies := fr.Result().Cookies(); len(cookies) != 2 {
-		t.Fatalf("Set-Cookie は2つ(セッションと、チャレンジの破棄): %v", fr.Header().Values("Set-Cookie"))
+	if cookies := fr.Result().Cookies(); len(cookies) != 1 {
+		t.Fatalf("Set-Cookie はセッションの1つだけ: %v", fr.Header().Values("Set-Cookie"))
 	}
 	sc := cookieNamed(fr, sessionName)
 	if sc == nil || sc.Value == "" || !sc.Secure || !sc.HttpOnly || sc.Path != "/" || sc.Domain != "" || sc.SameSite != http.SameSiteLaxMode || sc.MaxAge != 86400 {
 		t.Fatalf("セッションCookie = %+v", sc)
-	}
-	dc := cookieNamed(fr, challengeName)
-	if dc == nil || dc.Value != "" || dc.MaxAge >= 0 || !dc.Secure || !dc.HttpOnly || dc.Path != "/" || dc.Domain != "" {
-		t.Errorf("破棄するチャレンジCookie = %+v", dc)
 	}
 	// 発行されたセッションで本人確認できる
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
@@ -1250,4 +1247,152 @@ func TestLoginInProductionUsesHostPrefixedSecureCookies(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("/auth/me = %d %s", rec.Code, rec.Body)
 	}
+}
+
+// ---- 複数のタブ(ceremonyごとに独立したトークン) ----
+
+// 同じ利用者が2つのタブでログインを始めても、先に始めた方も成功する(begin A, begin B, finish B, finish A)。
+func TestLoginTwoCeremoniesOfOneUserBothSucceed(t *testing.T) {
+	e := newLoginEnv(t)
+	a := e.enroll(1, 5, true, false)
+	tokenA, pubA, _ := e.begin(reqOpts{})
+	tokenB, pubB, _ := e.begin(reqOpts{})
+	if tokenA == tokenB {
+		t.Fatal("ceremonyごとに別のトークンを返すこと")
+	}
+	rb := e.finish(reqOpts{challenge: tokenB}, a.assertion(pubB, 6).json(t))
+	if rb.Code != http.StatusOK {
+		t.Fatalf("B = %d %s", rb.Code, rb.Body)
+	}
+	ra := e.finish(reqOpts{challenge: tokenA}, a.assertion(pubA, 7).json(t))
+	if ra.Code != http.StatusOK {
+		t.Fatalf("A = %d %s", ra.Code, ra.Body)
+	}
+	if sessionCookieOf(ra) == nil || sessionCookieOf(rb) == nil || sessionCookieOf(ra).Value == sessionCookieOf(rb).Value {
+		t.Error("それぞれ別のセッションが発行されるはず")
+	}
+}
+
+// 別のceremonyのトークンで失敗しても、消費されるのはそのトークンだけで、他方は使える。
+func TestLoginFailureConsumesOnlyItsOwnToken(t *testing.T) {
+	e := newLoginEnv(t)
+	a := e.enroll(1, 5, true, false)
+	tokenA, pubA, _ := e.begin(reqOpts{})
+	tokenB, pubB, _ := e.begin(reqOpts{})
+	// Aのトークンに、Bの設定への応答を送る(チャレンジ不一致で失敗し、Aは消費される)
+	e.wantLoginFailure(e.finish(reqOpts{challenge: tokenA}, a.assertion(pubB, 6).json(t)), "取り違え")
+	e.wantLoginFailure(e.finish(reqOpts{challenge: tokenA}, a.assertion(pubA, 6).json(t)), "Aは使い切り")
+	if r := e.finish(reqOpts{challenge: tokenB}, a.assertion(pubB, 6).json(t)); r.Code != http.StatusOK {
+		t.Fatalf("Bは残っている = %d %s", r.Code, r.Body)
+	}
+}
+
+// 本文のトークンだけを見る。古いチャレンジCookieが付いていても読まず、Cookieだけでは完了できない。
+func TestLoginIgnoresAnyChallengeCookie(t *testing.T) {
+	e := newLoginEnv(t)
+	a := e.enroll(1, 5, true, false)
+	token, pub, _ := e.begin(reqOpts{})
+	cred := a.assertion(pub, 6).json(t)
+
+	send := func(body any, cookieValue string) resp {
+		b, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, loginBase+"/finish", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", testOrigin)
+		req.Header.Set("X-MTP-CSRF", "1")
+		req.AddCookie(&http.Cookie{Name: "mtp_passkey_challenge", Value: cookieValue})
+		req.AddCookie(&http.Cookie{Name: "__Host-mtp_passkey_challenge", Value: cookieValue})
+		rec := httptest.NewRecorder()
+		e.h.ServeHTTP(rec, req)
+		return resp{rec}
+	}
+	if r := send(map[string]any{"credential": cred}, token); r.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("Cookieだけでは完了できない = %d %s", r.Code, r.Body)
+	}
+	// 本文のトークンが正しければ、間違った値のCookieが付いていても完了できる(Cookieは読まない)
+	if r := send(map[string]any{"challengeToken": token, "credential": cred}, "forged"); r.Code != http.StatusOK {
+		t.Fatalf("本文のトークン = %d %s", r.Code, r.Body)
+	}
+}
+
+// 欠落・空・長すぎ・型違いのトークンは、入力の形の不正として422。値は応答に出ず、チャレンジも消費しない。
+func TestLoginFinishRejectsMalformedTokenField(t *testing.T) {
+	e := newLoginEnv(t)
+	a := e.enroll(1, 5, true, false)
+	token, pub, _ := e.begin(reqOpts{})
+	cred := a.assertion(pub, 6).json(t)
+	cb, _ := json.Marshal(cred)
+
+	for name, body := range map[string]string{
+		"欠落":     `{"credential":` + string(cb) + `}`,
+		"空":      `{"challengeToken":"","credential":` + string(cb) + `}`,
+		"長すぎる":   `{"challengeToken":"` + strings.Repeat("a", 129) + `","credential":` + string(cb) + `}`,
+		"文字列でない": `{"challengeToken":5,"credential":` + string(cb) + `}`,
+		"null":   `{"challengeToken":null,"credential":` + string(cb) + `}`,
+	} {
+		req := httptest.NewRequest(http.MethodPost, loginBase+"/finish", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", testOrigin)
+		req.Header.Set("X-MTP-CSRF", "1")
+		rec := httptest.NewRecorder()
+		e.h.ServeHTTP(rec, req)
+		r := resp{rec}
+		if r.Code != http.StatusUnprocessableEntity || r.code() != "validation_failed" {
+			t.Errorf("トークン%s = %d %s", name, r.Code, r.Body)
+		}
+		if strings.Contains(r.Body.String(), token) || strings.Contains(r.Body.String(), "alice") {
+			t.Errorf("トークン%s: 応答に値が出ている: %s", name, r.Body)
+		}
+		r.noCookies(t, name)
+	}
+	// 形の不正ではチャレンジを消費しないので、正しい要求はこの後も通る
+	if r := e.finish(reqOpts{challenge: token}, cred); r.Code != http.StatusOK {
+		t.Fatalf("やり直し = %d %s", r.Code, r.Body)
+	}
+}
+
+// challengeTokenの形式不正(欠落・空・型違い・129文字)による422は、失敗として数えない。
+// 失敗枠の締め出し直前(19回)まで失敗を重ねたあとでも、形の不正を送り続けて枠を使い切らない。
+func TestLoginMalformedTokenFieldIsNotCountedAsAFailure(t *testing.T) {
+	e := newLoginEnv(t)
+	a := e.enroll(1, 5, true, false)
+	const ip = "203.0.113.80"
+	for i := 0; i < 19; i++ {
+		e.wantLoginFailure(e.forgedFinish(ip), "失敗"+strconv.Itoa(i+1))
+	}
+
+	for i := 0; i < 10; i++ {
+		for name, body := range map[string]map[string]any{
+			"欠落":     {"credential": map[string]any{}},
+			"空":      {"challengeToken": "", "credential": map[string]any{}},
+			"長すぎる":   {"challengeToken": strings.Repeat("a", 129), "credential": map[string]any{}},
+			"文字列でない": {"challengeToken": 5, "credential": map[string]any{}},
+			"null":   {"challengeToken": nil, "credential": map[string]any{}},
+		} {
+			if r := e.post(loginBase+"/finish", body, reqOpts{ip: ip}); r.Code != http.StatusUnprocessableEntity || r.code() != "validation_failed" {
+				t.Fatalf("トークン%s = %d %s", name, r.Code, r.Body)
+			}
+		}
+	}
+
+	// 失敗は19回のまま。正しいログインが通る
+	if r := e.signIn(a, 6, reqOpts{ip: ip}); r.Code != http.StatusOK {
+		t.Fatalf("形の不正は失敗として数えない: %d %s", r.Code, r.Body)
+	}
+	// 20回目の失敗までは401で、その次から締め出される(数が増えていない証拠)
+	e.wantLoginFailure(e.forgedFinish(ip), "20回目の失敗")
+	if r := e.forgedFinish(ip); r.Code != http.StatusTooManyRequests {
+		t.Errorf("21回目 = %d %s", r.Code, r.Body)
+	}
+}
+
+// 成功したあとでも、同じトークンは使えない(単回使用)。
+func TestLoginTokenIsSingleUseEvenAfterSuccess(t *testing.T) {
+	e := newLoginEnv(t)
+	a := e.enroll(1, 5, true, false)
+	token, pub, _ := e.begin(reqOpts{})
+	if r := e.finish(reqOpts{challenge: token}, a.assertion(pub, 6).json(t)); r.Code != http.StatusOK {
+		t.Fatalf("1回目 = %d %s", r.Code, r.Body)
+	}
+	e.wantLoginFailure(e.finish(reqOpts{challenge: token}, a.assertion(pub, 7).json(t)), "再利用")
 }

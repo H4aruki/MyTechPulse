@@ -92,7 +92,7 @@ export interface paths {
         put?: never;
         /**
          * パスキーでのログインの開始
-         * @description 利用者名なしでパスキーを選ばせる設定を返し、チャレンジを結び付ける短命のHttpOnly Cookieを発行する。チャレンジは5分で失効し、1回しか使えない。開始は失敗として数えないが、締め出し中のIPには429を返す。開始そのものもIPごとに15分で60回まで数え(失敗とは別の枠。成功・失敗で戻さない)、超えると429と `Retry-After`(秒)を返す。接続元IPごと(15分に20回失敗で、窓が終わるまで)に失敗を数え、超えると429と `Retry-After`(秒)を返す。数えるのはパスワードのログインと同じ窓。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
+         * @description 利用者名なしでパスキーを選ばせる設定と、手続きを結び付ける使い捨ての `challengeToken` を返す。トークンは5分で失効し、1回しか使えない。Cookieは使わないので、複数のタブで同時にログインの手続きができる。開始は失敗として数えないが、締め出し中のIPには429を返す。開始そのものもIPごとに15分で60回まで数え(失敗とは別の枠。成功・失敗で戻さない)、超えると429と `Retry-After`(秒)を返す。接続元IPごと(15分に20回失敗で、窓が終わるまで)に失敗を数え、超えると429と `Retry-After`(秒)を返す。数えるのはパスワードのログインと同じ窓。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
          */
         post: operations["auth-passkey-login-begin"];
         delete?: never;
@@ -112,7 +112,7 @@ export interface paths {
         put?: never;
         /**
          * パスキーでのログインの完了
-         * @description 端末の応答を検証し、成功すればパスワードのログインと同じ属性のセッションCookieを発行する。チャレンジは検証の成否にかかわらず、この呼び出しで使い切る。チャレンジの不正・期限切れ・再利用、未知のパスキー、署名やオリジンの不一致、認証回数の巻き戻りなど、失敗の原因は区別できない同じ401を返す。接続元IPごと(15分に20回失敗で、窓が終わるまで)に失敗を数え、超えると429と `Retry-After`(秒)を返す。数えるのはパスワードのログインと同じ窓。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
+         * @description 開始で受け取った `challengeToken` と端末の応答を検証し、成功すればパスワードのログインと同じ属性のセッションCookieを発行する。トークンは検証の成否にかかわらず、この呼び出しで使い切る。トークンの不正・期限切れ・再利用、未知のパスキー、署名やオリジンの不一致、認証回数の巻き戻りなど、失敗の原因は区別できない同じ401を返す。接続元IPごと(15分に20回失敗で、窓が終わるまで)に失敗を数え、超えると429と `Retry-After`(秒)を返す。数えるのはパスワードのログインと同じ窓。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
          */
         post: operations["auth-passkey-login-finish"];
         delete?: never;
@@ -132,7 +132,7 @@ export interface paths {
         put?: never;
         /**
          * パスキー登録の開始
-         * @description 端末へ渡す登録の設定を返し、チャレンジを結び付ける短命のHttpOnly Cookieを発行する。チャレンジは5分で失効し、1回しか使えない。登録済みのパスキーは `excludeCredentials` に入る。端末の本人確認(userVerification)と、利用者名なしで選べるパスキー(discoverable credential)を必須にする。上限は1人10件。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
+         * @description 端末へ渡す登録の設定と、手続きを結び付ける使い捨ての `challengeToken` を返す。トークンは5分で失効し、1回しか使えない。Cookieは使わないので、複数のタブで同時に手続きできる。登録済みのパスキーは `excludeCredentials` に入る。端末の本人確認(userVerification)と、利用者名なしで選べるパスキー(discoverable credential)を必須にする。上限は1人10件。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
          */
         post: operations["auth-passkey-register-begin"];
         delete?: never;
@@ -152,7 +152,7 @@ export interface paths {
         put?: never;
         /**
          * パスキー登録の完了
-         * @description 端末の応答を検証して保存する。チャレンジは検証の成否にかかわらず、この呼び出しで使い切る。パスワードの再入力は求めない。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
+         * @description 開始で受け取った `challengeToken` と端末の応答を送る。検証して保存する。トークンは検証の成否にかかわらず、この呼び出しで使い切る。他の利用者が開始したトークンは使えない。パスワードの再入力は求めない。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
          */
         post: operations["auth-passkey-register-finish"];
         delete?: never;
@@ -569,12 +569,16 @@ export interface components {
             passkeys: components["schemas"]["PasskeyItem"][] | null;
         };
         PasskeyLoginBeginResponse: {
+            /** @description この手続きを結び付ける使い捨てのトークン。5分で失効する。完了の呼び出しでそのまま返す。保存や記録をしない */
+            challengeToken: string;
             /** @description navigator.credentials.get() の publicKey に渡す値(WebAuthnのJSON形式。binary項目はbase64url文字列)。利用者名なしで選ばせるため allowCredentials は空 */
             publicKey: {
                 [key: string]: unknown;
             };
         };
         PasskeyLoginFinishRequest: {
+            /** @description 開始で受け取ったトークン */
+            challengeToken: string;
             /** @description navigator.credentials.get() の結果(PublicKeyCredentialのJSON表現。binary項目はbase64url文字列) */
             credential: {
                 [key: string]: unknown;
@@ -588,12 +592,16 @@ export interface components {
             status: "ok";
         };
         RegisterBeginResponse: {
+            /** @description この手続きを結び付ける使い捨てのトークン。5分で失効する。完了の呼び出しでそのまま返す。保存や記録をしない */
+            challengeToken: string;
             /** @description navigator.credentials.create() の publicKey に渡す値(WebAuthnのJSON形式。binary項目はbase64url文字列) */
             publicKey: {
                 [key: string]: unknown;
             };
         };
         RegisterFinishRequest: {
+            /** @description 開始で受け取ったトークン */
+            challengeToken: string;
             /** @description navigator.credentials.create() の結果(PublicKeyCredentialのJSON表現。binary項目はbase64url文字列) */
             credential: {
                 [key: string]: unknown;
@@ -850,7 +858,6 @@ export interface operations {
             200: {
                 headers: {
                     "Cache-Control"?: string;
-                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -952,7 +959,6 @@ export interface operations {
             200: {
                 headers: {
                     "Cache-Control"?: string;
-                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -1004,7 +1010,6 @@ export interface operations {
             /** @description Created */
             201: {
                 headers: {
-                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content: {
