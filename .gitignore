@@ -58,6 +58,9 @@ desktop.ini
 # Playwright MCP のブラウザ操作ログ（動作確認のたびに自動生成される一時ファイル）
 .playwright-mcp/
 
+# ===== API仕様書（scripts/build-api-docs.mjs の生成物。npm run docs:api） =====
+api-docs/
+
 # ===== Go (server/) =====
 /server/bin/
 /server/*.exe

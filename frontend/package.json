@@ -11,7 +11,8 @@
     "test:coverage": "vitest run --maxWorkers=1 --no-file-parallelism --coverage",
     "preview": "vite preview",
     "api:generate": "openapi-typescript ../server/openapi/openapi.json -o src/api/generated.ts",
-    "api:check": "npm run api:generate && git diff --exit-code -- src/api/generated.ts"
+    "api:check": "npm run api:generate && git diff --exit-code -- src/api/generated.ts",
+    "docs:api": "node ../scripts/build-api-docs.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

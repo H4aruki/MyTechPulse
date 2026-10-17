@@ -98,6 +98,7 @@ npm run dev
 - APIのローカル設定: `server/.env`。値を読まず、必要なら利用者に確認する
 - フロントのAPI URL: `VITE_API_BASE_URL`。ローカルの既定は、リポジトリの `frontend/.env.development`（`http://localhost:8001`）。`.env.development` は `frontend/.env` より優先される（個人の上書きは `.env.development.local`）。ホスト名は、画面を開くアドレスと同じ `localhost` にする。`127.0.0.1` だと、ブラウザが別のサイトとして扱い、Cookieが付かず、ログイン後が401になる。形式は `frontend/.env.example` を参照する
 - Swagger UI は、ローカル（`SWAGGER_ENABLED=true`）では `http://localhost:8001/docs`。**本番では無効**（`APP_ENV=production` では有効にできない）
+- サーバーを起動せずにAPIのリクエスト・レスポンスのJSON例を見るには、`cd frontend && npm run docs:api` を実行する。`server/openapi/openapi.json` から、外部通信もスクリプトも使わない静的HTML（`api-docs/index.html`、読み取り専用、Gitには入れない）を作る。本番のSwagger無効化は変えない。生成元は `scripts/build-api-docs.mjs`（`--spec`、`--out` で入出力を変えられる）
 - APIの契約は `server/openapi/openapi.json`。変更したら `cd server && go run ./cmd/openapi` で生成し直す（CIが差分を検査する）。DB問い合わせは `server/db/queries/` から `go tool sqlc generate` で生成する
 
 ## 完了前の検証
