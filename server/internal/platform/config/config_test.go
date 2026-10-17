@@ -21,6 +21,14 @@ func validValues() map[string]string {
 	}
 }
 
+// productionValues は本番として有効な最小の設定(CLIENT_IP_HEADERは本番では必須)。
+func productionValues() map[string]string {
+	values := validValues()
+	values["APP_ENV"] = "production"
+	values["CLIENT_IP_HEADER"] = "CF-Connecting-IP"
+	return values
+}
+
 func TestLoadRejectsMissingDatabaseURL(t *testing.T) {
 	_, err := Load(mapLookup(map[string]string{"APP_ENV": "local"}))
 	if err == nil || !strings.Contains(err.Error(), "DATABASE_URL") {
@@ -29,8 +37,7 @@ func TestLoadRejectsMissingDatabaseURL(t *testing.T) {
 }
 
 func TestLoadRejectsSwaggerInProduction(t *testing.T) {
-	values := validValues()
-	values["APP_ENV"] = "production"
+	values := productionValues()
 	values["SWAGGER_ENABLED"] = "true"
 	_, err := Load(mapLookup(values))
 	if err == nil || !strings.Contains(err.Error(), "SWAGGER_ENABLED") {
@@ -58,8 +65,7 @@ func TestLoadDefaultsForLocal(t *testing.T) {
 }
 
 func TestLoadProductionDisablesSwaggerAndSecuresCookie(t *testing.T) {
-	values := validValues()
-	values["APP_ENV"] = "production"
+	values := productionValues()
 	cfg, err := Load(mapLookup(values))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -135,8 +141,7 @@ func TestLoadWebAuthnDefaults(t *testing.T) {
 		len(cfg.WebAuthnOrigins) != 1 || cfg.WebAuthnOrigins[0] != "http://localhost:5173" {
 		t.Fatalf("unexpected local defaults: %+v", cfg)
 	}
-	values := validValues()
-	values["APP_ENV"] = "production"
+	values := productionValues()
 	// docker-composeは未設定の項目を空文字で渡すため、空も未設定と同じ扱いにする
 	values["WEBAUTHN_RP_ID"] = ""
 	values["WEBAUTHN_ORIGINS"] = " "
@@ -150,8 +155,7 @@ func TestLoadWebAuthnDefaults(t *testing.T) {
 }
 
 func TestLoadWebAuthnAcceptsSubdomainOrigin(t *testing.T) {
-	values := validValues()
-	values["APP_ENV"] = "production"
+	values := productionValues()
 	values["WEBAUTHN_RP_ID"] = "Example.com"
 	values["WEBAUTHN_ORIGINS"] = "https://example.com, https://app.example.com"
 	cfg, err := Load(mapLookup(values))
@@ -182,7 +186,7 @@ func TestLoadRejectsBadWebAuthn(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			values := validValues()
+			values := productionValues()
 			values["APP_ENV"] = c.env
 			values["WEBAUTHN_RP_ID"] = c.id
 			values["WEBAUTHN_ORIGINS"] = c.orig
@@ -194,5 +198,65 @@ func TestLoadRejectsBadWebAuthn(t *testing.T) {
 				t.Fatalf("error must not echo input: %v", err)
 			}
 		})
+	}
+}
+
+func TestLoadProductionRequiresClientIPHeader(t *testing.T) {
+	cases := map[string]func(map[string]string){
+		"未設定":  func(v map[string]string) { delete(v, "CLIENT_IP_HEADER") },
+		"空":    func(v map[string]string) { v["CLIENT_IP_HEADER"] = "" },
+		"空白のみ": func(v map[string]string) { v["CLIENT_IP_HEADER"] = "  \t " },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			values := productionValues()
+			mutate(values)
+			_, err := Load(mapLookup(values))
+			if err == nil || !strings.Contains(err.Error(), "CLIENT_IP_HEADER") {
+				t.Fatalf("expected CLIENT_IP_HEADER error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadRejectsBadClientIPHeaderWithoutEchoingIt(t *testing.T) {
+	for _, env := range []string{"production", "local", "test"} {
+		for _, bad := range []string{"CF Connecting-IP-secret", "X-Real_IP-secret", "CF-Connecting-IP:-secret", "ＣＦ-secret", "X-Forwarded-For, secret"} {
+			values := productionValues()
+			values["APP_ENV"] = env
+			values["CLIENT_IP_HEADER"] = bad
+			_, err := Load(mapLookup(values))
+			if err == nil || !strings.Contains(err.Error(), "CLIENT_IP_HEADER") {
+				t.Fatalf("%s %q: expected CLIENT_IP_HEADER error, got %v", env, bad, err)
+			}
+			if strings.Contains(err.Error(), "secret") {
+				t.Fatalf("%s %q: error echoes input: %v", env, bad, err)
+			}
+		}
+	}
+}
+
+func TestLoadAcceptsClientIPHeader(t *testing.T) {
+	values := productionValues()
+	values["CLIENT_IP_HEADER"] = " CF-Connecting-IP "
+	cfg, err := Load(mapLookup(values))
+	if err != nil || cfg.ClientIPHeader != "CF-Connecting-IP" {
+		t.Fatalf("unexpected result: %q %v", cfg.ClientIPHeader, err)
+	}
+}
+
+func TestLoadAllowsEmptyClientIPHeaderOutsideProduction(t *testing.T) {
+	for _, env := range []string{"local", "test"} {
+		for _, set := range []bool{false, true} {
+			values := validValues()
+			values["APP_ENV"] = env
+			if set {
+				values["CLIENT_IP_HEADER"] = "  "
+			}
+			cfg, err := Load(mapLookup(values))
+			if err != nil || cfg.ClientIPHeader != "" {
+				t.Fatalf("%s set=%v: unexpected result: %q %v", env, set, cfg.ClientIPHeader, err)
+			}
+		}
 	}
 }
