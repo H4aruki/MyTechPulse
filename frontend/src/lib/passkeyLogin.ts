@@ -1,14 +1,13 @@
 // パスキーでのログイン（ボタンの明示ceremonyと、利用者名欄の conditional UI）の進行を1つにまとめる。
 //
-// 前提（サーバー）: チャレンジのCookieは1つだけで、begin のたびに上書きされ、finish で成否にかかわらず
-// 消費される。古い・期限切れ・再利用のチャレンジへの finish は401になり、失敗回数にも数えられる。
-// そのため「finish へ送るのは、Cookieが指しているはずの、生きている run の応答だけ」にする。
-//   - 直列化: begin の前に、前の run が片付くのを待つ（begin の応答の順が入れ替わらず、
-//     ブラウザが保留中の get を持ったまま次の get を呼ぶこともない）
+// 前提（サーバー）: チャレンジのトークンは、begin の応答本文（challengeToken）で受け取り、finish の要求本文で返す。
+// Cookieは使わないので、トークンは run ごとに独立し、別のタブの begin に上書きされない。トークンは5分で切れ、
+// finish で成否にかかわらず消費される。古い・期限切れ・再利用のトークンへの finish は401になり、失敗回数にも数えられる。
+// そのため「finish へ送るのは、生きている run の応答だけ」にする。
+//   - 直列化: begin の前に、前の run が片付くのを待つ（ブラウザが保留中の get を持ったまま次の get を呼ばない）
 //   - abort した run の結果は、後から届いても finish へ送らず捨てる
 //   - finish へ進む直前に、await を挟まずに確認して finishing へ進む
-// 複数タブ: Cookieは同じオリジンで共有されるため、別のタブの begin がこちらのチャレンジを上書きし、
-// こちらの finish が401（固定文言）になることがある。BroadcastChannel での連携は、複雑さに見合わないため作らない。
+// 複数タブ: 各タブが自分のトークンを持つので、別のタブの操作でこちらの finish が失敗することはない。
 
 import { ApiError, UnauthorizedError } from '@/api/client'
 import { beginPasskeyLogin, finishPasskeyLogin } from '@/api/endpoints'
@@ -252,10 +251,11 @@ export class PasskeyLoginController {
 
   private async execute(run: Run): Promise<void> {
     try {
-      // 待ちきれないときは、チャレンジのCookieが1つなので先へ進まない（finally の done で tail は進む）
+      // 待ちきれないときは、前の run の get が保留中かもしれないので先へ進まない（finally の done で tail は進む）
       await waitPrevious(run.prev)
       if (!this.isCurrent(run)) return
-      const { publicKey } = await beginPasskeyLogin()
+      // challengeToken はこの run の finish にだけ使う（保存しない）
+      const { publicKey, challengeToken } = await beginPasskeyLogin()
       if (!this.isCurrent(run)) return
       run.begunAt = Date.now()
       run.stage = 'get'
@@ -268,7 +268,7 @@ export class PasskeyLoginController {
           ? { mediation: 'conditional', signal: run.controller.signal }
           : { signal: run.controller.signal },
       )
-      await this.finish(run, credential)
+      await this.finish(run, challengeToken, credential)
     } catch (error) {
       this.fail(run, error)
     } finally {
@@ -276,12 +276,12 @@ export class PasskeyLoginController {
     }
   }
 
-  private async finish(run: Run, credential: Record<string, unknown>): Promise<void> {
+  private async finish(run: Run, challengeToken: string, credential: Record<string, unknown>): Promise<void> {
     // ここから finishing へ進むまでは await を挟まない（ボタンやパスワードとの競合を同期で決める）。
     // abort 済み・別の run に置き換わった結果は、利用者に見せず捨てる
     if (!this.isCurrent(run) || this.phase !== run.kind) return
     if (Date.now() - run.begunAt >= CHALLENGE_MAX_AGE_MS) {
-      // 期限切れのチャレンジを送ると401になり失敗に数えられる。送らず、利用者には固定文言で知らせる
+      // 期限切れのトークンを送ると401になり失敗に数えられる。送らず、利用者には固定文言で知らせる
       this.settle(run)
       this.handlers.onError(PASSKEY_LOGIN_FAILED)
       this.requestConditional()
@@ -290,7 +290,7 @@ export class PasskeyLoginController {
     run.stage = 'finish'
     if (run.refreshTimer) clearTimeout(run.refreshTimer)
     this.setPhase('finishing')
-    const data = await finishPasskeyLogin({ credential })
+    const data = await finishPasskeyLogin({ challengeToken, credential })
     if (this.current !== run) return
     this.handlers.onLoggedIn(data)
   }

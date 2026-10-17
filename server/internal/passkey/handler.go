@@ -16,8 +16,6 @@ import (
 const (
 	cookieAuthScheme = "cookieAuth"
 	noStore          = "no-store"
-	// challengeCookieBase は登録の途中経過(チャレンジ)を結び付けるCookieの名前。本番は __Host- を付ける。
-	challengeCookieBase = "mtp_passkey_challenge"
 )
 
 // Handler は /api/v1/auth/passkeys/* と /api/v1/auth/passkeys/login/* の経路。
@@ -27,7 +25,7 @@ type Handler struct {
 	Auth    auth.Service
 	// CookieName はセッションCookieの名前。
 	CookieName string
-	// CookieSecure は本番でtrue。チャレンジCookieの名前と属性が変わる。
+	// CookieSecure は本番でtrue。セッションCookieの名前と属性が変わる。
 	CookieSecure bool
 	// ClientIPHeader は接続元IPを読むヘッダー名。パスワードログインと同じ値を渡す。
 	ClientIPHeader string
@@ -48,23 +46,27 @@ type PasskeyListResponse struct {
 
 // RegisterBeginResponse は端末へ渡す登録の設定。
 type RegisterBeginResponse struct {
-	PublicKey map[string]any `json:"publicKey" doc:"navigator.credentials.create() の publicKey に渡す値(WebAuthnのJSON形式。binary項目はbase64url文字列)"`
+	ChallengeToken string         `json:"challengeToken" doc:"この手続きを結び付ける使い捨てのトークン。5分で失効する。完了の呼び出しでそのまま返す。保存や記録をしない"`
+	PublicKey      map[string]any `json:"publicKey" doc:"navigator.credentials.create() の publicKey に渡す値(WebAuthnのJSON形式。binary項目はbase64url文字列)"`
 }
 
 // RegisterFinishRequest は登録の完了の入力。
 type RegisterFinishRequest struct {
-	Name       string         `json:"name,omitempty" maxLength:"64" example:"iPhone" doc:"パスキーの名前。省略すると「パスキー」。前後の空白を除いて1〜64文字"`
-	Credential map[string]any `json:"credential" doc:"navigator.credentials.create() の結果(PublicKeyCredentialのJSON表現。binary項目はbase64url文字列)"`
+	ChallengeToken string         `json:"challengeToken" minLength:"1" maxLength:"128" doc:"開始で受け取ったトークン"`
+	Name           string         `json:"name,omitempty" maxLength:"64" example:"iPhone" doc:"パスキーの名前。省略すると「パスキー」。前後の空白を除いて1〜64文字"`
+	Credential     map[string]any `json:"credential" doc:"navigator.credentials.create() の結果(PublicKeyCredentialのJSON表現。binary項目はbase64url文字列)"`
 }
 
 // PasskeyLoginBeginResponse は端末へ渡すログインの設定。
 type PasskeyLoginBeginResponse struct {
-	PublicKey map[string]any `json:"publicKey" doc:"navigator.credentials.get() の publicKey に渡す値(WebAuthnのJSON形式。binary項目はbase64url文字列)。利用者名なしで選ばせるため allowCredentials は空"`
+	ChallengeToken string         `json:"challengeToken" doc:"この手続きを結び付ける使い捨てのトークン。5分で失効する。完了の呼び出しでそのまま返す。保存や記録をしない"`
+	PublicKey      map[string]any `json:"publicKey" doc:"navigator.credentials.get() の publicKey に渡す値(WebAuthnのJSON形式。binary項目はbase64url文字列)。利用者名なしで選ばせるため allowCredentials は空"`
 }
 
 // PasskeyLoginFinishRequest はログインの完了の入力。
 type PasskeyLoginFinishRequest struct {
-	Credential map[string]any `json:"credential" doc:"navigator.credentials.get() の結果(PublicKeyCredentialのJSON表現。binary項目はbase64url文字列)"`
+	ChallengeToken string         `json:"challengeToken" minLength:"1" maxLength:"128" doc:"開始で受け取ったトークン"`
+	Credential     map[string]any `json:"credential" doc:"navigator.credentials.get() の結果(PublicKeyCredentialのJSON表現。binary項目はbase64url文字列)"`
 }
 
 // RenameRequest は名前変更の入力。
@@ -73,24 +75,21 @@ type RenameRequest struct {
 }
 
 type beginOutput struct {
-	CacheControl string      `header:"Cache-Control"`
-	SetCookie    http.Cookie `header:"Set-Cookie" doc:"登録の途中経過を結び付ける短命のCookie(HttpOnly、5分)"`
+	CacheControl string `header:"Cache-Control"`
 	Body         RegisterBeginResponse
 }
 type finishInput struct{ Body RegisterFinishRequest }
 type finishOutput struct {
-	SetCookie http.Cookie `header:"Set-Cookie" doc:"チャレンジCookieを破棄する指示"`
-	Body      PasskeyItem
+	Body PasskeyItem
 }
 type loginBeginOutput struct {
-	CacheControl string      `header:"Cache-Control"`
-	SetCookie    http.Cookie `header:"Set-Cookie" doc:"ログインの途中経過を結び付ける短命のCookie(HttpOnly、5分)"`
+	CacheControl string `header:"Cache-Control"`
 	Body         PasskeyLoginBeginResponse
 }
 type loginFinishInput struct{ Body PasskeyLoginFinishRequest }
 type loginFinishOutput struct {
 	CacheControl string        `header:"Cache-Control"`
-	SetCookie    []http.Cookie `header:"Set-Cookie" doc:"セッションCookie(HttpOnly、SameSite=Lax)と、チャレンジCookieを破棄する指示"`
+	SetCookie    []http.Cookie `header:"Set-Cookie" doc:"セッションCookie(HttpOnly、SameSite=Lax)"`
 	Body         auth.AuthResponse
 }
 type listOutput struct {
@@ -106,7 +105,6 @@ type deleteInput struct {
 }
 
 type tokenKey struct{}
-type challengeKey struct{}
 
 // Register はパスキーAPIをHumaへ登録する。
 func (h Handler) Register(api huma.API) {
@@ -123,13 +121,13 @@ func (h Handler) Register(api huma.API) {
 
 	const csrfNote = "ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。"
 	security := []map[string][]string{{cookieAuthScheme: {}}}
-	mw := huma.Middlewares{h.readCookies}
+	mw := huma.Middlewares{h.readSession}
 	tags := []string{"auth"}
 
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-passkey-register-begin", Method: http.MethodPost, Path: "/api/v1/auth/passkeys/register/begin",
 		Summary:     "パスキー登録の開始",
-		Description: "端末へ渡す登録の設定を返し、チャレンジを結び付ける短命のHttpOnly Cookieを発行する。チャレンジは5分で失効し、1回しか使えない。登録済みのパスキーは `excludeCredentials` に入る。端末の本人確認(userVerification)と、利用者名なしで選べるパスキー(discoverable credential)を必須にする。上限は1人10件。" + csrfNote,
+		Description: "端末へ渡す登録の設定と、手続きを結び付ける使い捨ての `challengeToken` を返す。トークンは5分で失効し、1回しか使えない。Cookieは使わないので、複数のタブで同時に手続きできる。登録済みのパスキーは `excludeCredentials` に入る。端末の本人確認(userVerification)と、利用者名なしで選べるパスキー(discoverable credential)を必須にする。上限は1人10件。" + csrfNote,
 		Tags:        tags, Security: security, Middlewares: mw, DefaultStatus: http.StatusOK,
 		Errors: []int{http.StatusUnauthorized, http.StatusConflict},
 	}, h.registerBegin)
@@ -137,19 +135,19 @@ func (h Handler) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-passkey-register-finish", Method: http.MethodPost, Path: "/api/v1/auth/passkeys/register/finish",
 		Summary:     "パスキー登録の完了",
-		Description: "端末の応答を検証して保存する。チャレンジは検証の成否にかかわらず、この呼び出しで使い切る。パスワードの再入力は求めない。" + csrfNote,
+		Description: "開始で受け取った `challengeToken` と端末の応答を送る。検証して保存する。トークンは検証の成否にかかわらず、この呼び出しで使い切る。他の利用者が開始したトークンは使えない。パスワードの再入力は求めない。" + csrfNote,
 		Tags:        tags, Security: security, Middlewares: mw, DefaultStatus: http.StatusCreated,
 		Errors: []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusConflict, http.StatusUnprocessableEntity},
 	}, h.registerFinish)
 
 	// ログインは未ログインの利用者が使うので、セキュリティ要件は付けない
-	loginMW := huma.Middlewares{h.readCookies, auth.ClientIPMiddleware(h.ClientIPHeader)}
+	loginMW := huma.Middlewares{h.readSession, auth.ClientIPMiddleware(h.ClientIPHeader)}
 	const loginNote = "接続元IPごと(15分に20回失敗で、窓が終わるまで)に失敗を数え、超えると429と `Retry-After`(秒)を返す。数えるのはパスワードのログインと同じ窓。"
 
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-passkey-login-begin", Method: http.MethodPost, Path: "/api/v1/auth/passkeys/login/begin",
 		Summary:     "パスキーでのログインの開始",
-		Description: "利用者名なしでパスキーを選ばせる設定を返し、チャレンジを結び付ける短命のHttpOnly Cookieを発行する。チャレンジは5分で失効し、1回しか使えない。開始は失敗として数えないが、締め出し中のIPには429を返す。開始そのものもIPごとに15分で60回まで数え(失敗とは別の枠。成功・失敗で戻さない)、超えると429と `Retry-After`(秒)を返す。" + loginNote + csrfNote,
+		Description: "利用者名なしでパスキーを選ばせる設定と、手続きを結び付ける使い捨ての `challengeToken` を返す。トークンは5分で失効し、1回しか使えない。Cookieは使わないので、複数のタブで同時にログインの手続きができる。開始は失敗として数えないが、締め出し中のIPには429を返す。開始そのものもIPごとに15分で60回まで数え(失敗とは別の枠。成功・失敗で戻さない)、超えると429と `Retry-After`(秒)を返す。" + loginNote + csrfNote,
 		Tags:        tags, Middlewares: loginMW, DefaultStatus: http.StatusOK,
 		Errors: []int{http.StatusTooManyRequests},
 	}, h.loginBegin)
@@ -157,7 +155,7 @@ func (h Handler) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-passkey-login-finish", Method: http.MethodPost, Path: "/api/v1/auth/passkeys/login/finish",
 		Summary:     "パスキーでのログインの完了",
-		Description: "端末の応答を検証し、成功すればパスワードのログインと同じ属性のセッションCookieを発行する。チャレンジは検証の成否にかかわらず、この呼び出しで使い切る。チャレンジの不正・期限切れ・再利用、未知のパスキー、署名やオリジンの不一致、認証回数の巻き戻りなど、失敗の原因は区別できない同じ401を返す。" + loginNote + csrfNote,
+		Description: "開始で受け取った `challengeToken` と端末の応答を検証し、成功すればパスワードのログインと同じ属性のセッションCookieを発行する。トークンは検証の成否にかかわらず、この呼び出しで使い切る。トークンの不正・期限切れ・再利用、未知のパスキー、署名やオリジンの不一致、認証回数の巻き戻りなど、失敗の原因は区別できない同じ401を返す。" + loginNote + csrfNote,
 		Tags:        tags, Middlewares: loginMW, DefaultStatus: http.StatusOK,
 		Errors: []int{http.StatusUnauthorized, http.StatusTooManyRequests},
 	}, h.loginFinish)
@@ -187,36 +185,13 @@ func (h Handler) Register(api huma.API) {
 	}, h.delete)
 }
 
-func (h Handler) challengeCookieName() string {
-	if h.CookieSecure {
-		return "__Host-" + challengeCookieBase
-	}
-	return challengeCookieBase
-}
-
-// readCookies はセッションとチャレンジのCookieの値を処理の文脈へ渡す。値はログに出さない。
-func (h Handler) readCookies(ctx huma.Context, next func(huma.Context)) {
-	session, challenge := "", ""
+// readSession はセッションCookieの値を処理の文脈へ渡す。値はログに出さない。
+func (h Handler) readSession(ctx huma.Context, next func(huma.Context)) {
+	session := ""
 	if c, err := huma.ReadCookie(ctx, h.CookieName); err == nil {
 		session = c.Value
 	}
-	if c, err := huma.ReadCookie(ctx, h.challengeCookieName()); err == nil {
-		challenge = c.Value
-	}
-	next(huma.WithValue(huma.WithValue(ctx, tokenKey{}, session), challengeKey{}, challenge))
-}
-
-func (h Handler) challengeCookie(value string, maxAge int, expires time.Time) http.Cookie {
-	return http.Cookie{
-		Name:     h.challengeCookieName(),
-		Value:    value,
-		Path:     "/",
-		Expires:  expires,
-		MaxAge:   maxAge,
-		HttpOnly: true,
-		Secure:   h.CookieSecure,
-		SameSite: http.SameSiteStrictMode,
-	}
+	next(huma.WithValue(ctx, tokenKey{}, session))
 }
 
 func (h Handler) user(ctx context.Context) (auth.User, error) {
@@ -252,12 +227,8 @@ func (h Handler) registerBegin(ctx context.Context, _ *struct{}) (*beginOutput, 
 	if err := json.Unmarshal(raw, &body); err != nil || body.PublicKey == nil {
 		return nil, problem(errors.New("passkey: 登録の設定を作れません"))
 	}
-	ttl := int(ChallengeTTL.Seconds())
-	return &beginOutput{
-		CacheControl: noStore,
-		SetCookie:    h.challengeCookie(token, ttl, time.Now().Add(ChallengeTTL)),
-		Body:         body,
-	}, nil
+	body.ChallengeToken = token
+	return &beginOutput{CacheControl: noStore, Body: body}, nil
 }
 
 func (h Handler) registerFinish(ctx context.Context, in *finishInput) (*finishOutput, error) {
@@ -265,16 +236,15 @@ func (h Handler) registerFinish(ctx context.Context, in *finishInput) (*finishOu
 	if err != nil {
 		return nil, err
 	}
-	token, _ := ctx.Value(challengeKey{}).(string)
 	raw, err := json.Marshal(in.Body.Credential)
 	if err != nil {
 		return nil, problem(ErrVerificationFailed)
 	}
-	saved, err := h.Service.FinishRegistration(ctx, user.ID, user.Username, token, in.Body.Name, raw)
+	saved, err := h.Service.FinishRegistration(ctx, user.ID, user.Username, in.Body.ChallengeToken, in.Body.Name, raw)
 	if err != nil {
 		return nil, problem(err)
 	}
-	return &finishOutput{SetCookie: h.challengeCookie("", -1, time.Unix(0, 0)), Body: toItem(saved)}, nil
+	return &finishOutput{Body: toItem(saved)}, nil
 }
 
 func (h Handler) loginBegin(ctx context.Context, _ *struct{}) (*loginBeginOutput, error) {
@@ -290,22 +260,17 @@ func (h Handler) loginBegin(ctx context.Context, _ *struct{}) (*loginBeginOutput
 	if err := json.Unmarshal(raw, &body); err != nil || body.PublicKey == nil {
 		return nil, loginProblem(errors.New("passkey: ログインの設定を作れません"))
 	}
-	ttl := int(ChallengeTTL.Seconds())
-	return &loginBeginOutput{
-		CacheControl: noStore,
-		SetCookie:    h.challengeCookie(token, ttl, time.Now().Add(ChallengeTTL)),
-		Body:         body,
-	}, nil
+	body.ChallengeToken = token
+	return &loginBeginOutput{CacheControl: noStore, Body: body}, nil
 }
 
 func (h Handler) loginFinish(ctx context.Context, in *loginFinishInput) (*loginFinishOutput, error) {
 	ip := auth.ClientIPFrom(ctx)
-	token, _ := ctx.Value(challengeKey{}).(string)
 	raw, err := json.Marshal(in.Body.Credential)
 	if err != nil {
 		return nil, loginProblem(h.Service.rejectLogin(ip, "parse"))
 	}
-	userID, err := h.Service.FinishLogin(ctx, ip, token, raw)
+	userID, err := h.Service.FinishLogin(ctx, ip, in.Body.ChallengeToken, raw)
 	if err != nil {
 		return nil, loginProblem(err)
 	}
@@ -319,11 +284,8 @@ func (h Handler) loginFinish(ctx context.Context, in *loginFinishInput) (*loginF
 	}
 	return &loginFinishOutput{
 		CacheControl: noStore,
-		SetCookie: []http.Cookie{
-			auth.SessionCookie(h.CookieName, h.CookieSecure, h.Auth.SessionTTL, session, expires),
-			h.challengeCookie("", -1, time.Unix(0, 0)),
-		},
-		Body: auth.AuthResponse{User: user},
+		SetCookie:    []http.Cookie{auth.SessionCookie(h.CookieName, h.CookieSecure, h.Auth.SessionTTL, session, expires)},
+		Body:         auth.AuthResponse{User: user},
 	}, nil
 }
 

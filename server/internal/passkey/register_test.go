@@ -248,6 +248,7 @@ type env struct {
 	h        http.Handler
 	clock    *clock
 	passkeys *memPasskeys
+	ch       *memChallenges
 	logs     *bytes.Buffer
 }
 
@@ -261,7 +262,8 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	pk := newMemPasskeys()
-	svc := &passkey.Service{WebAuthn: w, Passkeys: pk, Challenges: &memChallenges{rows: map[[32]byte]*memChallenge{}}, Clock: clk, Logger: logger}
+	ch := &memChallenges{rows: map[[32]byte]*memChallenge{}}
+	svc := &passkey.Service{WebAuthn: w, Passkeys: pk, Challenges: ch, Clock: clk, Logger: logger}
 	sessions := memSessions{rows: map[[32]byte]auth.Session{}}
 	for name, id := range map[string]int64{"tok-alice": 1, "tok-bob": 2} {
 		sessions.rows[auth.HashToken(name)] = auth.Session{
@@ -272,15 +274,23 @@ func newEnv(t *testing.T) *env {
 	authSvc := &auth.Service{Sessions: sessions, Clock: clk}
 	h, _ := app.New(config.Config{Environment: "local", CookieName: "mtp_session", CORSOrigins: []string{testOrigin}},
 		app.Dependencies{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Auth: authSvc, Passkey: svc})
-	return &env{t: t, h: h, clock: clk, passkeys: pk, logs: logs}
+	return &env{t: t, h: h, clock: clk, passkeys: pk, ch: ch, logs: logs}
 }
 
 type resp struct {
 	*httptest.ResponseRecorder
 }
 
+// do は要求を1つ送る。challenge が空でなければ、本文(map)の challengeToken に入れる。Cookieは送らない。
 func (e *env) do(method, path, session, challenge string, body any, csrf bool) resp {
 	e.t.Helper()
+	if m, ok := body.(map[string]any); ok && challenge != "" {
+		withToken := map[string]any{"challengeToken": challenge}
+		for k, v := range m {
+			withToken[k] = v
+		}
+		body = withToken
+	}
 	var rd io.Reader
 	if body != nil {
 		b, _ := json.Marshal(body)
@@ -299,9 +309,6 @@ func (e *env) do(method, path, session, challenge string, body any, csrf bool) r
 	if session != "" {
 		req.AddCookie(&http.Cookie{Name: "mtp_session", Value: session})
 	}
-	if challenge != "" {
-		req.AddCookie(&http.Cookie{Name: "mtp_passkey_challenge", Value: challenge})
-	}
 	rec := httptest.NewRecorder()
 	e.h.ServeHTTP(rec, req)
 	return resp{rec}
@@ -318,28 +325,27 @@ func (r resp) code() string {
 	return c
 }
 
-func (r resp) challengeCookie() *http.Cookie {
-	for _, c := range r.Result().Cookies() {
-		if c.Name == "mtp_passkey_challenge" {
-			return c
-		}
+// noCookies は、応答がCookieを一切設定していないことを確かめる(チャレンジはCookieで運ばない)。
+func (r resp) noCookies(t *testing.T, what string) {
+	t.Helper()
+	if got := r.Header().Values("Set-Cookie"); len(got) != 0 {
+		t.Errorf("%s: Set-Cookie を付けてはいけない: %v", what, got)
 	}
-	return nil
 }
 
-// begin は登録を開始し、チャレンジCookieの値と端末へ渡す設定を返す。
+// begin は登録を開始し、本文のチャレンジトークンと端末へ渡す設定を返す。
 func (e *env) begin(session string) (string, map[string]any, resp) {
 	e.t.Helper()
 	r := e.do(http.MethodPost, base+"/register/begin", session, "", nil, true)
 	if r.Code != http.StatusOK {
 		return "", nil, r
 	}
-	c := r.challengeCookie()
-	if c == nil || c.Value == "" {
-		e.t.Fatal("チャレンジCookieが無い")
+	token, _ := r.json()["challengeToken"].(string)
+	if token == "" {
+		e.t.Fatal("本文にチャレンジトークンが無い")
 	}
 	pub, _ := r.json()["publicKey"].(map[string]any)
-	return c.Value, pub, r
+	return token, pub, r
 }
 
 // ---- ソフトウェア認証器 ----
@@ -434,10 +440,7 @@ func TestRegisterFlow(t *testing.T) {
 	if r.Header().Get("Cache-Control") != "no-store" {
 		t.Error("beginの応答はキャッシュさせない")
 	}
-	c := r.challengeCookie()
-	if !c.HttpOnly || c.MaxAge != 300 || c.Path != "/" || c.SameSite != http.SameSiteStrictMode {
-		t.Errorf("チャレンジCookieの属性が想定と違う: %+v", c)
-	}
+	r.noCookies(t, "begin")
 	if pub["rp"].(map[string]any)["id"] != testRPID {
 		t.Errorf("rp = %v", pub["rp"])
 	}
@@ -454,7 +457,7 @@ func TestRegisterFlow(t *testing.T) {
 		t.Errorf("user.id = %x err=%v", rawID, err)
 	}
 	if string(token) == pub["challenge"] {
-		t.Error("Cookieの値とWebAuthnのチャレンジは別物")
+		t.Error("トークンとWebAuthnのチャレンジは別物")
 	}
 
 	credID := newCredID()
@@ -462,9 +465,7 @@ func TestRegisterFlow(t *testing.T) {
 	if fr.Code != http.StatusCreated {
 		t.Fatalf("finish = %d %s", fr.Code, fr.Body)
 	}
-	if got := fr.challengeCookie(); got == nil || got.MaxAge >= 0 {
-		t.Error("完了時にチャレンジCookieを破棄する")
-	}
+	fr.noCookies(t, "finish")
 	body := fr.json()
 	if body["name"] != "iPhone" {
 		t.Errorf("body = %v", body)
@@ -522,7 +523,7 @@ func TestRequiresLoginAndCSRF(t *testing.T) {
 			body = map[string]any{"name": "x"}
 		}
 		if c.path == base+"/register/finish" {
-			body = map[string]any{"credential": map[string]any{}}
+			body = map[string]any{"challengeToken": "t", "credential": map[string]any{}}
 		}
 		if r := e.do(c.method, c.path, "", "", body, true); r.Code != http.StatusUnauthorized || r.code() != "unauthenticated" {
 			t.Errorf("%s %s 未ログイン = %d %s", c.method, c.path, r.Code, r.Body)
@@ -572,11 +573,100 @@ func TestChallengeMissingOrUnknown(t *testing.T) {
 	e := newEnv(t)
 	_, pub, _ := e.begin("tok-alice")
 	cred := attest(t, pub, newCredID(), testOrigin)
-	for name, token := range map[string]string{"cookie無し": "", "未知のトークン": "unknown"} {
+	// 形は正しいが、保存されていないトークンは、チャレンジの不正として400
+	for name, token := range map[string]string{
+		"未知のトークン":   "unknown",
+		"形式の違うトークン": "!!not base64url!!",
+		"空白だけ":      "   ",
+	} {
 		r := e.finish("tok-alice", token, "", cred)
 		if r.Code != http.StatusBadRequest || r.code() != "passkey_challenge_invalid" {
 			t.Errorf("%s = %d %s", name, r.Code, r.Body)
 		}
+	}
+	// 欠落・空・長すぎるトークンは、入力の形の不正として、手続きに入る前に422で拒否する
+	finishPath := base + "/register/finish"
+	cb, _ := json.Marshal(cred)
+	for name, body := range map[string]string{
+		"欠落":     `{"credential":` + string(cb) + `}`,
+		"空":      `{"challengeToken":"","credential":` + string(cb) + `}`,
+		"長すぎる":   `{"challengeToken":"` + strings.Repeat("a", 129) + `","credential":` + string(cb) + `}`,
+		"文字列でない": `{"challengeToken":5,"credential":` + string(cb) + `}`,
+	} {
+		r := e.rawPost(finishPath, body, "tok-alice")
+		if r.Code != http.StatusUnprocessableEntity || r.code() != "validation_failed" {
+			t.Errorf("トークン%s = %d %s", name, r.Code, r.Body)
+		}
+	}
+}
+
+// rawPost は本文をそのまま送る(Cookieはセッションだけ)。
+func (e *env) rawPost(path, body, session string) resp {
+	e.t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", testOrigin)
+	req.Header.Set("X-MTP-CSRF", "1")
+	req.AddCookie(&http.Cookie{Name: "mtp_session", Value: session})
+	rec := httptest.NewRecorder()
+	e.h.ServeHTTP(rec, req)
+	return resp{rec}
+}
+
+// 同じ利用者が2つのタブで同時に登録を始めても、互いのトークンは影響しない。
+func TestTwoRegisterCeremoniesAreIndependent(t *testing.T) {
+	e := newEnv(t)
+	tokenA, pubA, _ := e.begin("tok-alice")
+	tokenB, pubB, _ := e.begin("tok-alice")
+	if tokenA == tokenB {
+		t.Fatal("ceremonyごとに別のトークンを返すこと")
+	}
+	// B → A の順に完了する。先に開いたAも成功する
+	if r := e.finish("tok-alice", tokenB, "b", attest(t, pubB, newCredID(), testOrigin)); r.Code != http.StatusCreated {
+		t.Fatalf("B = %d %s", r.Code, r.Body)
+	}
+	if r := e.finish("tok-alice", tokenA, "a", attest(t, pubA, newCredID(), testOrigin)); r.Code != http.StatusCreated {
+		t.Fatalf("A = %d %s", r.Code, r.Body)
+	}
+	if e.passkeys.count(1) != 2 {
+		t.Errorf("2件登録されるはず: %d", e.passkeys.count(1))
+	}
+}
+
+// 別のceremonyのトークンを使うと、そのトークンだけが消費され、他方は残る。
+func TestRegisterTokenOfOneCeremonyDoesNotConsumeTheOther(t *testing.T) {
+	e := newEnv(t)
+	tokenA, pubA, _ := e.begin("tok-alice")
+	tokenB, pubB, _ := e.begin("tok-alice")
+	// Aのトークンを使うが、Bの設定に対する応答を送る(チャレンジ不一致で失敗し、Aは消費される)
+	if r := e.finish("tok-alice", tokenA, "", attest(t, pubB, newCredID(), testOrigin)); r.Code != http.StatusBadRequest || r.code() != "passkey_verification_failed" {
+		t.Fatalf("取り違え = %d %s", r.Code, r.Body)
+	}
+	if r := e.finish("tok-alice", tokenA, "", attest(t, pubA, newCredID(), testOrigin)); r.Code != http.StatusBadRequest || r.code() != "passkey_challenge_invalid" {
+		t.Fatalf("Aは使い切り = %d %s", r.Code, r.Body)
+	}
+	if r := e.finish("tok-alice", tokenB, "", attest(t, pubB, newCredID(), testOrigin)); r.Code != http.StatusCreated {
+		t.Fatalf("Bは残っている = %d %s", r.Code, r.Body)
+	}
+}
+
+// ログイン用のトークンでは登録できない。
+func TestLoginTokenCannotFinishRegistration(t *testing.T) {
+	e := newEnv(t)
+	tokenLogin, id, err := passkey.NewChallengeToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.ch.Create(context.Background(), id, passkey.PurposeLogin, nil, []byte("{}"), e.clock.now.Add(passkey.ChallengeTTL)); err != nil {
+		t.Fatal(err)
+	}
+	_, pub, _ := e.begin("tok-alice")
+	r := e.finish("tok-alice", tokenLogin, "", attest(t, pub, newCredID(), testOrigin))
+	if r.Code != http.StatusBadRequest || r.code() != "passkey_challenge_invalid" {
+		t.Fatalf("login用トークンでregister = %d %s", r.Code, r.Body)
+	}
+	if e.passkeys.count(1) != 0 {
+		t.Error("登録されてはいけない")
 	}
 }
 
@@ -743,10 +833,10 @@ func TestSecurityLogsHaveNoSecrets(t *testing.T) {
 	}
 	resp := cred["response"].(map[string]any)
 	for name, secret := range map[string]string{
-		"credential_id": b64.EncodeToString(credID),
-		"challenge":     pub["challenge"].(string),
-		"cookie":        token,
-		"attestation":   resp["attestationObject"].(string),
+		"credential_id":  b64.EncodeToString(credID),
+		"challenge":      pub["challenge"].(string),
+		"challengeToken": token,
+		"attestation":    resp["attestationObject"].(string),
 	} {
 		if strings.Contains(out, secret) {
 			t.Errorf("ログに %s が含まれる", name)
@@ -754,7 +844,7 @@ func TestSecurityLogsHaveNoSecrets(t *testing.T) {
 	}
 }
 
-func TestChallengeCookieIsHostPrefixedInProduction(t *testing.T) {
+func TestRegisterBeginSetsNoCookieInProduction(t *testing.T) {
 	w, _ := passkey.NewWebAuthn(passkey.Config{RPID: testRPID, RPDisplayName: "MyTechPulse", Origins: []string{testOrigin}})
 	clk := &clock{now: time.Now()}
 	sessions := memSessions{rows: map[[32]byte]auth.Session{
@@ -776,11 +866,13 @@ func TestChallengeCookieIsHostPrefixedInProduction(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("begin = %d %s", rec.Code, rec.Body)
 	}
-	var got *http.Cookie
-	for _, c := range rec.Result().Cookies() {
-		got = c
+	// チャレンジはCookieで運ばない。本番でも Set-Cookie は一切付かず、トークンは本文にある
+	if got := rec.Header().Values("Set-Cookie"); len(got) != 0 {
+		t.Fatalf("Set-Cookie = %v", got)
 	}
-	if got == nil || got.Name != "__Host-mtp_passkey_challenge" || !got.Secure || !got.HttpOnly || got.Path != "/" || got.Domain != "" {
-		t.Fatalf("cookie = %+v", got)
+	var body map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	if token, _ := body["challengeToken"].(string); token == "" {
+		t.Fatalf("本文にチャレンジトークンが無い: %s", rec.Body)
 	}
 }

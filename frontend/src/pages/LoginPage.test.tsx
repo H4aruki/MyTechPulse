@@ -296,7 +296,7 @@ describe('LoginPage', () => {
       window.sessionStorage.setItem('mtp.feedback.openedArticles', '["https://a"]')
       const get = vi.fn().mockResolvedValue(fakeAssertion())
       support(get)
-      vi.mocked(beginPasskeyLogin).mockResolvedValue({ publicKey: assertionOptions })
+      vi.mocked(beginPasskeyLogin).mockResolvedValue({ challengeToken: 'token-1', publicKey: assertionOptions })
       vi.mocked(finishPasskeyLogin).mockResolvedValue({ user })
       const client = await renderReady()
 
@@ -311,7 +311,9 @@ describe('LoginPage', () => {
       expect(options.allowCredentials).toEqual([])
       expect(options.userVerification).toBe('required')
       expect(get.mock.calls[0][0].mediation).toBeUndefined()
+      // begin の応答のトークンを、そのまま finish へ渡す
       expect(vi.mocked(finishPasskeyLogin).mock.calls[0][0]).toEqual({
+        challengeToken: 'token-1',
         credential: {
           id: 'Y3JlZA',
           rawId: 'AQI',
@@ -329,7 +331,7 @@ describe('LoginPage', () => {
 
     test('401は理由を区別しない固定の文言を出し、パスワードの入力は使える', async () => {
       support(vi.fn().mockResolvedValue(fakeAssertion()))
-      vi.mocked(beginPasskeyLogin).mockResolvedValue({ publicKey: assertionOptions })
+      vi.mocked(beginPasskeyLogin).mockResolvedValue({ challengeToken: 'token-1', publicKey: assertionOptions })
       vi.mocked(finishPasskeyLogin).mockRejectedValue(new UnauthorizedError())
       await renderReady()
 
@@ -346,7 +348,7 @@ describe('LoginPage', () => {
 
     test('エラーの後でも、パスワードでログインできる', async () => {
       support(vi.fn().mockResolvedValue(fakeAssertion()))
-      vi.mocked(beginPasskeyLogin).mockResolvedValue({ publicKey: assertionOptions })
+      vi.mocked(beginPasskeyLogin).mockResolvedValue({ challengeToken: 'token-1', publicKey: assertionOptions })
       vi.mocked(finishPasskeyLogin).mockRejectedValue(new UnauthorizedError())
       vi.mocked(login).mockResolvedValue({ user })
       await renderReady()
@@ -361,7 +363,7 @@ describe('LoginPage', () => {
 
     test('429は失敗が続いたため待つよう案内する', async () => {
       support(vi.fn().mockResolvedValue(fakeAssertion()))
-      vi.mocked(beginPasskeyLogin).mockResolvedValue({ publicKey: assertionOptions })
+      vi.mocked(beginPasskeyLogin).mockResolvedValue({ challengeToken: 'token-1', publicKey: assertionOptions })
       vi.mocked(finishPasskeyLogin).mockRejectedValue(
         new ApiError({ status: 429, code: 'too_many_requests' }),
       )
@@ -389,7 +391,7 @@ describe('LoginPage', () => {
 
     test('端末側の想定外の失敗は、内部の文言を出さず固定の文言にする', async () => {
       support(vi.fn().mockRejectedValue(new DOMException('rp id mismatch', 'SecurityError')))
-      vi.mocked(beginPasskeyLogin).mockResolvedValue({ publicKey: assertionOptions })
+      vi.mocked(beginPasskeyLogin).mockResolvedValue({ challengeToken: 'token-1', publicKey: assertionOptions })
       await renderReady()
 
       fireEvent.click(screen.getByRole('button', { name: 'パスキーでログイン' }))
@@ -403,7 +405,7 @@ describe('LoginPage', () => {
     test('端末の確認を取り消しても、エラーを出さず、そのまま操作を続けられる', async () => {
       const get = vi.fn().mockRejectedValue(new DOMException('x', 'NotAllowedError'))
       support(get)
-      vi.mocked(beginPasskeyLogin).mockResolvedValue({ publicKey: assertionOptions })
+      vi.mocked(beginPasskeyLogin).mockResolvedValue({ challengeToken: 'token-1', publicKey: assertionOptions })
       await renderReady()
 
       fireEvent.click(screen.getByRole('button', { name: 'パスキーでログイン' }))
@@ -423,7 +425,7 @@ describe('LoginPage', () => {
         .mockResolvedValueOnce(fakeAssertion())
         .mockRejectedValueOnce(new DOMException('x', 'NotAllowedError'))
       support(get)
-      vi.mocked(beginPasskeyLogin).mockResolvedValue({ publicKey: assertionOptions })
+      vi.mocked(beginPasskeyLogin).mockResolvedValue({ challengeToken: 'token-1', publicKey: assertionOptions })
       vi.mocked(finishPasskeyLogin).mockRejectedValue(new UnauthorizedError())
       await renderReady()
 
@@ -437,7 +439,7 @@ describe('LoginPage', () => {
 
     test('処理中は両方のボタンを止め、二重に送らない', async () => {
       support(vi.fn().mockResolvedValue(fakeAssertion()))
-      let release: (value: { publicKey: Record<string, unknown> }) => void = () => {}
+      let release: (value: { challengeToken: string; publicKey: Record<string, unknown> }) => void = () => {}
       vi.mocked(beginPasskeyLogin).mockReturnValue(
         new Promise((resolve) => {
           release = resolve
@@ -457,7 +459,7 @@ describe('LoginPage', () => {
       expect(beginPasskeyLogin).toHaveBeenCalledTimes(Math.max(initialBegins, 1))
       expect(login).not.toHaveBeenCalled()
 
-      release({ publicKey: assertionOptions })
+      release({ challengeToken: 'token-1', publicKey: assertionOptions })
       expect(await screen.findByRole('heading', { name: '記事一覧' })).toBeInTheDocument()
       expect(finishPasskeyLogin).toHaveBeenCalledTimes(1)
       // 連打や二重の送信で、begin が増えていない
@@ -466,7 +468,7 @@ describe('LoginPage', () => {
 
     test('パスワードの処理中は「パスキーでログイン」も止める', async () => {
       support(vi.fn())
-      vi.mocked(beginPasskeyLogin).mockResolvedValue({ publicKey: assertionOptions })
+      vi.mocked(beginPasskeyLogin).mockResolvedValue({ challengeToken: 'token-1', publicKey: assertionOptions })
       vi.mocked(login).mockReturnValue(new Promise(() => {}))
       await renderReady()
 
@@ -483,7 +485,7 @@ describe('LoginPage', () => {
   describe('conditional UI（利用者名欄の autofill）', () => {
     beforeEach(() => {
       vi.useFakeTimers({ shouldAdvanceTime: true })
-      vi.mocked(beginPasskeyLogin).mockResolvedValue({ publicKey: assertionOptions })
+      vi.mocked(beginPasskeyLogin).mockResolvedValue({ challengeToken: 'token-1', publicKey: assertionOptions })
     })
 
     const clickPasskeyButton = () =>
@@ -560,6 +562,25 @@ describe('LoginPage', () => {
       expect(vi.mocked(finishPasskeyLogin).mock.calls[0][0].credential.id).toBe('modal')
     })
 
+    test('ceremony ごとに別のトークンを持ち、finish には、その ceremony の begin で受け取ったトークンを渡す', async () => {
+      const { get, modal } = conditionalBrowser()
+      modal.mockResolvedValue(fakeAssertion('modal'))
+      vi.mocked(finishPasskeyLogin).mockResolvedValue({ user })
+      vi.mocked(beginPasskeyLogin)
+        .mockResolvedValueOnce({ challengeToken: 'token-conditional', publicKey: assertionOptions })
+        .mockResolvedValueOnce({ challengeToken: 'token-explicit', publicKey: assertionOptions })
+      renderLogin()
+      await waitFor(() => expect(get).toHaveBeenCalledTimes(1))
+
+      clickPasskeyButton()
+
+      expect(await screen.findByRole('heading', { name: '記事一覧' })).toBeInTheDocument()
+      expect(beginPasskeyLogin).toHaveBeenCalledTimes(2)
+      // 中止した conditional のトークンではなく、明示の ceremony のトークンを送る
+      expect(finishPasskeyLogin).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(finishPasskeyLogin).mock.calls[0][0].challengeToken).toBe('token-explicit')
+    })
+
     test('conditional の begin が保留中にボタンを押しても、先の begin の応答が届くまで次の begin を送らない', async () => {
       const { get, modal } = conditionalBrowser()
       modal.mockResolvedValue(fakeAssertion('modal'))
@@ -569,10 +590,10 @@ describe('LoginPage', () => {
         .mockImplementationOnce(
           () =>
             new Promise((resolve) => {
-              releaseFirst = () => resolve({ publicKey: assertionOptions })
+              releaseFirst = () => resolve({ challengeToken: 'token-1', publicKey: assertionOptions })
             }),
         )
-        .mockResolvedValue({ publicKey: assertionOptions })
+        .mockResolvedValue({ challengeToken: 'token-1', publicKey: assertionOptions })
       renderLogin()
       await waitFor(() => expect(beginPasskeyLogin).toHaveBeenCalledTimes(1))
 
@@ -778,7 +799,7 @@ describe('LoginPage', () => {
       expect(screen.getByRole('button', { name: 'パスキーでログイン' })).toBeEnabled()
     })
 
-    test('begin の上限に達したあと更新の時期が来たら、待機を中止する（期限切れのチャレンジを残さない）', async () => {
+    test('begin の上限に達したあと更新の時期が来たら、待機を中止する（期限切れのトークンを残さない）', async () => {
       const { get, pending } = conditionalBrowser()
       renderLogin()
       await waitFor(() => expect(get).toHaveBeenCalledTimes(1))
@@ -837,7 +858,7 @@ describe('LoginPage', () => {
         vi.mocked(beginPasskeyLogin).mockImplementationOnce(
           () =>
             new Promise((resolve) => {
-              releaseFirst = () => resolve({ publicKey: assertionOptions })
+              releaseFirst = () => resolve({ challengeToken: 'token-1', publicKey: assertionOptions })
             }),
         )
         renderLogin()
@@ -859,7 +880,7 @@ describe('LoginPage', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(
           'パスキーでログインできませんでした。もう一度お試しください。',
         )
-        // チャレンジのCookieが1つなので、待たずに begin を送らない
+        // 前の run の get が保留中かもしれないので、待たずに begin を送らない
         expect(beginPasskeyLogin).toHaveBeenCalledTimes(1)
         expect(get).not.toHaveBeenCalled()
         expect(modal).not.toHaveBeenCalled()
@@ -924,7 +945,7 @@ describe('LoginPage', () => {
       expect(pending[0].signal.aborted).toBe(true)
     })
 
-    test('チャレンジが4分50秒より古いときは、結果を finish へ送らず固定の文言を出す', async () => {
+    test('トークンが4分50秒より古いときは、結果を finish へ送らず固定の文言を出す', async () => {
       const { get, pending } = conditionalBrowser()
       renderLogin()
       await waitFor(() => expect(get).toHaveBeenCalledTimes(1))

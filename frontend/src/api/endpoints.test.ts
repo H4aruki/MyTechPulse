@@ -87,15 +87,15 @@ describe('endpoints', () => {
     expect(lastCall()).toEqual({ url: `${BASE}/api/v1/user-feedback/dismissals`, method: 'POST', body: `{"prompt_id":"${id}"}` })
   })
 
-  test('パスキーのログインは、beginは本文なし・finishはcredentialを、POSTで送る', async () => {
+  test('パスキーのログインは、beginは本文なし・finishはchallengeTokenとcredentialを、POSTで送る', async () => {
     const e = await loadEndpoints()
     await e.beginPasskeyLogin()
     expect(lastCall()).toEqual({ url: `${BASE}/api/v1/auth/passkeys/login/begin`, method: 'POST', body: undefined })
-    await e.finishPasskeyLogin({ credential: { id: 'abc' } })
+    await e.finishPasskeyLogin({ challengeToken: 'tok', credential: { id: 'abc' } })
     expect(lastCall()).toEqual({
       url: `${BASE}/api/v1/auth/passkeys/login/finish`,
       method: 'POST',
-      body: '{"credential":{"id":"abc"}}',
+      body: '{"challengeToken":"tok","credential":{"id":"abc"}}',
     })
     // 更新系の要求なので、CSRF対策のヘッダーと、Cookieの送信を付ける
     const [, init] = fetchMock.mock.calls.at(-1)!

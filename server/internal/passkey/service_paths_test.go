@@ -80,7 +80,7 @@ func TestServiceBeginRegistrationRefusesAnUnusableUserHandle(t *testing.T) {
 		t.Error("開始できなかったのにチャレンジを保存した")
 	}
 	// HTTPでは、内部エラーとして原因を出さずに返す
-	if r := e.do(http.MethodPost, base+"/register/begin", "tok-alice", "", nil, true); r.Code != http.StatusInternalServerError || r.challengeCookie() != nil {
+	if r := e.do(http.MethodPost, base+"/register/begin", "tok-alice", "", nil, true); r.Code != http.StatusInternalServerError || r.json()["challengeToken"] != nil {
 		t.Errorf("begin = %d %s", r.Code, r.Body)
 	}
 }

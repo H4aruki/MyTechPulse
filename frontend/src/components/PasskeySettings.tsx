@@ -64,9 +64,10 @@ function PasskeySection({ onUnauthorized }: Props) {
   const addMutation = useMutation({
     retry: false,
     mutationFn: async (name: string) => {
-      const { publicKey } = await beginPasskeyRegistration()
+      // 開始で受け取った challengeToken は、この手続きの完了にだけ使う（保存しない）
+      const { publicKey, challengeToken } = await beginPasskeyRegistration()
       const credential = await createPasskeyCredential(publicKey)
-      return finishPasskeyRegistration({ credential, name: name.trim() || undefined })
+      return finishPasskeyRegistration({ challengeToken, credential, name: name.trim() || undefined })
     },
     onSuccess: () => {
       setNewName('')
