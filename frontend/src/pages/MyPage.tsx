@@ -43,6 +43,15 @@ export function MyPage() {
       }}
     >
       <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-10">
+        {/* 戻り先は記事一覧。履歴に依存せず、直接開いた場合でも同じ場所へ戻す */}
+        <Link
+          to="/articles"
+          aria-label="戻る"
+          className="inline-flex items-center gap-1 text-sm font-bold text-brand-700 hover:underline"
+        >
+          <span aria-hidden="true">←</span>
+          戻る
+        </Link>
         <h1 className="text-2xl font-bold text-ink">マイページ</h1>
         {logoutFailed && (
           <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">

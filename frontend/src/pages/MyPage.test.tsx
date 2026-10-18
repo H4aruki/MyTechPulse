@@ -19,6 +19,7 @@ function renderMyPage() {
       <MemoryRouter initialEntries={['/mypage']}>
         <Routes>
           <Route path="/mypage" element={<MyPage />} />
+          <Route path="/articles" element={<h1>記事一覧画面</h1>} />
           <Route path="/settings" element={<h1>設定画面</h1>} />
           <Route path="/login" element={<h1>ログイン画面</h1>} />
         </Routes>
@@ -53,6 +54,19 @@ describe('MyPage', () => {
     fireEvent.click(await screen.findByRole('link', { name: /設定（パスキーの管理など）へ/ }))
 
     expect(await screen.findByRole('heading', { name: '設定画面' })).toBeInTheDocument()
+  })
+
+  test('左上に戻るリンクがあり、タイトルより前にあって、記事一覧へ戻れる', async () => {
+    renderMyPage()
+
+    const back = await screen.findByRole('link', { name: '戻る' })
+    const title = screen.getByRole('heading', { name: 'マイページ' })
+    expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(back).toHaveAttribute('href', '/articles')
+
+    fireEvent.click(back)
+
+    expect(await screen.findByRole('heading', { name: '記事一覧画面' })).toBeInTheDocument()
   })
 
   test('保存した記事の場所取りを表示する', () => {
