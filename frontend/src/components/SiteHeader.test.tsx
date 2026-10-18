@@ -27,4 +27,17 @@ describe('SiteHeader', () => {
 
     expect(screen.getByRole('link', { name: 'MyTechPulse' })).toHaveAttribute('href', '/articles')
   })
+
+  test('ログイン後はマイページと設定への入口を出す', () => {
+    renderHeader(true)
+
+    expect(screen.getByRole('link', { name: 'マイページ' })).toHaveAttribute('href', '/mypage')
+    expect(screen.getByRole('link', { name: '設定' })).toHaveAttribute('href', '/settings')
+  })
+
+  test('未ログイン時はマイページへの入口を出さない', () => {
+    renderHeader(false)
+
+    expect(screen.queryByRole('link', { name: 'マイページ' })).not.toBeInTheDocument()
+  })
 })

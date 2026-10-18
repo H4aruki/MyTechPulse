@@ -49,6 +49,12 @@ export function SiteHeader({ authenticated = false, onLogout }: SiteHeaderProps)
           {authenticated ? (
             <>
               <Link
+                to="/mypage"
+                className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold sm:px-4 text-ink-muted transition hover:bg-slate-100"
+              >
+                マイページ
+              </Link>
+              <Link
                 to="/settings"
                 className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold sm:px-4 text-ink-muted transition hover:bg-slate-100"
               >

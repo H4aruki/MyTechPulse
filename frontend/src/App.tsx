@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { ArticlesPage } from '@/pages/ArticlesPage'
 import { LoginPage } from '@/pages/LoginPage'
+import { MyPage } from '@/pages/MyPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { SignupPage } from '@/pages/SignupPage'
 
@@ -21,6 +22,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <ArticlesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="mypage"
+          element={
+            <ProtectedRoute>
+              <MyPage />
             </ProtectedRoute>
           }
         />
