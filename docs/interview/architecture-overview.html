@@ -93,7 +93,7 @@ footer{color:var(--sub);font-size:.8rem;text-align:center;margin-top:24px}
 
 <header class="hero">
   <h1>MyTechPulse ― 本番で「今」動いていることだけ</h1>
-  <p>頭の整理・面接対策ノート（K.Haruki / GitHub <code style="background:rgba(255,255,255,.18);color:#fff">@H4aruki</code>）</p>
+  <p>頭の整理・アーキテクチャ整理ノート（K.Haruki / GitHub <code style="background:rgba(255,255,255,.18);color:#fff">@H4aruki</code>）</p>
   <p>基準: <code style="background:rgba(255,255,255,.18);color:#fff">main 5cc75fd</code>（2026-10-19 09:53 JST コミット「ログイン後にマイページを追加する (#238)」）。この版の CI「Go版の本番への反映」ジョブは 2026-10-19 09:59 JST に成功。</p>
   <div class="badges">
     <span class="badge">事実はコード優先</span><span class="badge">未マージ・未実装は §12 に隔離</span><span class="badge">時刻はすべて JST</span><span class="badge">作成 2026-10-20</span>
@@ -112,10 +112,9 @@ footer{color:var(--sub);font-size:.8rem;text-align:center;margin-top:24px}
     <li><a href="#s7">認証</a></li>
     <li><a href="#s8">インフラ・デプロイ・CI</a></li>
     <li><a href="#s9">制約・トレードオフ</a></li>
-    <li><a href="#s10">面接で言わない／言えないこと</a></li>
-    <li><a href="#s11">文書とコードの食い違い</a></li>
-    <li><a href="#s12">これから（未マージ・未実装）</a></li>
-    <li><a href="#s13">出典まとめ・未確認事項</a></li>
+    <li><a href="#s10">文書とコードの食い違い</a></li>
+    <li><a href="#s11">これから（未マージ・未実装）</a></li>
+    <li><a href="#s12">出典まとめ・未確認事項</a></li>
   </ol>
 </nav>
 
@@ -357,38 +356,7 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
 
 <!-- 10 -->
 <section id="s10">
-  <h2><span class="no">10</span>面接で「言わない／言えない」こと</h2>
-  <div class="callout ng">以下は main / 本番に<b>存在しない</b>。「やっている」と言うと矛盾になる。</div>
-  <div class="tbl"><table>
-    <tr><th>言ってはいけない表現</th><th>事実</th></tr>
-    <tr><td>「ベクトル検索・埋め込みで推薦」</td><td><span class="pill ng">なし</span> pgvector・全文検索（tsvector）・埋め込み・機械学習は未使用。推薦はタグ重みの和（＋Qiitaのいいね）だけ</td></tr>
-    <tr><td>「記事をバッチで集めて DB に保存」「キャッシュしている」</td><td><span class="pill ng">なし</span> 記事テーブルなし・毎リクエスト取得。日次一括取得は Issue #66（OPEN）</td></tr>
-    <tr><td>「未選択タグは 0 で、空き枠は人気記事で埋める」</td><td><span class="pill ng">未マージ</span> PR #242（OPEN）。main は選択 1.0 / 未選択 0.8</td></tr>
-    <tr><td>「記事を保存（お気に入り）できる」</td><td><span class="pill ng">なし</span> #236（OPEN）。マイページに置き場所の見出しだけある</td></tr>
-    <tr><td>「似たタグの記事も出す」</td><td><span class="pill ng">なし</span> #241（OPEN）</td></tr>
-    <tr><td>「errgroup で並列化」</td><td><span class="pill warn">違う</span> goroutine＋バッファ付き channel＋context タイムアウト</td></tr>
-    <tr><td>「登録後に興味タグを変更できる」</td><td><span class="pill ng">なし</span> FeaturesList F-3-5 未実装</td></tr>
-    <tr><td>「マイクロサービス」</td><td><span class="pill warn">違う</span> モジュラーモノリス（ADR 0001 で明示的に不採用）</td></tr>
-    <tr><td>「JWT 認証」</td><td><span class="pill warn">違う</span> 旧Python版の話。現行はサーバー側セッション</td></tr>
-    <tr><td>「監視・アラートを整備」「バックアップは別拠点」</td><td><span class="pill ng">未完</span> 監視 #187 OPEN、外部退避 #188 OPEN（同一サーバー内のみ）</td></tr>
-    <tr><td>「利用規約・プライバシーポリシーあり」</td><td><span class="pill ng">なし</span> #185 OPEN</td></tr>
-    <tr><td>「冗長化・オートスケール」</td><td><span class="pill ng">なし</span> 1台構成</td></tr>
-    <tr><td>「Zenn はトレンド順で取得している」と断言</td><td><span class="pill warn">注意</span> README の説明。コードは並び順パラメータを渡していない（Zenn側の既定順は未確認）</td></tr>
-  </table></div>
-  <h3>深掘りされたときの想定問答（事実ベース）</h3>
-  <dl class="qa">
-    <dt>Q. なぜ記事を保存しない？</dt><dd>テーブル3つ・書き込みも少ない小規模で始め、常に新しい記事を出すため都度取得にしている。外部APIの上限とダウン時の表示が課題で、日次一括化は #66 で検討中（未実装）。</dd>
-    <dt>Q. 外部APIが落ちたら？</dt><dd>片方だけなら成功側を返し <code>warnings</code> で通知。両方失敗で 503。全体8秒・1回5秒で打ち切り。</dd>
-    <dt>Q. なぜ整数で持つ？</dt><dd>小数のまま保存すると誤差が出るため、×10000 の固定小数点で保存・計算。</dd>
-    <dt>Q. なぜ 0.8 / 0.2？</dt><dd><span class="pill warn">文書に定数値の決定理由なし</span> 「全体を弱めてクリックしたタグを強める＝直近の関心に寄せる」という目的のみ記載。</dd>
-    <dt>Q. DBを変えて失敗したら？</dt><dd>移行は追加のみで、API だけ直前の版へ自動で戻す。DB は巻き戻さない設計。</dd>
-  </dl>
-  <div class="src">出典: <code>rg errgroup|pgvector|tsvector server/</code>（該当なし）、GitHub Issue/PR #66・#185・#187・#188・#236・#241・#242（いずれも OPEN、2026-10-20 確認）、<code>FeaturesList.md</code></div>
-</section>
-
-<!-- 11 -->
-<section id="s11">
-  <h2><span class="no">11</span>文書とコードの食い違い（突っ込まれたら「コードが正」）</h2>
+  <h2><span class="no">10</span>文書とコードの食い違い（実装を正とする）</h2>
   <div class="tbl"><table>
     <tr><th>文書</th><th>文書の記述</th><th>main のコード／事実</th></tr>
     <tr><td><code>DataBaseArchitecture.md</code> §3-3</td><td>会員登録時の初期値は「仮の初期値 1」</td><td>選択 10000・未選択 8000（#203）</td></tr>
@@ -400,9 +368,9 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
   <div class="src">出典: 各文書と <code>server/internal/interest/model.go</code>、<code>server/internal/recommendation/score.go</code>、<code>server/internal/auth/{policy,limiter}.go</code>、<code>server/db/migrations/00007_auth_passkey.sql</code></div>
 </section>
 
-<!-- 12 -->
-<section id="s12">
-  <h2><span class="no">12</span>これから（未マージ・未実装。本番では動いていない）</h2>
+<!-- 11 -->
+<section id="s11">
+  <h2><span class="no">11</span>これから（未マージ・未実装。本番では動いていない）</h2>
   <ul>
     <li><span class="pill warn">PR OPEN</span> #242 選ばなかったタグの初期値を0にし、空いたフィード枠を人気記事で埋める</li>
     <li><span class="pill warn">Issue OPEN</span> #66 記事取得を都度実行から定期一括実行へ</li>
@@ -414,9 +382,9 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
   <div class="src">出典: <code>gh issue/pr view</code>（2026-10-20 確認）、<code>TASKS.md</code></div>
 </section>
 
-<!-- 13 -->
-<section id="s13">
-  <h2><span class="no">13</span>出典まとめ・未確認事項</h2>
+<!-- 12 -->
+<section id="s12">
+  <h2><span class="no">12</span>出典まとめ・未確認事項</h2>
   <h3>基準</h3>
   <ul>
     <li><code>main</code> = <code>5cc75fda985e053472a5034012b985c275d407c4</code>（2026-10-19 09:53:40 JST）。<code>git fetch</code> 後 origin/main と一致。</li>
