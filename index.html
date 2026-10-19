@@ -69,6 +69,14 @@ th{background:#f4f6f9;font-weight:600;white-space:nowrap}
 .qa dt{font-weight:700;margin-top:10px}
 .qa dd{margin:2px 0 6px 0;padding-left:14px;border-left:3px solid var(--line)}
 footer{color:var(--sub);font-size:.8rem;text-align:center;margin-top:24px}
+
+.rationale{font-size:.9rem;margin:8px 0 4px;padding:8px 12px;background:#f7f9fc;border:1px solid var(--line);border-radius:8px}
+.rationale b{color:var(--accent)}
+.rationale ul{margin:4px 0 0;padding-left:1.2em}
+.rationale li{margin:3px 0}
+a.iss{color:var(--accent);text-decoration:none;font-family:var(--mono);font-size:.9em}
+a.iss:hover{text-decoration:underline}
+
 @media (max-width:900px){
   .wrap{grid-template-columns:1fr;padding:14px 12px 60px}
   nav.toc{position:static;max-height:none}
@@ -96,7 +104,7 @@ footer{color:var(--sub);font-size:.8rem;text-align:center;margin-top:24px}
   <p>頭の整理・アーキテクチャ整理ノート（K.Haruki / GitHub <code style="background:rgba(255,255,255,.18);color:#fff">@H4aruki</code>）</p>
   <p>基準: <code style="background:rgba(255,255,255,.18);color:#fff">main 5cc75fd</code>（2026-10-19 09:53 JST コミット「ログイン後にマイページを追加する (#238)」）。この版の CI「Go版の本番への反映」ジョブは 2026-10-19 09:59 JST に成功。</p>
   <div class="badges">
-    <span class="badge">事実はコード優先</span><span class="badge">未マージ・未実装は §12 に隔離</span><span class="badge">時刻はすべて JST</span><span class="badge">作成 2026-10-20</span>
+    <span class="badge">事実はコード優先</span><span class="badge">未マージ・未実装は §12 に隔離</span><span class="badge">時刻はすべて JST</span><span class="badge">判断理由は Issue/PR コメントも参照</span><span class="badge">作成 2026-10-20</span>
   </div>
 </header>
 
@@ -131,7 +139,13 @@ footer{color:var(--sub);font-size:.8rem;text-align:center;margin-top:24px}
     <li>ログイン後の画面: 記事一覧 <code>/app/articles</code>、マイページ <code>/app/mypage</code>（#238、利用者名の表示と設定へのリンク）、設定 <code>/app/settings</code>（パスキー管理）。</li>
     <li>記事を開いた利用者向けのアンケート（利用者フィードバック、<code>/api/v1/user-feedback/*</code>）も動いている。</li>
   </ul>
-  <div class="src">出典: <code>README.md</code>、<code>AGENTS.md</code>「プロジェクト概要」、<code>frontend/src/App.tsx</code>、<code>docs/BasicDesignSpecifications/FeaturesList.md</code> F-7-2、<code>server/internal/userfeedback/</code></div>
+  <div class="rationale"><b>判断理由（マイページ）</b>
+    <ul>
+      <li>設定ページと分離（案B）。マイページは概要のみ、パスキーは設定ページのまま。統合は入口が1つになるが既存画面・試験の変更が大きいため初版では採らない（<a href="https://github.com/H4aruki/MyTechPulse/issues/235">#235</a> オーナー決定 → <a href="https://github.com/H4aruki/MyTechPulse/pull/238">#238</a>）。</li>
+      <li>表示は利用者名のみ。メール・表示名・登録日は DB に無く、個人情報はできるだけ持たず出さない方針。API/DB 変更なし（<code>auth/me</code>）。記事保存一覧の場所取りのみ（中身は <a href="https://github.com/H4aruki/MyTechPulse/issues/236">#236</a>）。</li>
+    </ul>
+  </div>
+  <div class="src">出典: <code>README.md</code>、<code>AGENTS.md</code>「プロジェクト概要」、<code>frontend/src/App.tsx</code>、<code>docs/BasicDesignSpecifications/FeaturesList.md</code> F-7-2、<code>server/internal/userfeedback/</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/235">#235</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/238">#238</a></div>
 </section>
 
 <!-- 2 -->
@@ -178,22 +192,22 @@ footer{color:var(--sub);font-size:.8rem;text-align:center;margin-top:24px}
 <section id="s3">
   <h2><span class="no">03</span>技術スタックと「なぜその選択か」</h2>
   <div class="tbl"><table>
-    <tr><th>区分</th><th>採用（main の実バージョン）</th><th>理由（文書の記載）</th></tr>
-    <tr><td>画面</td><td>React 19.2 / TypeScript 6.0 / Vite 8 / Tailwind CSS 4（<code>@tailwindcss/vite</code>）</td><td>文書に理由なし・事実のみ</td></tr>
-    <tr><td>画面のデータ取得・フォーム</td><td>TanStack Query 5 / React Router DOM 7 / React Hook Form 7 + zod 4（<code>@hookform/resolvers</code>）</td><td>文書に理由なし・事実のみ</td></tr>
-    <tr><td>画面の検査</td><td>oxlint / Vitest 5 + Testing Library / <code>openapi-typescript</code> でAPI型を生成し差分をCIで検査</td><td>API契約と画面の型ずれをCIで止める（<code>AGENTS.md</code>「保護APIを変更するとき…同時に更新」）</td></tr>
-    <tr><td>API</td><td>Go 1.26.4、標準HTTPサーバー + Huma v2（OpenAPI をコードから生成）</td><td>ADR 0001: 堅牢性・保守性・運用の単純さ・将来のチーム開発。Python からの移行（2026-10-07 本番切替）</td></tr>
-    <tr><td>構成</td><td>モジュラーモノリス（1配布単位、内部をパッケージで分割）</td><td>ADR 0001: 層の直訳は責務集中を残す／マイクロサービスは規模に対し運用負担が大きい</td></tr>
-    <tr><td>DBアクセス</td><td>pgx v5 + sqlc（SQLから型付きコード生成）</td><td>文書に「SQLを書き、型付きコードを自動生成」と記載。選択理由そのものは記載なし</td></tr>
-    <tr><td>マイグレーション</td><td>goose v3（<code>server/cmd/migrate</code>）。<b>追加のみ</b>を <code>additive_test.go</code> で強制</td><td>自動デプロイ失敗時に API だけ旧版へ戻しても、DB を巻き戻さずに済ませるため</td></tr>
-    <tr><td>DB</td><td>PostgreSQL 17（<code>postgres:17-alpine</code>）を API と同じサーバーに同居</td><td>ADR 0003: テーブルが少なく書き込みも少ない、マネージドDBは月$8〜25で予算超過、1画面で複数回問い合わせるので外に出すと遅延が積み上がる</td></tr>
-    <tr><td>認証</td><td>サーバー側セッション（HttpOnly Cookie）＋ bcrypt、パスキー（<code>go-webauthn/webauthn</code> v0.18）</td><td>ADR 0002: XSS 時に JS から認証情報を読まれる範囲を減らす／ログアウト・期限切れをサーバー側で確実に失効</td></tr>
-    <tr><td>エラー形式</td><td>Problem Details（RFC 9457）＋HTTPステータス</td><td>文書に理由なし・事実のみ（旧Python版の「本文の status」規約は廃止）</td></tr>
+    <tr><th>区分</th><th>採用（main の実バージョン）</th><th>理由（ADR・文書・Issue/PR）</th></tr>
+    <tr><td>画面</td><td>React 19.2 / TypeScript 6.0 / Vite 8 / Tailwind CSS 4（<code>@tailwindcss/vite</code>）</td><td>文書・Issue/PRに理由の記録なし・事実のみ</td></tr>
+    <tr><td>画面のデータ取得・フォーム</td><td>TanStack Query 5 / React Router DOM 7 / React Hook Form 7 + zod 4（<code>@hookform/resolvers</code>）</td><td>文書・Issue/PRに理由の記録なし・事実のみ</td></tr>
+    <tr><td>画面の検査</td><td>oxlint / Vitest 5 + Testing Library / <code>openapi-typescript</code> でAPI型を生成し差分をCIで検査</td><td>API契約と画面の型ずれをCIで止める（<code>AGENTS.md</code>）。Issue/PRに追加の選択議論の記録なし</td></tr>
+    <tr><td>API</td><td>Go 1.26.4、標準HTTPサーバー + Huma v2（OpenAPI をコードから生成）</td><td>ADR 0001: 堅牢性・保守性・運用の単純さ・将来のチーム開発。Python からの移行（2026-10-07 本番切替）。Issue/PRコメントでの追加比較の記録なし</td></tr>
+    <tr><td>構成</td><td>モジュラーモノリス（1配布単位、内部をパッケージで分割）</td><td>ADR 0001: 層の直訳は責務集中を残す／マイクロサービスは規模に対し運用負担が大きい。Issue/PRに同趣旨の再議論の記録なし</td></tr>
+    <tr><td>DBアクセス</td><td>pgx v5 + sqlc（SQLから型付きコード生成）</td><td>文書に「SQLを書き、型付きコードを自動生成」と記載。選択理由そのものは文書・Issue/PRに記録なし</td></tr>
+    <tr><td>マイグレーション</td><td>goose v3（<code>server/cmd/migrate</code>）。<b>追加のみ</b>を <code>additive_test.go</code> で強制</td><td>自動デプロイ失敗時に API だけ旧版へ戻しても DB を巻き戻さずに済ませるため（デプロイ文書）。<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> でも <code>DELETE</code> 移行は追加のみ規約に反し巻き戻せないため却下</td></tr>
+    <tr><td>DB</td><td>PostgreSQL 17（<code>postgres:17-alpine</code>）を API と同じサーバーに同居</td><td>ADR 0003: テーブルが少なく書き込みも少ない、マネージドDBは月$8〜25で予算超過、1画面で複数回問い合わせるので外に出すと遅延が積み上がる。<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a> でもバッチ化後は DB 同居のメリットが強まると記載</td></tr>
+    <tr><td>認証</td><td>サーバー側セッション（HttpOnly Cookie）＋ bcrypt、パスキー（<code>go-webauthn/webauthn</code> v0.18）</td><td>セッション: ADR 0002（XSS範囲の縮小・サーバー側失効）。パスキー基盤: <a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a> で自前実装は検証漏れ危険が大きいため <code>go-webauthn</code> を採用（<a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a>）。初版はパスワード併用・discoverable・上限10件</td></tr>
+    <tr><td>エラー形式</td><td>Problem Details（RFC 9457）＋HTTPステータス</td><td>文書に理由なし・事実のみ（旧Python版の「本文の status」規約は廃止）。Issue/PRに理由の記録なし</td></tr>
     <tr><td>ホスティング</td><td>Cloudflare Pages（画面）＋ AWS Lightsail 東京 1GB 1台（API・DB・Caddy）</td><td>ADR 0003: 合計 月約$8。却下: Vercel（無料は非商用）、GitHub Pages（接続先URLの書き換え不可）、Netlify（転送量上限）、Xserver VPS（年契約）、EC2（通信従量）、GCP無料VM（米国のみ）、Oracle無料VM（アカウント作成不可）。次点: さくらVPS</td></tr>
-    <tr><td>HTTPS終端</td><td>Caddy 2（証明書の自動取得・更新）</td><td>文書に「証明書の自動取得・更新を担う」と記載。他候補との比較は記載なし</td></tr>
-    <tr><td>CI/CD</td><td>GitHub Actions（<code>ci.yml</code>・<code>release.yml</code> ほか）、イメージは GHCR</td><td>文書に選択理由なし・事実のみ</td></tr>
+    <tr><td>HTTPS終端・入口制限</td><td>Caddy 2（証明書の自動取得・更新）。Cloudflare IP 以外は 403（<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>）</td><td>Caddy 自体の他候補比較は文書・Issue/PRに記録なし。直アクセス遮断: <a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> で Cloudflare Tunnel は 1GB メモリと複雑さから過剰と判断。Caddy 許可リストは <a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a> で main へ。Lightsail FW の手動絞り込みは残作業（Issue は OPEN）</td></tr>
+    <tr><td>CI/CD</td><td>GitHub Actions（<code>ci.yml</code>・<code>release.yml</code> ほか）、イメージは GHCR</td><td>文書・Issue/PRに選択理由の記録なし・事実のみ</td></tr>
   </table></div>
-  <div class="src">出典: <code>frontend/package.json</code>、<code>server/go.mod</code>、<code>docs/adr/0001〜0003</code>、<code>docs/BasicDesignSpecifications/SystemArchitectureDiagram.md</code> §2、<code>server/db/migrations/README.md</code>、<code>AGENTS.md</code></div>
+  <div class="src">出典: <code>frontend/package.json</code>、<code>server/go.mod</code>、<code>docs/adr/0001〜0003</code>、<code>docs/BasicDesignSpecifications/SystemArchitectureDiagram.md</code> §2、<code>server/db/migrations/README.md</code>、<code>AGENTS.md</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a></div>
 </section>
 
 <!-- 4 -->
@@ -244,7 +258,13 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
     Zenn の点数　= 興味合計（いいね数は掛けない）
   </div>
   <p><small>Zenn に反響を掛けない理由は README に「取得時点で提供元のトレンド順に絞り込まれているため重ねて数えない」とある。コード上の Zenn 呼び出しは <code>topicname</code> と <code>count</code> だけで、並び順の指定パラメータは無い（Zenn 側の既定の並び順は<b>未確認</b>）。</small></p>
-  <div class="src">出典: <code>server/internal/recommendation/{service,score,handler}.go</code>、<code>server/internal/provider/{qiita,zenn}/client.go</code>、<code>server/internal/platform/config/config.go</code>、<code>README.md</code>「仕組み」、<code>AGENTS.md</code>「パーソナライズの重要仕様」</div>
+  <div class="rationale"><b>判断理由（取得まわり）</b>
+    <ul>
+      <li>空白入りタグ（例: Spring Boot）: 表示名は空白のまま、Qiita/Zenn 問い合わせ時だけ空白除去（<a href="https://github.com/H4aruki/MyTechPulse/issues/206">#206</a> オーナー決定 → <a href="https://github.com/H4aruki/MyTechPulse/pull/208">#208</a>）。表示名・DB・順位付けは変えない。</li>
+      <li>クリックAPIが任意タグを新規作成できる問題は <a href="https://github.com/H4aruki/MyTechPulse/issues/239">#239</a>（OPEN）。短期案は既存タグのみ受理・文字種検査・レート制限。長期は <a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a> 後に article_id 基準へ。</li>
+    </ul>
+  </div>
+  <div class="src">出典: <code>server/internal/recommendation/{service,score,handler}.go</code>、<code>server/internal/provider/{qiita,zenn}/client.go</code>、<code>server/internal/platform/config/config.go</code>、<code>README.md</code>「仕組み」、<code>AGENTS.md</code>「パーソナライズの重要仕様」、<a href="https://github.com/H4aruki/MyTechPulse/issues/206">#206</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/208">#208</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/239">#239</a></div>
 </section>
 
 <!-- 6 -->
@@ -272,8 +292,16 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
     <li>入力はタグ1〜50件・各1〜50文字。学習の送信が失敗しても画面にエラーは出さない（閲覧を妨げない）。</li>
     <li>浮動小数点を使わないのは、小数のまま保存すると誤差が出るため（DB文書の説明）。</li>
   </ul>
-  <div class="callout warn">事実として言える副作用: 選んだタグが5個未満だと、上位5の残りは 8000 同士の同点になり、<b>正規化タグ名の昇順</b>で埋まる。これを変える提案が未マージの PR #242（§12）。</div>
-  <div class="src">出典: <code>server/internal/interest/{model,click}.go</code>、<code>server/internal/store/{auth,interest}.go</code>、<code>server/db/queries/signup.sql</code>、<code>server/internal/recommendation/handler.go</code>、PR #203（MERGED）、<code>FeaturesList.md</code> F-5-4</div>
+  <div class="callout warn">事実として言える副作用: 選んだタグが5個未満だと、上位5の残りは 8000 同士の同点になり、<b>正規化タグ名の昇順</b>で埋まる。これを変える提案が未マージの PR <a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a>（§11）。本番（main）はまだ未選択 0.8。</div>
+  <div class="rationale"><b>判断理由（興味の初期値・減衰）</b>
+    <ul>
+      <li><b>本番の現行:</b> 選択 1.0 / 未選択 0.8 は <a href="https://github.com/H4aruki/MyTechPulse/issues/201">#201</a> オーナー確認コメントで確定し <a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a> で実装。旧 <code>match_int=1</code>（=0.0001）は尺度ミスとして修正。</li>
+      <li><b>未選択 0.8 の数値理由:</b> <a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> 調査コメントどおり、Issue/PR・コミット・設計資料に数値の根拠は見つからなかった（「デフォルト0.8」メモのみ）。コード上は減衰率と同じ <code>Scale×8/10</code>。</li>
+      <li><b>クリック減衰 0.8:</b> 意図して決めた値（指数移動平均。0.5 だと過去がすぐ消える）。<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> 補足コメント。この値は変更しない方針。</li>
+      <li><b>見直し（未マージ）:</b> <a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> で未選択は行を作らない（0扱い）、空き枠は人気記事で埋める、既存利用者のデータ揃えは ops 一回限り（goose DELETE は却下）と決定。実装 PR は <a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a>（OPEN）のため本番は未反映。</li>
+    </ul>
+  </div>
+  <div class="src">出典: <code>server/internal/interest/{model,click}.go</code>、<code>server/internal/store/{auth,interest}.go</code>、<code>server/db/queries/signup.sql</code>、<code>server/internal/recommendation/handler.go</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/201">#201</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a>、<code>FeaturesList.md</code> F-5-4</div>
 </section>
 
 <!-- 7 -->
@@ -301,7 +329,15 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
     <li>チャレンジ: 使い捨てトークンを<b>レスポンス本文の <code>challengeToken</code></b> で渡し、完了時に本文で返す。DB には SHA-256 のみ、5分で失効、1回で消費。Cookie 受け渡しから本文へ変えたのは、複数タブで先に開いたタブのログインが失敗する問題のため（#230 → #232）。</li>
     <li>RP ID は本番 <code>mytechpulse.net</code> が既定（<code>WEBAUTHN_RP_ID</code>）。本番の origin は https・localhost 不可を起動時に検査。</li>
   </ul>
-  <div class="src">出典: <code>docs/adr/0002-use-server-side-sessions.md</code>、<code>server/internal/auth/{password,policy,limiter,handler,session}.go</code>、<code>server/internal/passkey/{handler,model,service}.go</code>、<code>server/internal/platform/config/config.go</code>、<code>server/db/migrations/00007_auth_passkey.sql</code>、#217・#221・#228・#229・#230・#231・#232</div>
+  <div class="rationale"><b>判断理由（認証まわり）</b>
+    <ul>
+      <li>試行制限・強度: <a href="https://github.com/H4aruki/MyTechPulse/issues/186">#186</a> で必須化。Cloudflare WAF レート制限だけに任せる案は「利用者名ごとの制限ができない」ため補助にとどめると明記 → <a href="https://github.com/H4aruki/MyTechPulse/pull/217">#217</a>（12文字以上・よくあるパスワード拒否・文字種ルールなし／メモリ内制限）。</li>
+      <li>パスキー: <a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a> 設計。自前実装は検証漏れ危険 → <code>go-webauthn</code>。初版はパスワード併用（パスキーのみ利用者は後続）。discoverable・userVerification=required・上限10件。実装段階: 基盤 <a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a> → 登録/設定 <a href="https://github.com/H4aruki/MyTechPulse/pull/221">#221</a> → ログイン <a href="https://github.com/H4aruki/MyTechPulse/pull/228">#228</a> → conditional UI <a href="https://github.com/H4aruki/MyTechPulse/pull/229">#229</a>。</li>
+      <li>チャレンジ受け渡し: 当初 Cookie。複数タブで上書き失敗（<a href="https://github.com/H4aruki/MyTechPulse/issues/230">#230</a>）。<a href="https://github.com/H4aruki/MyTechPulse/pull/229">#229</a> では BroadcastChannel は複雑さに見合わず見送り → <a href="https://github.com/H4aruki/MyTechPulse/pull/232">#232</a> で本文 <code>challengeToken</code> に変更（登録も同形）。トークン単独では本人確認付き署名が必要なため、本文載せでもできることは増えないと PR に記載。</li>
+      <li>本番で <code>CLIENT_IP_HEADER</code> 空なら起動停止（<a href="https://github.com/H4aruki/MyTechPulse/pull/231">#231</a>）。直アクセスでヘッダー偽装可能な間は IP 制限が弱まりうる（<a href="https://github.com/H4aruki/MyTechPulse/pull/217">#217</a> 注意書き、<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> 関連）。</li>
+    </ul>
+  </div>
+  <div class="src">出典: <code>docs/adr/0002-use-server-side-sessions.md</code>、<code>server/internal/auth/{password,policy,limiter,handler,session}.go</code>、<code>server/internal/passkey/{handler,model,service}.go</code>、<code>server/internal/platform/config/config.go</code>、<code>server/db/migrations/00007_auth_passkey.sql</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/186">#186</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/217">#217</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/221">#221</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/228">#228</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/229">#229</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/230">#230</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/231">#231</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/232">#232</a></div>
 </section>
 
 <!-- 8 -->
@@ -311,7 +347,7 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
   <ul>
     <li>Lightsail 東京 1GB（文書上 約$7/月）。メモリ対策にスワップ 2GB・<code>vm.swappiness=10</code>。</li>
     <li>Docker Compose: <code>db</code>（postgres:17-alpine、127.0.0.1:5432 のみ）、<code>api-go</code>（127.0.0.1:8001 のみ）、<code>caddy</code>（80/443、443/udp）。外部へは Caddy だけが開く。</li>
-    <li>Caddy は Cloudflare の IP 範囲以外を 403（#218）。HSTS 付与。証明書は Let's Encrypt 自動更新。</li>
+    <li>Caddy は Cloudflare の IP 範囲以外を 403（<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>、Refs <a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>）。HSTS 付与。証明書は Let's Encrypt 自動更新。Lightsail ファイアウォールでの送信元絞り込みはオーナー手動の残作業のため <a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> は OPEN のまま。</li>
     <li>API イメージ: マルチステージで最終 <code>FROM scratch</code>、<code>USER 65532</code>（非root）。本番では Swagger UI（<code>/docs</code>）を有効にすると起動しない。</li>
     <li>バックアップ: <code>pg_dump -Fc</code>。デプロイ前に自動取得、日次は cron 想定、7日超を自動削除（<code>.keep</code> は残す）。<b>保存先は同じサーバー内</b>。</li>
   </ul>
@@ -334,7 +370,12 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
     <li>API 成功時だけ Cloudflare Pages へ画面を公開（画面は新 API 前提のため）。サーバー上でソースからビルドはしない。</li>
   </ol>
   <p>直近: main <code>5cc75fd</code> の CI 実行で全ジョブ成功、「Go版の本番への反映」は 2026-10-19 09:59 JST に成功。本番は Go 版（2026-10-07 切替、#127）、自動デプロイは 2026-10-08 から有効。</p>
-  <div class="src">出典: <code>docs/deploy/go-auto-deploy.md</code>、<code>docs/deploy/lightsail-provisioning.md</code>、<code>docs/adr/0003</code>、<code>.github/workflows/ci.yml</code>、<code>docker-compose.yml</code>、<code>Caddyfile</code>、<code>server/Dockerfile</code>、<code>ops/backup_db.sh</code>・<code>ops/prune_backups.sh</code>、<code>TASKS.md</code>、GitHub Actions run 39182816694</div>
+  <div class="rationale"><b>判断理由（入口制限）</b>
+    <ul>
+      <li><a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>: オリジン直叩きで Cloudflare のレート制限・WAF を迂回しうる。Tunnel はメモリと複雑さで過剰。Caddy 許可リスト実装は <a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>。FW 手動作業が残るため Closes していない。</li>
+    </ul>
+  </div>
+  <div class="src">出典: <code>docs/deploy/go-auto-deploy.md</code>、<code>docs/deploy/lightsail-provisioning.md</code>、<code>docs/adr/0003</code>、<code>.github/workflows/ci.yml</code>、<code>docker-compose.yml</code>、<code>Caddyfile</code>、<code>server/Dockerfile</code>、<code>ops/backup_db.sh</code>・<code>ops/prune_backups.sh</code>、<code>TASKS.md</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>、GitHub Actions run 39182816694</div>
 </section>
 
 <!-- 9 -->
@@ -342,16 +383,16 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
   <h2><span class="no">09</span>設計上の制約・トレードオフ</h2>
   <div class="tbl"><table>
     <tr><th>決めたこと</th><th>得たもの</th><th>払っているコスト（事実）</th></tr>
-    <tr><td>記事を DB に持たず、毎リクエスト外部 API を呼ぶ</td><td>実装が単純、常に新しい記事、記事データの保守不要</td><td>表示ごとに最大10回の外部呼び出し。外部の遅延・障害・レート制限の影響を直接受ける（8秒で打ち切り、片側失敗は warnings）。日次一括化は未実装（#66）</td></tr>
+    <tr><td>記事を DB に持たず、毎リクエスト外部 API を呼ぶ</td><td>実装が単純、常に新しい記事、記事データの保守不要</td><td>表示ごとに最大10回の外部呼び出し。外部の遅延・障害・レート制限の影響を直接受ける（8秒で打ち切り、片側失敗は warnings）。日次一括化は未実装（<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a>。方針はコメントで決定済み・§11）</td></tr>
     <tr><td>Lightsail 1GB に API・DB・Caddy を同居</td><td>月約$8、DB往復が速い、構成が単純</td><td>単一障害点（サーバー停止＝全停止、要件上許容）。メモリが小さくスワップ前提</td></tr>
     <tr><td>移行は追加のみ</td><td>API だけ旧版へ自動ロールバックしても DB 互換が保たれる</td><td>列の削除・改名・型変更ができず、古い列が残る</td></tr>
     <tr><td>ログイン試行制限をプロセス内メモリで持つ</td><td>追加インフラ不要</td><td>再起動で数え直し。API が1台である前提</td></tr>
     <tr><td>サーバー側セッション</td><td>即時失効・XSSで盗まれる範囲の縮小</td><td>毎リクエスト DB 参照、クロスオリジンなので CSRF 対策（Origin＋専用ヘッダー）が必要</td></tr>
     <tr><td>興味度を整数（×10000）で保存・計算</td><td>誤差なし・決定的なテスト</td><td>クリップ（0〜10000）や整数除算の切り捨てを意識する必要</td></tr>
-    <tr><td>未選択タグも 0.8 で全行作成（#203）</td><td>選んだタグが少なくても上位5が埋まる</td><td>同点の未選択タグは名前順で選ばれる（意図との差は #242 で議論中）。利用者×全タグ分の行</td></tr>
+    <tr><td>未選択タグも 0.8 で全行作成（#203）</td><td>選んだタグが少なくても上位5が埋まる</td><td>同点の未選択タグは名前順で選ばれる（見直しは <a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>→<a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a> 未マージ）。利用者×全タグ分の行</td></tr>
     <tr><td>人の承認なしの自動デプロイ</td><td>速く反映、手作業ミスなし</td><td>検査・自動ロールバック・digest 固定に依存</td></tr>
   </table></div>
-  <div class="src">出典: <code>docs/adr/0003</code>、<code>DataBaseArchitecture.md</code> §4、<code>SystemArchitectureDiagram.md</code> §4、<code>server/internal/auth/limiter.go</code>、<code>server/internal/recommendation/service.go</code>、<code>docs/deploy/go-auto-deploy.md</code></div>
+  <div class="src">出典: <code>docs/adr/0003</code>、<code>DataBaseArchitecture.md</code> §4、<code>SystemArchitectureDiagram.md</code> §4、<code>server/internal/auth/limiter.go</code>、<code>server/internal/recommendation/service.go</code>、<code>docs/deploy/go-auto-deploy.md</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a></div>
 </section>
 
 <!-- 10 -->
@@ -359,9 +400,9 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
   <h2><span class="no">10</span>文書とコードの食い違い（実装を正とする）</h2>
   <div class="tbl"><table>
     <tr><th>文書</th><th>文書の記述</th><th>main のコード／事実</th></tr>
-    <tr><td><code>DataBaseArchitecture.md</code> §3-3</td><td>会員登録時の初期値は「仮の初期値 1」</td><td>選択 10000・未選択 8000（#203）</td></tr>
+    <tr><td><code>DataBaseArchitecture.md</code> §3-3</td><td>会員登録時の初期値は「仮の初期値 1」</td><td>選択 10000・未選択 8000（<a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a> / <a href="https://github.com/H4aruki/MyTechPulse/issues/201">#201</a>）</td></tr>
     <tr><td><code>AGENTS.md</code> パーソナライズ仕様 3</td><td>順位は <code>タグ重みの合計 × (likes + 1)</code>（提供元を区別せず）</td><td>Qiita のみ ×(likes+1)。Zenn は合計のみ（<code>score.go</code>）</td></tr>
-    <tr><td><code>FeaturesList.md</code> §3、README Roadmap</td><td>ログイン試行制限・パスワード強度チェックが「未実装」</td><td>実装済み（#217、Issue #186 CLOSED）</td></tr>
+    <tr><td><code>FeaturesList.md</code> §3、README Roadmap</td><td>ログイン試行制限・パスワード強度チェックが「未実装」</td><td>実装済み（<a href="https://github.com/H4aruki/MyTechPulse/pull/217">#217</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/186">#186</a> CLOSED）</td></tr>
     <tr><td><code>DataBaseArchitecture.md</code> §1</td><td>テーブルは10個</td><td>パスキーの3表（00007）を加えると13個</td></tr>
   </table></div>
   <p><small>#203 以前に登録した既存利用者の <code>recommend</code> の実データがどうなっているかは<b>未確認</b>（本番DBは見ていない）。</small></p>
@@ -372,14 +413,31 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
 <section id="s11">
   <h2><span class="no">11</span>これから（未マージ・未実装。本番では動いていない）</h2>
   <ul>
-    <li><span class="pill warn">PR OPEN</span> #242 選ばなかったタグの初期値を0にし、空いたフィード枠を人気記事で埋める</li>
-    <li><span class="pill warn">Issue OPEN</span> #66 記事取得を都度実行から定期一括実行へ</li>
-    <li><span class="pill warn">Issue OPEN</span> #236 記事の保存（お気に入り）</li>
-    <li><span class="pill warn">Issue OPEN</span> #241 興味タグに似たタグの記事を空き枠に</li>
+    <li><span class="pill warn">PR OPEN</span> <a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a> 選ばなかったタグの初期値を0にし、空いたフィード枠を人気記事で埋める（決定の正本は <a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> コメント。本番は未反映のため現行は未選択 0.8）</li>
+    <li><span class="pill warn">Issue OPEN</span> <a href="https://github.com/H4aruki/MyTechPulse/issues/239">#239</a> クリックAPIの任意タグ登録（<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> 決定: 進める順は #240 → #239 → #66）</li>
+    <li><span class="pill warn">Issue OPEN</span> <a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a> 記事取得を都度実行から定期一括実行へ
+      <div class="rationale" style="margin-top:6px"><b>判断理由（コメントで決定・未実装）</b>
+        <ul>
+          <li><a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a> を先に進め、記事テーブルを一括取得時に作る。フィードは DB から読み、画面オープンでは外部APIを叩かない。</li>
+          <li>取得タグは <code>tag</code> 表の全タグ。実行は 1日3回（6:00・11:30・16:30 JST）案。Qiita 並列4・Zenn 並列2。古い記事削除は Qiita5日/Zenn14日（保存記事は消さない）。</li>
+          <li><a href="https://github.com/H4aruki/MyTechPulse/issues/236">#236</a> の保存はその記事ID参照の上に載せる。</li>
+        </ul>
+      </div>
+    </li>
+    <li><span class="pill warn">Issue OPEN</span> <a href="https://github.com/H4aruki/MyTechPulse/issues/236">#236</a> 記事の保存（お気に入り）
+      <div class="rationale" style="margin-top:6px"><b>判断理由（コメントで決定・未実装）</b>
+        <ul>
+          <li>ログイン必須（端末またぎ・学習のため。ローカル保存案は却下）。記事行は <a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a> で作り、保存は参照のみ。</li>
+          <li>学習: 保存 +3000（クリック約1.5回分）。+2000 は差がつかず、+4000 は過学習、学習なしは却下。解除は基本学習に使わない（読み終え整理もありうる）。</li>
+          <li>誤タップ: 5秒取り消し表示、学習反映は保存から10秒後。確認ダイアログ毎回は却下。退会時 CASCADE 削除。</li>
+        </ul>
+      </div>
+    </li>
+    <li><span class="pill warn">Issue OPEN</span> <a href="https://github.com/H4aruki/MyTechPulse/issues/241">#241</a> 興味タグに似たタグの記事を空き枠に（<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> で人気記事埋めを先に採り、類似タグは後回し）</li>
     <li><span class="pill warn">Issue OPEN</span> #185 規約・プライバシーポリシー ／ #187 ログ整備・監視 ／ #188 バックアップ外部退避 ／ #55 移行手順と2GBプランの判断基準</li>
-    <li><span class="pill warn">Issue OPEN</span> #74 オリジン直アクセス遮断（Caddy 側の制限は #218 で main に入っているが、Issue は OPEN のまま。残作業の内容は未確認）</li>
+    <li><span class="pill warn">Issue OPEN</span> <a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> オリジン直アクセス遮断（Caddy 許可リストは <a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a> で main 済み。残作業は Lightsail FW の手動絞り込み。Tunnel は却下済み）</li>
   </ul>
-  <div class="src">出典: <code>gh issue/pr view</code>（2026-10-20 確認）、<code>TASKS.md</code></div>
+  <div class="src">出典: <code>gh issue/pr view</code>（2026-10-20 確認）、<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/236">#236</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/239">#239</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a>、<code>TASKS.md</code></div>
 </section>
 
 <!-- 12 -->
@@ -393,16 +451,19 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
   <h3>未確認（書かなかった／保留したこと）</h3>
   <ul>
     <li>Zenn API の既定の並び順（README は「トレンド順」と説明）</li>
-    <li>#203 以前の登録者の興味度データの実態</li>
-    <li>#74 の残作業の内容</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a> 以前の登録者の興味度データの実態（本番DB未確認。<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> で「クリック0回の人だけ 1→10000」方針は決定済み・未実行）</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> の Lightsail FW 手動作業が本番で完了したか（文書上の残作業。Caddy 側は <a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a> 済み）</li>
     <li>Lightsail の実メモリ使用量の最新値（ADR に「起動直後で約半分」とあるのみ）</li>
-    <li>フロントエンド各ライブラリ・Caddy・GitHub Actions を選んだ理由（文書に記載なし）</li>
+    <li>フロントエンド各ライブラリ・Caddy・GitHub Actions を選んだ理由（文書・Issue/PRに理由の記録なし）</li>
+    <li>未選択初期値 0.8 の数値根拠（<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>: 記録なしと明記。本番はまだ 0.8）</li>
   </ul>
+  <h3>判断理由の主な Issue / PR</h3>
+  <p><small>認証: <a href="https://github.com/H4aruki/MyTechPulse/issues/186">#186</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/217">#217</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/221">#221</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/228">#228</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/229">#229</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/230">#230</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/232">#232</a> ／ 興味・推薦: <a href="https://github.com/H4aruki/MyTechPulse/issues/201">#201</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/206">#206</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/208">#208</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/239">#239</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a> ／ マイページ: <a href="https://github.com/H4aruki/MyTechPulse/issues/235">#235</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/238">#238</a> ／ これから: <a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/236">#236</a> ／ 入口: <a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a> ／ 構成: ADR 0001〜0003</small></p>
   <h3>主な出典ファイル</h3>
   <p><small><code>README.md</code> / <code>AGENTS.md</code> / <code>TASKS.md</code> / <code>docs/adr/0001〜0003</code> / <code>docs/BasicDesignSpecifications/{SystemArchitectureDiagram,DataBaseArchitecture,FeaturesList}.md</code> / <code>docs/deploy/go-auto-deploy.md</code> / <code>frontend/package.json</code> / <code>frontend/src/App.tsx</code> / <code>server/go.mod</code> / <code>docker-compose.yml</code> / <code>Caddyfile</code> / <code>server/Dockerfile</code> / <code>.github/workflows/ci.yml</code> / <code>server/internal/{interest,recommendation,auth,passkey,provider,store,platform/config,app}</code> / <code>server/db/{migrations,queries}</code></small></p>
 </section>
 
-<footer>MyTechPulse 整理ノート ・ main 5cc75fd 基準 ・ 2026-10-20 作成（JST） ・ 秘密情報は含めていません</footer>
+<footer>MyTechPulse 整理ノート ・ main 5cc75fd 基準 ・ 2026-10-20 作成（JST） ・ 秘密情報は含めていません ・ 判断理由は ADR と Issue/PR コメントを併記</footer>
 </main>
 </div>
 </body>
