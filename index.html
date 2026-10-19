@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>MyTechPulse 本番アーキテクチャ整理ノート（main 5cc75fd 時点）</title>
+<style>
+:root{
+  --bg:#f7f7f4; --card:#ffffff; --ink:#1d2330; --sub:#5b6474; --line:#e3e5e8;
+  --accent:#2f6fde; --accent-soft:#e8f0fd; --ok:#1f8a4c; --ok-soft:#e5f5ec;
+  --warn:#b26a00; --warn-soft:#fff3df; --ng:#c0392b; --ng-soft:#fdecea;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:16px}
+body{margin:0;background:var(--bg);color:var(--ink);font:15.5px/1.75 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",Meiryo,sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 20px 80px;display:grid;grid-template-columns:250px minmax(0,1fr);gap:28px}
+header.hero{grid-column:1/-1;background:linear-gradient(135deg,#1d2a4a,#2f6fde);color:#fff;border-radius:16px;padding:28px 30px}
+header.hero h1{margin:0 0 6px;font-size:1.55rem;line-height:1.4}
+header.hero p{margin:4px 0;opacity:.92}
+.badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.badge{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);border-radius:999px;padding:2px 12px;font-size:.82rem}
+nav.toc{position:sticky;top:16px;align-self:start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 14px 10px;max-height:calc(100vh - 32px);overflow:auto}
+nav.toc h2{font-size:.85rem;margin:0 0 6px;color:var(--sub);letter-spacing:.05em}
+nav.toc ol{margin:0;padding-left:1.3em;font-size:.9rem}
+nav.toc li{margin:3px 0}
+nav.toc a{color:var(--ink);text-decoration:none}
+nav.toc a:hover{color:var(--accent)}
+main{min-width:0}
+section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px}
+section>h2{margin:0 0 12px;font-size:1.25rem;display:flex;align-items:baseline;gap:10px}
+section>h2 .no{color:var(--accent);font-family:var(--mono);font-size:1rem}
+h3{font-size:1.02rem;margin:18px 0 6px}
+p{margin:6px 0 10px}
+code,kbd{font-family:var(--mono);font-size:.86em;background:#f0f2f5;border-radius:4px;padding:1px 5px}
+pre{font-family:var(--mono);font-size:.84rem;background:#0f1729;color:#e6ebf5;border-radius:10px;padding:14px 16px;overflow:auto;line-height:1.6}
+table{width:100%;border-collapse:collapse;margin:8px 0 12px;font-size:.92rem}
+th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+th{background:#f4f6f9;font-weight:600;white-space:nowrap}
+.tbl{overflow-x:auto}
+.src{font-size:.78rem;color:var(--sub);border-top:1px dashed var(--line);margin-top:14px;padding-top:8px}
+.src code{font-size:.95em}
+.callout{border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;padding:10px 14px;margin:10px 0}
+.callout.warn{border-color:var(--warn);background:var(--warn-soft)}
+.callout.ng{border-color:var(--ng);background:var(--ng-soft)}
+.callout.ok{border-color:var(--ok);background:var(--ok-soft)}
+.pill{display:inline-block;font-size:.75rem;border-radius:999px;padding:0 9px;line-height:1.7;font-weight:600;vertical-align:middle}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.ng{background:var(--ng-soft);color:var(--ng)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.oneliner{font-size:1.15rem;font-weight:700;margin:4px 0 10px}
+/* architecture diagram */
+.arch{display:grid;grid-template-columns:1fr 1fr 1.5fr 1fr;gap:12px;align-items:stretch;margin:6px 0 4px}
+.zone{border:2px dashed #c9d2e3;border-radius:12px;padding:10px;position:relative;background:#fbfcfe}
+.zone>.zt{font-size:.75rem;font-weight:700;color:var(--sub);margin-bottom:6px}
+.node{background:#fff;border:1.5px solid #9fb6e6;border-radius:9px;padding:7px 9px;margin:6px 0;font-size:.85rem;line-height:1.45}
+.node b{display:block;font-size:.88rem}
+.node small{color:var(--sub)}
+.node.db{border-color:#7fb89a;background:#f3fbf6}
+.node.ext{border-color:#e0b46a;background:#fffaf0}
+.node.edge{border-color:#f39c4a;background:#fff6ee}
+.flow{font-size:.85rem;margin:10px 0 0;padding-left:1.2em}
+.steps{counter-reset:s;list-style:none;padding:0;margin:8px 0}
+.steps>li{counter-increment:s;position:relative;padding:8px 10px 8px 46px;border:1px solid var(--line);border-radius:10px;margin:8px 0;background:#fcfdff}
+.steps>li::before{content:counter(s);position:absolute;left:10px;top:8px;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;display:grid;place-items:center;font-size:.85rem}
+.formula{font-family:var(--mono);background:#f4f6fb;border:1px solid #dfe5f2;border-radius:10px;padding:12px 14px;font-size:.92rem;line-height:1.8;overflow-x:auto}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.qa dt{font-weight:700;margin-top:10px}
+.qa dd{margin:2px 0 6px 0;padding-left:14px;border-left:3px solid var(--line)}
+footer{color:var(--sub);font-size:.8rem;text-align:center;margin-top:24px}
+@media (max-width:900px){
+  .wrap{grid-template-columns:1fr;padding:14px 12px 60px}
+  nav.toc{position:static;max-height:none}
+  .arch{grid-template-columns:1fr}
+  .grid2{grid-template-columns:1fr}
+  section{padding:18px 16px}
+}
+@media print{
+  body{background:#fff;font-size:11pt}
+  .wrap{display:block;max-width:none;padding:0}
+  nav.toc{position:static;border:none;page-break-after:always}
+  header.hero{background:#fff;color:#000;border:1px solid #999}
+  .badge{border-color:#999;color:#000;background:#fff}
+  section{break-inside:avoid-page;border-color:#bbb}
+  pre{background:#f4f4f4;color:#000;border:1px solid #ccc;white-space:pre-wrap}
+  a{color:#000}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>MyTechPulse ― 本番で「今」動いていることだけ</h1>
+  <p>頭の整理・アーキテクチャ整理ノート（K.Haruki / GitHub <code style="background:rgba(255,255,255,.18);color:#fff">@H4aruki</code>）</p>
+  <p>基準: <code style="background:rgba(255,255,255,.18);color:#fff">main 5cc75fd</code>（2026-10-19 09:53 JST コミット「ログイン後にマイページを追加する (#238)」）。この版の CI「Go版の本番への反映」ジョブは 2026-10-19 09:59 JST に成功。</p>
+  <div class="badges">
+    <span class="badge">事実はコード優先</span><span class="badge">未マージ・未実装は §12 に隔離</span><span class="badge">時刻はすべて JST</span><span class="badge">作成 2026-10-20</span>
+  </div>
+</header>
+
+<nav class="toc" aria-label="目次">
+  <h2>目次</h2>
+  <ol>
+    <li><a href="#s1">プロダクト一言</a></li>
+    <li><a href="#s2">システム全体図</a></li>
+    <li><a href="#s3">技術スタックと選択理由</a></li>
+    <li><a href="#s4">ドメインモデル</a></li>
+    <li><a href="#s5">おすすめの流れ</a></li>
+    <li><a href="#s6">興味学習の式</a></li>
+    <li><a href="#s7">認証</a></li>
+    <li><a href="#s8">インフラ・デプロイ・CI</a></li>
+    <li><a href="#s9">制約・トレードオフ</a></li>
+    <li><a href="#s10">文書とコードの食い違い</a></li>
+    <li><a href="#s11">これから（未マージ・未実装）</a></li>
+    <li><a href="#s12">出典まとめ・未確認事項</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<!-- 1 -->
+<section id="s1">
+  <h2><span class="no">01</span>プロダクト一言</h2>
+  <p class="oneliner">Qiita と Zenn から、利用者の興味タグに合う新しい技術記事を集めて並べる、パーソナライズ技術ニュースWebアプリ。</p>
+  <ul>
+    <li>登録時に興味タグを選ぶ → 記事一覧を開くたびに、興味の強い<b>上位5タグ</b>で Qiita・Zenn を<b>その場で</b>検索 → 点数順に<b>提供元ごと最大10件</b>表示。</li>
+    <li>記事をクリックすると、その記事のタグの興味が強まり、他のタグは少し弱まる（直近の関心に寄る）。</li>
+    <li>公開URL: <code>https://mytechpulse.net</code>（画面）／ API は <code>api.mytechpulse.net</code>。</li>
+    <li>ログイン後の画面: 記事一覧 <code>/app/articles</code>、マイページ <code>/app/mypage</code>（#238、利用者名の表示と設定へのリンク）、設定 <code>/app/settings</code>（パスキー管理）。</li>
+    <li>記事を開いた利用者向けのアンケート（利用者フィードバック、<code>/api/v1/user-feedback/*</code>）も動いている。</li>
+  </ul>
+  <div class="src">出典: <code>README.md</code>、<code>AGENTS.md</code>「プロジェクト概要」、<code>frontend/src/App.tsx</code>、<code>docs/BasicDesignSpecifications/FeaturesList.md</code> F-7-2、<code>server/internal/userfeedback/</code></div>
+</section>
+
+<!-- 2 -->
+<section id="s2">
+  <h2><span class="no">02</span>システム全体図</h2>
+  <div class="arch" role="img" aria-label="ブラウザ、Cloudflare、Lightsail、外部API の構成図">
+    <div class="zone"><div class="zt">利用者</div>
+      <div class="node"><b>ブラウザ</b><small>LP（静的HTML）＋ React SPA（/app/）</small></div>
+    </div>
+    <div class="zone"><div class="zt">Cloudflare</div>
+      <div class="node edge"><b>Cloudflare Pages</b><small>LP・SPA の静的ファイル配信<br>mytechpulse.net</small></div>
+      <div class="node edge"><b>Cloudflare プロキシ</b><small>api.mytechpulse.net の前段。<br>接続元IPは <code>CF-Connecting-IP</code></small></div>
+    </div>
+    <div class="zone"><div class="zt">AWS Lightsail（東京・1GB）／ Docker Compose</div>
+      <div class="node"><b>Caddy 2</b><small>HTTPS終端・証明書自動更新・HSTS<br>Cloudflare の IP 範囲以外は 403</small></div>
+      <div class="node"><b>Go API（api-go）</b><small>Huma v2 / モジュラーモノリス<br>GHCR のイメージを digest 固定で pull・FROM scratch・非root</small></div>
+      <div class="node db"><b>PostgreSQL 17（alpine）</b><small>user / tag / recommend / auth_session / パスキー / アンケート<br><b>記事テーブルなし</b>・127.0.0.1 にのみ公開</small></div>
+    </div>
+    <div class="zone"><div class="zt">外部（毎リクエスト）</div>
+      <div class="node ext"><b>Qiita API v2</b><small><code>/api/v2/tags/{tag}/items</code><br>トークン付き・per_page=20</small></div>
+      <div class="node ext"><b>Zenn API</b><small><code>/api/articles?topicname=…</code><br>トークン不要・count=5・公式仕様なし</small></div>
+    </div>
+  </div>
+  <ol class="flow">
+    <li>ブラウザ → Cloudflare Pages で画面を取得。</li>
+    <li>SPA → <code>https://api.mytechpulse.net/api/v1/…</code>（JSON・Cookie 付き・クロスオリジン）→ Cloudflare → Caddy → <code>api-go:8001</code>。</li>
+    <li>API → DB（興味度・セッション）／ API → Qiita・Zenn（並列取得）。</li>
+  </ol>
+  <h3>API 内部（<code>server/internal/</code>）</h3>
+  <div class="tbl"><table>
+    <tr><th>パッケージ</th><th>役割</th></tr>
+    <tr><td><code>app/</code></td><td>組み立て。ミドルウェア順: RequestID → Recover → AccessLog → CORS → CSRF → Huma</td></tr>
+    <tr><td><code>auth/</code> ・ <code>passkey/</code></td><td>登録・ログイン・ログアウト・セッション確認、ログイン試行制限／パスキー（WebAuthn）</td></tr>
+    <tr><td><code>interest/</code></td><td>興味度の固定小数点計算（減衰・加算）とタグ正規化</td></tr>
+    <tr><td><code>recommendation/</code></td><td>上位タグ選択・並列取得・絞り込み・採点・並べ替え（<code>/api/v1/feed</code>、クリック記録）</td></tr>
+    <tr><td><code>provider/</code>（<code>qiita/</code>・<code>zenn/</code>）・<code>article/</code></td><td>外部取得（https・許可ホストのみ・リダイレクト非追従・サイズ上限）と共通記事型の検証</td></tr>
+    <tr><td><code>store/</code></td><td>sqlc 生成コード（<code>store/dbgen</code>）でDB読み書き・トランザクション</td></tr>
+    <tr><td><code>platform/</code> ・ <code>health/</code> ・ <code>userfeedback/</code></td><td>設定・ログ・HTTP共通／<code>/health/live</code>・<code>/health/ready</code>／アンケート</td></tr>
+  </table></div>
+  <div class="src">出典: <code>docs/BasicDesignSpecifications/SystemArchitectureDiagram.md</code>、<code>docker-compose.yml</code>、<code>Caddyfile</code>、<code>server/Dockerfile</code>、<code>server/internal/app/app.go</code>、<code>server/internal/provider/{qiita,zenn}/client.go</code>、<code>server/internal/provider/httpclient.go</code>、<code>TASKS.md</code>、#218</div>
+</section>
+
+<!-- 3 -->
+<section id="s3">
+  <h2><span class="no">03</span>技術スタックと「なぜその選択か」</h2>
+  <div class="tbl"><table>
+    <tr><th>区分</th><th>採用（main の実バージョン）</th><th>理由（文書の記載）</th></tr>
+    <tr><td>画面</td><td>React 19.2 / TypeScript 6.0 / Vite 8 / Tailwind CSS 4（<code>@tailwindcss/vite</code>）</td><td>文書に理由なし・事実のみ</td></tr>
+    <tr><td>画面のデータ取得・フォーム</td><td>TanStack Query 5 / React Router DOM 7 / React Hook Form 7 + zod 4（<code>@hookform/resolvers</code>）</td><td>文書に理由なし・事実のみ</td></tr>
+    <tr><td>画面の検査</td><td>oxlint / Vitest 5 + Testing Library / <code>openapi-typescript</code> でAPI型を生成し差分をCIで検査</td><td>API契約と画面の型ずれをCIで止める（<code>AGENTS.md</code>「保護APIを変更するとき…同時に更新」）</td></tr>
+    <tr><td>API</td><td>Go 1.26.4、標準HTTPサーバー + Huma v2（OpenAPI をコードから生成）</td><td>ADR 0001: 堅牢性・保守性・運用の単純さ・将来のチーム開発。Python からの移行（2026-10-07 本番切替）</td></tr>
+    <tr><td>構成</td><td>モジュラーモノリス（1配布単位、内部をパッケージで分割）</td><td>ADR 0001: 層の直訳は責務集中を残す／マイクロサービスは規模に対し運用負担が大きい</td></tr>
+    <tr><td>DBアクセス</td><td>pgx v5 + sqlc（SQLから型付きコード生成）</td><td>文書に「SQLを書き、型付きコードを自動生成」と記載。選択理由そのものは記載なし</td></tr>
+    <tr><td>マイグレーション</td><td>goose v3（<code>server/cmd/migrate</code>）。<b>追加のみ</b>を <code>additive_test.go</code> で強制</td><td>自動デプロイ失敗時に API だけ旧版へ戻しても、DB を巻き戻さずに済ませるため</td></tr>
+    <tr><td>DB</td><td>PostgreSQL 17（<code>postgres:17-alpine</code>）を API と同じサーバーに同居</td><td>ADR 0003: テーブルが少なく書き込みも少ない、マネージドDBは月$8〜25で予算超過、1画面で複数回問い合わせるので外に出すと遅延が積み上がる</td></tr>
+    <tr><td>認証</td><td>サーバー側セッション（HttpOnly Cookie）＋ bcrypt、パスキー（<code>go-webauthn/webauthn</code> v0.18）</td><td>ADR 0002: XSS 時に JS から認証情報を読まれる範囲を減らす／ログアウト・期限切れをサーバー側で確実に失効</td></tr>
+    <tr><td>エラー形式</td><td>Problem Details（RFC 9457）＋HTTPステータス</td><td>文書に理由なし・事実のみ（旧Python版の「本文の status」規約は廃止）</td></tr>
+    <tr><td>ホスティング</td><td>Cloudflare Pages（画面）＋ AWS Lightsail 東京 1GB 1台（API・DB・Caddy）</td><td>ADR 0003: 合計 月約$8。却下: Vercel（無料は非商用）、GitHub Pages（接続先URLの書き換え不可）、Netlify（転送量上限）、Xserver VPS（年契約）、EC2（通信従量）、GCP無料VM（米国のみ）、Oracle無料VM（アカウント作成不可）。次点: さくらVPS</td></tr>
+    <tr><td>HTTPS終端</td><td>Caddy 2（証明書の自動取得・更新）</td><td>文書に「証明書の自動取得・更新を担う」と記載。他候補との比較は記載なし</td></tr>
+    <tr><td>CI/CD</td><td>GitHub Actions（<code>ci.yml</code>・<code>release.yml</code> ほか）、イメージは GHCR</td><td>文書に選択理由なし・事実のみ</td></tr>
+  </table></div>
+  <div class="src">出典: <code>frontend/package.json</code>、<code>server/go.mod</code>、<code>docs/adr/0001〜0003</code>、<code>docs/BasicDesignSpecifications/SystemArchitectureDiagram.md</code> §2、<code>server/db/migrations/README.md</code>、<code>AGENTS.md</code></div>
+</section>
+
+<!-- 4 -->
+<section id="s4">
+  <h2><span class="no">04</span>ドメインモデル</h2>
+  <div class="grid2">
+    <div>
+      <div class="tbl"><table>
+        <tr><th>テーブル</th><th>意味</th></tr>
+        <tr><td><code>user</code></td><td>利用者。<code>user_ID</code>・<code>user_name</code>（一意・50字）・<code>password</code>（bcrypt）・<code>role</code>（member/admin。admin機能は無い）</td></tr>
+        <tr><td><code>tag</code></td><td>技術タグ名。会員登録画面の100タグを移行で投入（00006）。クリックで未知のタグが来たらその場で追加</td></tr>
+        <tr><td><code>recommend</code></td><td><b>興味度</b>。(user_ID, tag_ID) 複合主キー＋ <code>match_int</code>（0〜1 を 10000 倍した整数）。user と tag の多対多を「値つき」で表す中核テーブル</td></tr>
+        <tr><td><code>auth_session</code></td><td>端末ごとのセッション。乱数トークンの SHA-256（32バイト）と有効期限のみ</td></tr>
+        <tr><td><code>auth_webauthn_user</code> / <code>auth_passkey</code> / <code>auth_webauthn_challenge</code></td><td>パスキー（00007）</td></tr>
+        <tr><td><code>feedback_*</code>（6表）</td><td>アンケートの定義・表示記録・回答・回答時点の上位5タグのスナップショット</td></tr>
+      </table></div>
+    </div>
+    <div>
+      <div class="callout ng"><b>記事は DB に無い。</b> 記事テーブルは存在せず、記事一覧を開くたびに Qiita・Zenn から取得して、その場で採点して返すだけ。記事のキャッシュ・保存・既読管理もない。</div>
+      <div class="callout"><b>タグ名の正規化:</b> 比較は「前後空白を除いて小文字化」（<code>interest.NormalizeTag</code>）。作成時は正規化名で <code>pg_advisory_xact_lock</code> を取ってから再検索し、同時登録でも重複させない。DB に正規化後同名のタグが複数あると、安全のためフィード取得を 500 で止める。</div>
+      <div class="callout warn">移行は <b>00001〜00007</b>。出発点 00001 は Python 版時代の3表と同じ形（違えば止まる）。</div>
+    </div>
+  </div>
+  <pre>user 1 ──< recommend >── 1 tag        recommend.match_int : 0..10000（= 0.0..1.0）
+user 1 ──< auth_session                 auth_session.token_hash : SHA-256(32B)
+user 1 ──< auth_passkey                 （記事テーブル: なし）</pre>
+  <div class="src">出典: <code>docs/BasicDesignSpecifications/DataBaseArchitecture.md</code>、<code>server/db/migrations/00001〜00007</code>、<code>server/db/queries/{signup,recommendations}.sql</code>、<code>server/internal/interest/normalize.go</code></div>
+</section>
+
+<!-- 5 -->
+<section id="s5">
+  <h2><span class="no">05</span>おすすめの流れ（<code>GET /api/v1/feed</code> 1リクエストごと）</h2>
+  <ol class="steps">
+    <li><b>本人確認</b>: セッションCookie → <code>auth.Authenticate</code>。失敗は 401。</li>
+    <li><b>興味度を読む</b>: その利用者の <code>recommend</code> 全行を取得。正規化後に同名タグがあればエラー（500）。</li>
+    <li><b>上位5タグ</b>: 値の降順、同値は正規化タグ名の昇順で並べて先頭5件。</li>
+    <li><b>並列取得</b>: 5タグ × {Qiita, Zenn} ＝ <b>最大10個の goroutine</b>。結果はバッファ付き channel で全件回収（<b>errgroup は使っていない</b>）。全体の期限 <code>FEED_TIMEOUT</code> 既定 8秒、外部1回あたり <code>PROVIDER_TIMEOUT</code> 既定 5秒。<br><small>Qiita: <code>/api/v2/tags/{tag}/items?page=1&amp;per_page=20</code>（Bearer トークン）／ Zenn: <code>/api/articles?topicname={tag}&amp;count=5</code></small></li>
+    <li><b>検証と期間の絞り込み</b>: 記事ごとに検証。Qiita は<b>直近5日</b>以内のみ。Zenn は<b>直近14日</b>以内を採用し、<b>0件のときだけ</b>古い記事で補う（追加の問い合わせはしない）。Zenn 記事には検索に使ったタグを記事タグとして足す。</li>
+    <li><b>重複除去</b>: URL 単位でまとめ、タグは和集合。</li>
+    <li><b>採点</b>（§6 の式）→ 点数降順、同点は公開日時が新しい順 → 提供元 → URL。</li>
+    <li><b>マージして返す</b>: <code>qiita_articles</code>（最大10）・<code>zenn_articles</code>（最大10）・<code>warnings</code>。片方の提供元だけ失敗 → 成功側を返し <code>warnings</code> に <code>provider_unavailable</code>。両方失敗 → <b>503</b>。</li>
+  </ol>
+  <h3>採点式</h3>
+  <div class="formula">
+    興味合計 = Σ（記事タグのうち、利用者が recommend に持つタグの match_int）<br>
+    　※ 合計に使うのは<b>上位5タグだけでなく、利用者が持つ全タグの重み</b><br>
+    Qiita の点数 = 興味合計 × (likes + 1)<br>
+    Zenn の点数　= 興味合計（いいね数は掛けない）
+  </div>
+  <p><small>Zenn に反響を掛けない理由は README に「取得時点で提供元のトレンド順に絞り込まれているため重ねて数えない」とある。コード上の Zenn 呼び出しは <code>topicname</code> と <code>count</code> だけで、並び順の指定パラメータは無い（Zenn 側の既定の並び順は<b>未確認</b>）。</small></p>
+  <div class="src">出典: <code>server/internal/recommendation/{service,score,handler}.go</code>、<code>server/internal/provider/{qiita,zenn}/client.go</code>、<code>server/internal/platform/config/config.go</code>、<code>README.md</code>「仕組み」、<code>AGENTS.md</code>「パーソナライズの重要仕様」</div>
+</section>
+
+<!-- 6 -->
+<section id="s6">
+  <h2><span class="no">06</span>興味学習の式（固定小数点）</h2>
+  <div class="formula">
+    Scale = 10000（1.0）　　DecayNumerator/DecayDenominator = 8/10　　ClickBoost = 2000（0.2）<br><br>
+    【会員登録時（#203、main）】選んだタグ = 10000（1.0）／ tag 表にある選ばなかった全タグ = 8000（0.8）<br>
+    　→ 利用者作成・興味度・セッションを <b>1トランザクション</b>で作成<br><br>
+    【記事クリック時 POST /api/v1/feedback/article-clicks】<br>
+    　① 全タグ: v ← clamp(v) × 8 / 10　（整数演算）<br>
+    　② クリックした記事のタグ（正規化・重複除去）: v ← min(v + 2000, 10000)<br>
+    　③ 未所持のタグ: 2000 で新規作成（tag 表に無ければ tag も作成）
+  </div>
+  <h3>計算例</h3>
+  <div class="tbl"><table>
+    <tr><th>タグ</th><th>登録直後</th><th>[Go, Docker] の記事をクリック後</th></tr>
+    <tr><td>Go（選択）</td><td>10000</td><td>10000×0.8＋2000 = <b>10000</b></td></tr>
+    <tr><td>React（選択）</td><td>10000</td><td>8000</td></tr>
+    <tr><td>Docker（未選択）</td><td>8000</td><td>8000×0.8＋2000 = <b>8400</b></td></tr>
+    <tr><td>その他の未選択</td><td>8000</td><td>6400</td></tr>
+  </table></div>
+  <ul>
+    <li>同じ利用者のクリック更新は <code>SELECT … FOR UPDATE</code>（利用者行ロック）付きトランザクションで直列化。</li>
+    <li>入力はタグ1〜50件・各1〜50文字。学習の送信が失敗しても画面にエラーは出さない（閲覧を妨げない）。</li>
+    <li>浮動小数点を使わないのは、小数のまま保存すると誤差が出るため（DB文書の説明）。</li>
+  </ul>
+  <div class="callout warn">事実として言える副作用: 選んだタグが5個未満だと、上位5の残りは 8000 同士の同点になり、<b>正規化タグ名の昇順</b>で埋まる。これを変える提案が未マージの PR #242（§12）。</div>
+  <div class="src">出典: <code>server/internal/interest/{model,click}.go</code>、<code>server/internal/store/{auth,interest}.go</code>、<code>server/db/queries/signup.sql</code>、<code>server/internal/recommendation/handler.go</code>、PR #203（MERGED）、<code>FeaturesList.md</code> F-5-4</div>
+</section>
+
+<!-- 7 -->
+<section id="s7">
+  <h2><span class="no">07</span>認証</h2>
+  <h3>セッション（ADR 0002）</h3>
+  <ul>
+    <li>ログイン/登録成功で 32バイト乱数トークンを発行 → Cookie で渡し、DB には <b>SHA-256 だけ</b>保存。既定有効期限 24時間（<code>SESSION_TTL</code>）。</li>
+    <li>Cookie: 本番 <code>__Host-mtp_session</code>（HttpOnly・Secure・SameSite=Lax・Path=/）、開発 <code>mtp_session</code>。</li>
+    <li>ログアウトでその端末のセッション行だけ削除（他端末は残る）。期限切れの掃除はログインのたびに実行。</li>
+    <li>CSRF: <code>/api/v1/</code> の更新系は「許可 Origin」かつ「<code>X-MTP-CSRF: 1</code> ヘッダー」が必須。CORS も許可サイト限定。</li>
+    <li>旧 Python 版の JWT（localStorage）は引き継がず、切替時に一度だけ再ログイン。</li>
+  </ul>
+  <h3>パスワード</h3>
+  <ul>
+    <li>bcrypt コスト 12（旧 Python/Passlib と同じ。既存の <code>$2b$</code> ハッシュをそのまま検証）。72バイト上限。</li>
+    <li>存在しない利用者でもダミーハッシュと照合し、応答は区別しない（どちらも <code>invalid_credentials</code> / 401）。</li>
+    <li>新規パスワード: 12文字以上・利用者名と同一不可・よく使われるパスワード一覧に含まれないこと（文字種ルールなし、NIST SP 800-63B）。ログイン照合には適用しない。（#217）</li>
+    <li>ログイン試行制限（プロセス内メモリ、#217）: 利用者名ごと15分に5回失敗で 1→2→4…分の締め出し（最大15分）、IPごと15分に20回失敗で締め出し、パスキーのログイン開始は IP ごと15分に60回まで。IP は <code>CF-Connecting-IP</code>。本番で <code>CLIENT_IP_HEADER</code> が空なら起動しない（#231）。</li>
+  </ul>
+  <h3>パスキー（WebAuthn）</h3>
+  <ul>
+    <li>登録・一覧・名前変更・削除（設定画面、#221）／ログイン（#228）／自動入力 conditional UI（#229）。</li>
+    <li>ログインは利用者名なしで選ばせる（<code>allowCredentials</code> 空）。</li>
+    <li>チャレンジ: 使い捨てトークンを<b>レスポンス本文の <code>challengeToken</code></b> で渡し、完了時に本文で返す。DB には SHA-256 のみ、5分で失効、1回で消費。Cookie 受け渡しから本文へ変えたのは、複数タブで先に開いたタブのログインが失敗する問題のため（#230 → #232）。</li>
+    <li>RP ID は本番 <code>mytechpulse.net</code> が既定（<code>WEBAUTHN_RP_ID</code>）。本番の origin は https・localhost 不可を起動時に検査。</li>
+  </ul>
+  <div class="src">出典: <code>docs/adr/0002-use-server-side-sessions.md</code>、<code>server/internal/auth/{password,policy,limiter,handler,session}.go</code>、<code>server/internal/passkey/{handler,model,service}.go</code>、<code>server/internal/platform/config/config.go</code>、<code>server/db/migrations/00007_auth_passkey.sql</code>、#217・#221・#228・#229・#230・#231・#232</div>
+</section>
+
+<!-- 8 -->
+<section id="s8">
+  <h2><span class="no">08</span>インフラ・デプロイ・CI</h2>
+  <h3>本番の置き方</h3>
+  <ul>
+    <li>Lightsail 東京 1GB（文書上 約$7/月）。メモリ対策にスワップ 2GB・<code>vm.swappiness=10</code>。</li>
+    <li>Docker Compose: <code>db</code>（postgres:17-alpine、127.0.0.1:5432 のみ）、<code>api-go</code>（127.0.0.1:8001 のみ）、<code>caddy</code>（80/443、443/udp）。外部へは Caddy だけが開く。</li>
+    <li>Caddy は Cloudflare の IP 範囲以外を 403（#218）。HSTS 付与。証明書は Let's Encrypt 自動更新。</li>
+    <li>API イメージ: マルチステージで最終 <code>FROM scratch</code>、<code>USER 65532</code>（非root）。本番では Swagger UI（<code>/docs</code>）を有効にすると起動しない。</li>
+    <li>バックアップ: <code>pg_dump -Fc</code>。デプロイ前に自動取得、日次は cron 想定、7日超を自動削除（<code>.keep</code> は残す）。<b>保存先は同じサーバー内</b>。</li>
+  </ul>
+  <h3>CI（<code>.github/workflows/ci.yml</code>、PR と main の push）</h3>
+  <div class="tbl"><table>
+    <tr><th>ジョブ</th><th>内容</th></tr>
+    <tr><td>フロントエンドの書き方チェック</td><td>API型の生成差分、oxlint、Vitest（カバレッジ）、<code>tsc -b</code> + build</td></tr>
+    <tr><td>Goバックエンドの検査</td><td>gofmt・go vet・<code>go test -race -cover</code>・build</td></tr>
+    <tr><td>sqlc と OpenAPI の生成差分</td><td>生成物がコードと一致するか</td></tr>
+    <tr><td>Go API の image 検査</td><td>build、起動・疎通・非root の確認</td></tr>
+    <tr><td>設定まわりの仕掛けの確認</td><td>フック類の試験、Caddyfile 検証、外部 action の固定（pin）・文書整合</td></tr>
+    <tr><td>本番への反映が要るか</td><td>変更ファイルで判定。文書・試験だけなら反映しない。比較起点は「最後に反映成功した main のコミット」（#213）</td></tr>
+    <tr><td>配布物の作成 → Go版の本番への反映</td><td>下の流れ</td></tr>
+  </table></div>
+  <h3>自動デプロイ（人の承認なし。<code>GO_DEPLOY_ENABLED=true</code> のときだけ）</h3>
+  <ol class="steps">
+    <li>配布物（API イメージ・画面・運用ファイル・manifest）を一度だけ作り、<b>digest で固定</b>。</li>
+    <li>SHA-256 照合 → サーバーへ送る → <code>ops/deploy_go.sh</code>: ロック → 入力確認 → 現行版を記録（戻し先）→ 新イメージ取得 → <b>DBバックアップ</b> → <b>移行（追加のみ・入れ替えより先）</b> → 入れ替え → 疎通確認。</li>
+    <li>疎通失敗なら確認なしで<b>直前のイメージへ自動ロールバック</b>（DB は戻さない）。</li>
+    <li>API 成功時だけ Cloudflare Pages へ画面を公開（画面は新 API 前提のため）。サーバー上でソースからビルドはしない。</li>
+  </ol>
+  <p>直近: main <code>5cc75fd</code> の CI 実行で全ジョブ成功、「Go版の本番への反映」は 2026-10-19 09:59 JST に成功。本番は Go 版（2026-10-07 切替、#127）、自動デプロイは 2026-10-08 から有効。</p>
+  <div class="src">出典: <code>docs/deploy/go-auto-deploy.md</code>、<code>docs/deploy/lightsail-provisioning.md</code>、<code>docs/adr/0003</code>、<code>.github/workflows/ci.yml</code>、<code>docker-compose.yml</code>、<code>Caddyfile</code>、<code>server/Dockerfile</code>、<code>ops/backup_db.sh</code>・<code>ops/prune_backups.sh</code>、<code>TASKS.md</code>、GitHub Actions run 39182816694</div>
+</section>
+
+<!-- 9 -->
+<section id="s9">
+  <h2><span class="no">09</span>設計上の制約・トレードオフ</h2>
+  <div class="tbl"><table>
+    <tr><th>決めたこと</th><th>得たもの</th><th>払っているコスト（事実）</th></tr>
+    <tr><td>記事を DB に持たず、毎リクエスト外部 API を呼ぶ</td><td>実装が単純、常に新しい記事、記事データの保守不要</td><td>表示ごとに最大10回の外部呼び出し。外部の遅延・障害・レート制限の影響を直接受ける（8秒で打ち切り、片側失敗は warnings）。日次一括化は未実装（#66）</td></tr>
+    <tr><td>Lightsail 1GB に API・DB・Caddy を同居</td><td>月約$8、DB往復が速い、構成が単純</td><td>単一障害点（サーバー停止＝全停止、要件上許容）。メモリが小さくスワップ前提</td></tr>
+    <tr><td>移行は追加のみ</td><td>API だけ旧版へ自動ロールバックしても DB 互換が保たれる</td><td>列の削除・改名・型変更ができず、古い列が残る</td></tr>
+    <tr><td>ログイン試行制限をプロセス内メモリで持つ</td><td>追加インフラ不要</td><td>再起動で数え直し。API が1台である前提</td></tr>
+    <tr><td>サーバー側セッション</td><td>即時失効・XSSで盗まれる範囲の縮小</td><td>毎リクエスト DB 参照、クロスオリジンなので CSRF 対策（Origin＋専用ヘッダー）が必要</td></tr>
+    <tr><td>興味度を整数（×10000）で保存・計算</td><td>誤差なし・決定的なテスト</td><td>クリップ（0〜10000）や整数除算の切り捨てを意識する必要</td></tr>
+    <tr><td>未選択タグも 0.8 で全行作成（#203）</td><td>選んだタグが少なくても上位5が埋まる</td><td>同点の未選択タグは名前順で選ばれる（意図との差は #242 で議論中）。利用者×全タグ分の行</td></tr>
+    <tr><td>人の承認なしの自動デプロイ</td><td>速く反映、手作業ミスなし</td><td>検査・自動ロールバック・digest 固定に依存</td></tr>
+  </table></div>
+  <div class="src">出典: <code>docs/adr/0003</code>、<code>DataBaseArchitecture.md</code> §4、<code>SystemArchitectureDiagram.md</code> §4、<code>server/internal/auth/limiter.go</code>、<code>server/internal/recommendation/service.go</code>、<code>docs/deploy/go-auto-deploy.md</code></div>
+</section>
+
+<!-- 10 -->
+<section id="s10">
+  <h2><span class="no">10</span>文書とコードの食い違い（実装を正とする）</h2>
+  <div class="tbl"><table>
+    <tr><th>文書</th><th>文書の記述</th><th>main のコード／事実</th></tr>
+    <tr><td><code>DataBaseArchitecture.md</code> §3-3</td><td>会員登録時の初期値は「仮の初期値 1」</td><td>選択 10000・未選択 8000（#203）</td></tr>
+    <tr><td><code>AGENTS.md</code> パーソナライズ仕様 3</td><td>順位は <code>タグ重みの合計 × (likes + 1)</code>（提供元を区別せず）</td><td>Qiita のみ ×(likes+1)。Zenn は合計のみ（<code>score.go</code>）</td></tr>
+    <tr><td><code>FeaturesList.md</code> §3、README Roadmap</td><td>ログイン試行制限・パスワード強度チェックが「未実装」</td><td>実装済み（#217、Issue #186 CLOSED）</td></tr>
+    <tr><td><code>DataBaseArchitecture.md</code> §1</td><td>テーブルは10個</td><td>パスキーの3表（00007）を加えると13個</td></tr>
+  </table></div>
+  <p><small>#203 以前に登録した既存利用者の <code>recommend</code> の実データがどうなっているかは<b>未確認</b>（本番DBは見ていない）。</small></p>
+  <div class="src">出典: 各文書と <code>server/internal/interest/model.go</code>、<code>server/internal/recommendation/score.go</code>、<code>server/internal/auth/{policy,limiter}.go</code>、<code>server/db/migrations/00007_auth_passkey.sql</code></div>
+</section>
+
+<!-- 11 -->
+<section id="s11">
+  <h2><span class="no">11</span>これから（未マージ・未実装。本番では動いていない）</h2>
+  <ul>
+    <li><span class="pill warn">PR OPEN</span> #242 選ばなかったタグの初期値を0にし、空いたフィード枠を人気記事で埋める</li>
+    <li><span class="pill warn">Issue OPEN</span> #66 記事取得を都度実行から定期一括実行へ</li>
+    <li><span class="pill warn">Issue OPEN</span> #236 記事の保存（お気に入り）</li>
+    <li><span class="pill warn">Issue OPEN</span> #241 興味タグに似たタグの記事を空き枠に</li>
+    <li><span class="pill warn">Issue OPEN</span> #185 規約・プライバシーポリシー ／ #187 ログ整備・監視 ／ #188 バックアップ外部退避 ／ #55 移行手順と2GBプランの判断基準</li>
+    <li><span class="pill warn">Issue OPEN</span> #74 オリジン直アクセス遮断（Caddy 側の制限は #218 で main に入っているが、Issue は OPEN のまま。残作業の内容は未確認）</li>
+  </ul>
+  <div class="src">出典: <code>gh issue/pr view</code>（2026-10-20 確認）、<code>TASKS.md</code></div>
+</section>
+
+<!-- 12 -->
+<section id="s12">
+  <h2><span class="no">12</span>出典まとめ・未確認事項</h2>
+  <h3>基準</h3>
+  <ul>
+    <li><code>main</code> = <code>5cc75fda985e053472a5034012b985c275d407c4</code>（2026-10-19 09:53:40 JST）。<code>git fetch</code> 後 origin/main と一致。</li>
+    <li>本番反映: 同コミットの CI 実行で「Go版の本番への反映」成功（2026-10-19 09:59 JST）。<b>本番サイトそのものへの直接アクセス確認はしていない。</b></li>
+  </ul>
+  <h3>未確認（書かなかった／保留したこと）</h3>
+  <ul>
+    <li>Zenn API の既定の並び順（README は「トレンド順」と説明）</li>
+    <li>#203 以前の登録者の興味度データの実態</li>
+    <li>#74 の残作業の内容</li>
+    <li>Lightsail の実メモリ使用量の最新値（ADR に「起動直後で約半分」とあるのみ）</li>
+    <li>フロントエンド各ライブラリ・Caddy・GitHub Actions を選んだ理由（文書に記載なし）</li>
+  </ul>
+  <h3>主な出典ファイル</h3>
+  <p><small><code>README.md</code> / <code>AGENTS.md</code> / <code>TASKS.md</code> / <code>docs/adr/0001〜0003</code> / <code>docs/BasicDesignSpecifications/{SystemArchitectureDiagram,DataBaseArchitecture,FeaturesList}.md</code> / <code>docs/deploy/go-auto-deploy.md</code> / <code>frontend/package.json</code> / <code>frontend/src/App.tsx</code> / <code>server/go.mod</code> / <code>docker-compose.yml</code> / <code>Caddyfile</code> / <code>server/Dockerfile</code> / <code>.github/workflows/ci.yml</code> / <code>server/internal/{interest,recommendation,auth,passkey,provider,store,platform/config,app}</code> / <code>server/db/{migrations,queries}</code></small></p>
+</section>
+
+<footer>MyTechPulse 整理ノート ・ main 5cc75fd 基準 ・ 2026-10-20 作成（JST） ・ 秘密情報は含めていません</footer>
+</main>
+</div>
+</body>
+</html>
