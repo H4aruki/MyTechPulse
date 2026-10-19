@@ -24,6 +24,10 @@ func (f fakeClient) Search(context.Context, string) ([]article.Article, error) {
 	return f.articles, f.err
 }
 
+func (f fakeClient) Popular(context.Context, time.Time) ([]article.Article, error) {
+	return f.articles, f.err
+}
+
 func TestOutcome(t *testing.T) {
 	tests := []struct {
 		err  error
@@ -161,6 +165,22 @@ func TestObservedRecordsDurationAndPassesResultThrough(t *testing.T) {
 	}
 	if rec["duration_ms"] != float64(250) {
 		t.Fatalf("duration_ms = %v", rec["duration_ms"])
+	}
+}
+
+func TestObservedPopularLogsAndPassesResultThrough(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	c := Observed{Name: "zenn", Client: fakeClient{err: newError(ErrRateLimited, 429)}, Logger: logger}
+	if _, err := c.Popular(context.Background(), time.Now()); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("err = %v", err)
+	}
+	var rec map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &rec); err != nil {
+		t.Fatal(err)
+	}
+	if rec["provider"] != "zenn" || rec["outcome"] != OutcomeRateLimited || rec["level"] != "WARN" {
+		t.Fatalf("record = %v", rec)
 	}
 }
 

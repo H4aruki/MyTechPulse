@@ -90,6 +90,7 @@ func (a *Auth) FindByID(ctx context.Context, id int64) (auth.User, error) {
 }
 
 // CreateWithInterestsAndSession は利用者・初期興味度・セッションを1つのトランザクションで作る。
+// 初期興味度は、選んだタグだけに interest.InitialSelected で作る。選ばなかったタグには行を作らない(#240)。
 // どこかで失敗した場合は何も残さない。同名の利用者は auth.ErrUsernameTaken。
 func (a *Auth) CreateWithInterestsAndSession(ctx context.Context, username, passwordHash string, role auth.Role,
 	favoriteTags []string, tokenHash [32]byte, expiresAt time.Time) (auth.User, error) {
@@ -129,11 +130,6 @@ func (a *Auth) CreateWithInterestsAndSession(ctx context.Context, username, pass
 		if err := q.CreateInitialRecommendation(ctx, dbgen.CreateInitialRecommendationParams{UserID: created.UserID, TagID: tag.TagID, MatchInt: int32(interest.InitialSelected)}); err != nil {
 			return auth.User{}, errors.New("store: 初期の興味度を作成できません")
 		}
-	}
-	if err := q.CreateUnselectedRecommendations(ctx, dbgen.CreateUnselectedRecommendationsParams{
-		UserID: created.UserID, MatchInt: int32(interest.InitialUnselected),
-	}); err != nil {
-		return auth.User{}, errors.New("store: 初期の興味度を作成できません")
 	}
 
 	if err := q.CreateSession(ctx, dbgen.CreateSessionParams{

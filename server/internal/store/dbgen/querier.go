@@ -19,9 +19,6 @@ type Querier interface {
 	CreatePasskey(ctx context.Context, arg CreatePasskeyParams) (AuthPasskey, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateTag(ctx context.Context, tagName string) (Tag, error)
-	// 登録時に選ばなかったタグ(tagテーブルにある全タグのうち、選んだタグと正規化後の名前が同じものを除く)に、
-	// 同じ重みを一括で入れる。選んだタグの保存が終わったあとで呼ぶ。
-	CreateUnselectedRecommendations(ctx context.Context, arg CreateUnselectedRecommendationsParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	CreateWebAuthnChallenge(ctx context.Context, arg CreateWebAuthnChallengeParams) error
 	// 保持期限（終了日時、未終了なら表示日時）の古い順に、上限件数まで消す。回答などは連鎖して消える
@@ -48,7 +45,6 @@ type Querier interface {
 	// 版をまたいで、同じフォームの直近の表示を返す
 	LastFeedbackPrompt(ctx context.Context, arg LastFeedbackPromptParams) (LastFeedbackPromptRow, error)
 	ListFeedbackQuestions(ctx context.Context, formID int64) ([]ListFeedbackQuestionsRow, error)
-	ListFeedbackSnapshotSource(ctx context.Context, userID int32) ([]ListFeedbackSnapshotSourceRow, error)
 	ListPasskeysByUser(ctx context.Context, userID int32) ([]AuthPasskey, error)
 	ListRecommendations(ctx context.Context, userID int32) ([]ListRecommendationsRow, error)
 	LockFeedbackPrompt(ctx context.Context, id pgtype.UUID) (LockFeedbackPromptRow, error)

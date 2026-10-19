@@ -346,3 +346,58 @@ func TestSearchUsesOnlyAllowedHost(t *testing.T) {
 		t.Fatal("許可外ホストへ通信してはいけません")
 	}
 }
+
+func TestPopularRequestContractAndConversion(t *testing.T) {
+	srv, calls := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/articles" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("order") != "weekly" || q.Get("article_type") != "tech" || q.Get("count") != "5" || q.Has("topicname") || len(q) != 3 {
+			t.Errorf("query = %v", q)
+		}
+		_, _ = io.WriteString(w, fixture(t))
+	})
+	got, err := newClient(srv).Popular(context.Background(), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 1 || len(got) == 0 {
+		t.Fatalf("calls=%d articles=%d", calls.Load(), len(got))
+	}
+	for _, a := range got {
+		// 一覧APIは記事本来のトピックを返さないので、タグは空
+		if a.Source != article.SourceZenn || len(a.Tags) != 0 {
+			t.Fatalf("article = %#v", a)
+		}
+	}
+}
+
+func TestPopularRejectsNegativeCountAndInvalidResponse(t *testing.T) {
+	srv, calls := serve(t, func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, `{"items":[]}`) })
+	c := newClient(srv)
+	c.Count = -1
+	if _, err := c.Popular(context.Background(), time.Now()); !errors.Is(err, provider.ErrInvalidRequest) || calls.Load() != 0 {
+		t.Fatalf("err = %v calls = %d", err, calls.Load())
+	}
+	c.Count = 0
+	if _, err := c.Popular(context.Background(), time.Now()); !errors.Is(err, provider.ErrInvalidResponse) {
+		t.Fatalf("articles が無い応答は不正: %v", err)
+	}
+}
+
+func TestPopularProductionURLWithoutNetwork(t *testing.T) {
+	var gotURL string
+	f := provider.NewJSONFetcher(time.Second, 1<<20)
+	f.Client.(*http.Client).Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		gotURL = r.URL.String()
+		body := `{"articles":[]}`
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body)), ContentLength: int64(len(body)), Request: r}, nil
+	})
+	if _, err := (Client{Fetcher: f}).Popular(context.Background(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if want := "https://zenn.dev/api/articles?article_type=tech&count=5&order=weekly"; gotURL != want {
+		t.Fatalf("url = %q, want %q", gotURL, want)
+	}
+}

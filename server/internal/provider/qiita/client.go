@@ -1,4 +1,4 @@
-// Package qiita は Qiita API v2 からタグ別の記事を取得し、共通の記事へ変換する。
+// Package qiita は Qiita API v2 からタグ別の記事と人気の記事を取得し、共通の記事へ変換する。
 // Qiitaの応答型はこのパッケージの外へ出さない。
 package qiita
 
@@ -20,6 +20,14 @@ const (
 	defaultBaseURL = "https://qiita.com"
 	defaultPerPage = 20
 	maxPerPage     = 100 // Qiita APIが受け付ける上限
+
+	// 人気の記事(Popular)の取得条件。Qiita API v2 には「いいね数の順」に並べる指定が無く、
+	// 検索結果は新しい順に返る。そのため、ストック数の下限で反響のあった記事に絞ってから、
+	// 推薦処理がいいね数の順に並べる(検索条件の likes: は効かず、stocks: は効く)。
+	popularMinStocks = 10
+	// 人気の記事は本文が長く、20件だと応答が PROVIDER_MAX_BYTES(約2MB)を超えやすいため10件にする
+	// (2026-10-19に実測。ストック5以上の20件で約2.3MB、10件で約1.2MB)。
+	popularPerPage = 10
 )
 
 // Client はQiitaのタグ別記事一覧を取得する。provider.Client を満たす。
@@ -61,17 +69,41 @@ func (c Client) Search(ctx context.Context, tag string) ([]article.Article, erro
 	if tag == "" || tag == "." || tag == ".." || perPage < 1 || perPage > maxPerPage {
 		return nil, provider.Annotate(&provider.Error{Kind: provider.ErrInvalidRequest}, providerName)
 	}
-	base := c.BaseURL
-	if base == "" {
-		base = defaultBaseURL
-	}
+	base := c.baseURL()
 
 	// タグは1つのパス要素としてエスケープし、"/" や ".." でパスを変えられないようにする。
 	endpoint := strings.TrimRight(base, "/") + "/api/v2/tags/" + url.PathEscape(tag) + "/items"
 	q := url.Values{}
 	q.Set("page", "1")
 	q.Set("per_page", strconv.Itoa(perPage))
+	return c.fetch(ctx, endpoint, q)
+}
 
+// Popular は、タグを問わず since 以降に投稿され、ストック数が popularMinStocks 以上の記事を、
+// Qiitaが返す順(新しい順)のまま最大 popularPerPage 件返す。並べ替えは呼び出し側が行う。
+// 期間はQiitaの検索条件で日付単位に絞る。UTCの日付で指定するので、
+// QiitaがUTC・日本時間のどちらで解釈しても since より前から含まれる(最終的な絞り込みは呼び出し側)。
+func (c Client) Popular(ctx context.Context, since time.Time) ([]article.Article, error) {
+	if since.IsZero() {
+		return nil, provider.Annotate(&provider.Error{Kind: provider.ErrInvalidRequest}, providerName)
+	}
+	base := c.baseURL()
+	endpoint := strings.TrimRight(base, "/") + "/api/v2/items"
+	q := url.Values{}
+	q.Set("page", "1")
+	q.Set("per_page", strconv.Itoa(popularPerPage))
+	q.Set("query", "created:>="+since.UTC().Format("2006-01-02")+" stocks:>="+strconv.Itoa(popularMinStocks))
+	return c.fetch(ctx, endpoint, q)
+}
+
+func (c Client) baseURL() string {
+	if c.BaseURL == "" {
+		return defaultBaseURL
+	}
+	return c.BaseURL
+}
+
+func (c Client) fetch(ctx context.Context, endpoint string, q url.Values) ([]article.Article, error) {
 	headers := http.Header{}
 	if c.Token != "" {
 		headers.Set("Authorization", "Bearer "+c.Token)

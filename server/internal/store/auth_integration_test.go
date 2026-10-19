@@ -130,11 +130,11 @@ func TestAuthRepositorySignupCreatesUserInterestsAndSession(t *testing.T) {
 	}
 }
 
-func TestAuthRepositorySignupGivesUnselectedTagsEightThousand(t *testing.T) {
+func TestAuthRepositorySignupCreatesRowsOnlyForSelectedTags(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
 	repo := store.NewAuth(pool)
-	// 既存の全タグ。Python/PYTHON は表記違いの重複で、1件だけ入る。
+	// 既存の全タグ。選ばなかったタグ(Python, Java)には行を作らない(#240)。
 	if _, err := pool.Exec(ctx, `INSERT INTO tag(tag_name) VALUES ('Go'), ('Python'), ('PYTHON'), ('Java')`); err != nil {
 		t.Fatal(err)
 	}
@@ -143,16 +143,21 @@ func TestAuthRepositorySignupGivesUnselectedTagsEightThousand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, want := range map[string]int{"Go": 10000, "Rust": 10000, "Python": 8000, "Java": 8000} {
+	for name, want := range map[string]int{"Go": 10000, "Rust": 10000} {
 		got := queryInt(t, pool, `SELECT r.match_int FROM recommend r JOIN tag t USING ("tag_ID")
 			WHERE r."user_ID" = $1 AND t.tag_name = $2`, user.ID, name)
 		if got != want {
 			t.Errorf("%s match_int = %d, want %d", name, got, want)
 		}
 	}
-	// Go, Rust, Python, Java の4件。PYTHON は入らない。
-	if n := queryInt(t, pool, `SELECT count(*) FROM recommend WHERE "user_ID" = $1`, user.ID); n != 4 {
+	// Go, Rust の2件だけ。Python・PYTHON・Java には行が無い。
+	if n := queryInt(t, pool, `SELECT count(*) FROM recommend WHERE "user_ID" = $1`, user.ID); n != 2 {
 		t.Fatalf("recommend rows = %d", n)
+	}
+	// フィードが使う興味度も、選んだタグだけ
+	got, err := store.NewInterest(pool).List(ctx, user.ID)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("List = %#v, %v", got, err)
 	}
 }
 

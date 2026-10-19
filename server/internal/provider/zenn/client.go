@@ -1,5 +1,5 @@
 // Package zenn は Zenn の現行記事一覧API（https://zenn.dev/api/articles）から
-// トピック別の記事を取得し、共通の記事へ変換する。
+// トピック別の記事と人気の記事を取得し、共通の記事へ変換する。
 // 公式仕様の無いAPIなので、必須項目の欠落や型の変化は応答不正として検出する。
 // RSSなど別の取得方式へは切り替えない。Zennの応答型はこのパッケージの外へ出さない。
 package zenn
@@ -21,6 +21,12 @@ const (
 	articleHost     = "zenn.dev"
 	defaultEndpoint = "https://zenn.dev/api/articles"
 	defaultCount    = 5
+
+	// 人気の記事(Popular)の並べ方。weekly はZennの週間の人気順(直近1週間の記事。フィードのZennの期間14日に収まる)。
+	// いいね数そのものの順ではないので、フィードでは点数0の記事としていいね数の順に並べ直す。
+	// トピックを付けない検索では技術以外の記事(idea)も混ざるため、技術記事(tech)に絞る。
+	popularOrder       = "weekly"
+	popularArticleType = "tech"
 )
 
 // Client はZennのトピック別記事一覧を取得する。provider.Client を満たす。
@@ -70,7 +76,32 @@ func (c Client) Search(ctx context.Context, tag string) ([]article.Article, erro
 	q := url.Values{}
 	q.Set("topicname", topic)
 	q.Set("count", strconv.Itoa(count))
+	return c.fetch(ctx, endpoint, q, []string{topic})
+}
 
+// Popular は、トピックを問わず直近1週間の人気の技術記事を、Zennが返す順(週間の人気順)のまま最大 Count 件返す。
+// 一覧APIは記事本来のトピックを返さないため、記事のタグは空になる。
+// Zennの一覧は期間を日付で指定できないため since は使わない(weekly が直近1週間に絞る)。
+func (c Client) Popular(ctx context.Context, _ time.Time) ([]article.Article, error) {
+	count := c.Count
+	if count == 0 {
+		count = defaultCount
+	}
+	if count < 1 {
+		return nil, provider.Annotate(&provider.Error{Kind: provider.ErrInvalidRequest}, providerName)
+	}
+	endpoint := c.Endpoint
+	if endpoint == "" {
+		endpoint = defaultEndpoint
+	}
+	q := url.Values{}
+	q.Set("order", popularOrder)
+	q.Set("article_type", popularArticleType)
+	q.Set("count", strconv.Itoa(count))
+	return c.fetch(ctx, endpoint, q, []string{})
+}
+
+func (c Client) fetch(ctx context.Context, endpoint string, q url.Values, tags []string) ([]article.Article, error) {
 	var resp listResponse
 	if err := c.Fetcher.GetJSON(ctx, endpoint+"?"+q.Encode(), nil, &resp); err != nil {
 		return nil, provider.Annotate(err, providerName)
@@ -82,7 +113,7 @@ func (c Client) Search(ctx context.Context, tag string) ([]article.Article, erro
 	articles := make([]article.Article, 0, len(*resp.Articles))
 	seen := make(map[string]struct{}, len(*resp.Articles))
 	for _, it := range *resp.Articles {
-		a, ok := convert(it, topic)
+		a, ok := convert(it, tags)
 		if !ok {
 			return nil, provider.Annotate(&provider.Error{Kind: provider.ErrInvalidResponse}, providerName)
 		}
@@ -95,7 +126,7 @@ func (c Client) Search(ctx context.Context, tag string) ([]article.Article, erro
 	return articles, nil
 }
 
-func convert(it item, topic string) (article.Article, bool) {
+func convert(it item, tags []string) (article.Article, bool) {
 	if it.LikedCount == nil {
 		return article.Article{}, false
 	}
@@ -116,7 +147,7 @@ func convert(it item, topic string) (article.Article, bool) {
 		Source:      article.SourceZenn,
 		Title:       it.Title,
 		URL:         articleURL,
-		Tags:        []string{topic},
+		Tags:        tags,
 		Likes:       *it.LikedCount,
 		PublishedAt: published,
 	})
