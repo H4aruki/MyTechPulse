@@ -47,6 +47,9 @@ docs/
 │           ├── SignUp.md                 … G-02 会員登録画面
 │           ├── Login.md                  … G-03 ログイン画面
 │           └── ArticleList.md            … G-04 記事一覧画面
+├── interview/                            … 個人の面接準備・頭の整理用（本番のみ）
+│   ├── architecture-overview.md          … 本番で今動いていることの要約
+│   └── architecture-overview.html        … 同内容の閲覧用HTML
 └── deploy/                               … 公開・運用の手順書
     ├── lightsail-provisioning.md         … サーバーを一から作り直す手順（初回のGo版の起動まで）
     ├── go-auto-deploy.md                 … 通常の更新（自動デプロイ）の流れ・止め方・失敗時の見方
@@ -125,6 +128,13 @@ APIに共通する決まりごと。データの形式や送り方、結果をHT
 ### BasicDesignSpecifications/Screen/Details/
 
 画面ごとの詳細。構成・表示項目・入力チェック・状態ごとの見え方（読み込み中／0件／失敗時）・レスポンシブの扱いを画面ごとに示す。`LandingPage.md`がサービス紹介ページ（G-01）、`SignUp.md`が会員登録画面（G-02）、`Login.md`がログイン画面（G-03）、`ArticleList.md`が記事一覧画面（G-04）に対応する。
+
+### interview/
+
+個人の面接準備・頭の整理用。本番 `main` 時点で動いている事実だけの要約（Markdown）と閲覧用HTML。製品機能ではなく、プロダクトの進展より遅れることがある。
+
+- `architecture-overview.md`: 本番構成・スタック・フィード・学習・認証・CIの要約
+- `architecture-overview.html`: 同内容の閲覧用HTML
 
 ### deploy/
 
