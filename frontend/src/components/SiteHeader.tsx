@@ -12,29 +12,29 @@ interface SiteHeaderProps {
 export function SiteHeader({ authenticated = false, onLogout }: SiteHeaderProps) {
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2">
+      <div className="mx-auto flex min-h-12 max-w-6xl flex-wrap items-center justify-between gap-x-2 gap-y-2 px-3 py-1.5 sm:min-h-16 sm:gap-x-3 sm:px-4 sm:py-2">
         {/* LP（/）はSPAの外にあるため、未ログイン時は通常のリンクでページごと移動する */}
         {authenticated ? (
           <Link
             to="/articles"
-            className="flex items-center gap-2 font-display text-base font-bold text-ink sm:text-lg"
+            className="flex items-center gap-1.5 font-display text-sm font-bold text-ink sm:gap-2 sm:text-lg"
           >
-            <img src="/img/mytechpulse-logo2.png" alt="" className="h-8 w-8 object-contain" />
+            <img src="/img/mytechpulse-logo2.png" alt="" className="h-7 w-7 object-contain sm:h-8 sm:w-8" />
             MyTechPulse
           </Link>
         ) : (
           <a
             href="/"
-            className="flex items-center gap-2 font-display text-base font-bold text-ink sm:text-lg"
+            className="flex items-center gap-1.5 font-display text-sm font-bold text-ink sm:gap-2 sm:text-lg"
           >
-            <img src="/img/mytechpulse-logo2.png" alt="" className="h-8 w-8 object-contain" />
+            <img src="/img/mytechpulse-logo2.png" alt="" className="h-7 w-7 object-contain sm:h-8 sm:w-8" />
             MyTechPulse
           </a>
         )}
 
-        {/* スマホでは、ロゴを大きく見せるため、2段目に回す */}
+        {/* スマホでは、ヘッダーを1段に収めるため隠す（提供元はフッターの Powered by にもある） */}
         <nav
-          className="order-last flex w-full items-center justify-center gap-6 md:order-none md:w-auto md:gap-4"
+          className="hidden items-center gap-4 md:flex"
           aria-label="提供元サイト"
         >
           <a href="https://qiita.com/" target="_blank" rel="noreferrer noopener" title="Qiita">
@@ -45,25 +45,25 @@ export function SiteHeader({ authenticated = false, onLogout }: SiteHeaderProps)
           </a>
         </nav>
 
-        <div className="ml-auto flex items-center gap-2 md:ml-0">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2 md:ml-0">
           {authenticated ? (
             <>
               <Link
                 to="/mypage"
-                className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold sm:px-4 text-ink-muted transition hover:bg-slate-100"
+                className="whitespace-nowrap rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-bold sm:px-4 sm:py-2 sm:text-sm text-ink-muted transition hover:bg-slate-100"
               >
                 マイページ
               </Link>
               <Link
                 to="/settings"
-                className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold sm:px-4 text-ink-muted transition hover:bg-slate-100"
+                className="whitespace-nowrap rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-bold sm:px-4 sm:py-2 sm:text-sm text-ink-muted transition hover:bg-slate-100"
               >
                 設定
               </Link>
               <button
               type="button"
               onClick={onLogout}
-              className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold sm:px-4 text-ink-muted transition hover:bg-slate-100"
+              className="whitespace-nowrap rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-bold sm:px-4 sm:py-2 sm:text-sm text-ink-muted transition hover:bg-slate-100"
             >
               ログアウト
               </button>
@@ -72,13 +72,13 @@ export function SiteHeader({ authenticated = false, onLogout }: SiteHeaderProps)
             <>
               <Link
                 to="/signup"
-                className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold sm:px-4 text-ink-muted transition hover:bg-slate-100"
+                className="whitespace-nowrap rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-bold sm:px-4 sm:py-2 sm:text-sm text-ink-muted transition hover:bg-slate-100"
               >
                 新規登録
               </Link>
               <Link
                 to="/login"
-                className="whitespace-nowrap rounded-lg bg-brand-500 px-3 py-2 text-sm font-bold sm:px-4 text-white transition hover:bg-brand-700"
+                className="whitespace-nowrap rounded-lg bg-brand-500 px-2 py-1.5 text-xs font-bold sm:px-4 sm:py-2 sm:text-sm text-white transition hover:bg-brand-700"
               >
                 ログイン
               </Link>
