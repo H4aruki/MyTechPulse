@@ -83,6 +83,30 @@ jobs:
       - name: 型チェックと組み立て
         run: npm run build
 
+  # エージェント設定（.claude・.codex のフックと scripts/agent-harness）の確認。
+  # エージェント設定は Windows 上で書いているが、共同開発者の環境は
+  # Mac や Linux のこともある。手元だけで確かめると、他の人の環境で初めて
+  # 壊れていることが分かる。Linux 上でも動くことをここで確かめる。
+  #
+  # 公開の工程（go-release の needs）には入れていない。エージェント設定の
+  # 不具合で本番公開まで止める必要はないため。失敗しても、ほかの検査と同じく
+  # PRとmainの実行結果には赤く出る
+  agent-harness-test:
+    name: エージェント設定の仕掛けの確認
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      # 追加の依存が無いので、依存の導入の手順は要らない
+      - name: 仕掛けの確認
+        run: node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/agent-harness/**/*.test.mjs"
+
+  # 本番の入口（Caddy）の設定と、CI・文書の整合の確認。
+  # どちらも本番の反映に関わるので、公開の工程（go-release の needs）に入れている
   hooks-test:
     name: 設定まわりの仕掛けの確認
     runs-on: ubuntu-latest
@@ -92,16 +116,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
-
-      # エージェント設定は Windows 上で書いているが、共同開発者の環境は
-      # Mac や Linux のこともある。手元だけで確かめると、他の人の環境で初めて
-      # 壊れていることが分かる。Linux 上でも動くことをここで確かめる。
-      #
-      # 追加の依存が無いので、依存の導入の手順は要らない。
-      # 公開の工程（下の needs）には入れていない。設定まわりの不具合で
-      # 本番公開まで止める必要はないため
-      - name: 仕掛けの確認
-        run: node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/agent-harness/**/*.test.mjs"
 
       # 本番の入口（Caddy）の設定を、本番と同じ版のcaddyで検証する。書き間違いは
       # 反映後に入口が落ちて初めて分かるため。イメージはダイジェストで固定する

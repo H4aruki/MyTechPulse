@@ -9,7 +9,9 @@ name: Cutover frontend
 #
 # 公開は、配布（release.yml）の実行回で作った画面の成果物を、再ビルドせずにそのまま使う。
 # 配布のSummaryに出たManifest SHA256と照合し、一致しなければ何も公開しない。
-# 旧画面の自動公開（ci.yml の deploy-frontend）は凍結中のため、このworkflowと干渉しない。
+# 旧画面の自動公開（ci.yml の deploy-frontend）は #173 で削除済み。いまの自動公開は ci.yml の go-deploy で、
+# 同じ Cloudflare Pages の公開先（mytechpulse）へ出す。同時に走らせない仕組み（concurrency）は
+# go-deploy と cutover-frontend で別々なので、go-deploy の実行中はこのworkflowを動かさないこと。
 
 on:
   workflow_dispatch:
