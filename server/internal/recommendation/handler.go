@@ -26,7 +26,7 @@ type FeedResponse struct {
 type feedOutput struct{ Body FeedResponse }
 type clickInput struct{ Body ClickRequest }
 type ClickRequest struct {
-	Tags []string `json:"tags" minItems:"1" maxItems:"50" doc:"クリックした記事タグ。1〜50件、各1〜50文字"`
+	Tags []string `json:"tags" minItems:"1" maxItems:"50" doc:"クリックした記事タグ。1〜50件、各1〜50文字。サーバーのタグ一覧に無いタグは無視し、新しく登録しない"`
 }
 
 func (h Handler) Register(api huma.API) {
