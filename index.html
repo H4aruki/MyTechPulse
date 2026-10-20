@@ -534,8 +534,7 @@ a.iss:hover{text-decoration:underline}
   <ul>
     <li>設計判断の記録には、堅牢さ、保守のしやすさ、運用の単純さ、将来のチームでの開発を両立するため、とあります。</li>
     <li>Huma は、型付きの処理、OpenAPI 3.1 の仕様書の自動生成、API の説明画面のために選びました。Go の標準の HTTP サーバーにそのまま載せられるので、ほかのルーターに頼らずに済みます。</li>
-    <li>検討を始めたころ（2026-08）の記録には、別の事実も書かれています。最初の動機は「1GB のサーバーに MySQL 8 が載らない」というメモリの問題でした。これは PostgreSQL への移行で先に解決しました。実測では、Python 版の API は 64MiB で動いていて、性能の上で書き換える必要はありませんでした。それでも着手するなら、主な目的は「Go を書けることを示す」ことだ、と書かれています。</li>
-    <li>書き換えた後の実測では、API が使うメモリは約5〜8MB になりました。Python 版は約64MB でした。</li>
+    <li>書き換えた後の実測では、API が常に使うメモリは約5〜8MB です。</li>
   </ul>
   <p><b>選ばなかった案:</b> 検討のときに、Web の部品として Echo と Gin も挙がっています。選ばなかった理由の記録はありません。</p>
 
@@ -819,7 +818,7 @@ a.iss:hover{text-decoration:underline}
   <ul class="srclist">
     <li><a href="https://github.com/H4aruki/MyTechPulse/blob/main/docs/adr/0001-use-go-modular-monolith.md">設計判断の記録（Go のモジュラーモノリス）</a>: Go に移した理由と、構成の比較</li>
     <li><a href="https://github.com/H4aruki/MyTechPulse/issues/48">#48</a>: 画面を React、TypeScript、Vite、Tailwind CSS で作り直した判断</li>
-    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/60">#60</a>: Go への書き換えの検討、当時のメモリの実測、書き換え後の実測</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/60">#60</a>: ビルドを GitHub Actions に移す案と、書き換え後のメモリの実測</li>
     <li><a href="https://github.com/H4aruki/MyTechPulse/issues/63">#63</a>: MySQL から PostgreSQL へ移した判断</li>
     <li><a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a>: Go 版の設計（Huma、sqlc、Problem Details、GHCR のイメージの固定）</li>
     <li><a href="https://github.com/H4aruki/MyTechPulse/issues/13">#13</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/14">#14</a>: 名前の重複と障害を見分けられなかった不具合と、HTTP ステータスで返すと決めた経緯</li>
