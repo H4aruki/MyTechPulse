@@ -2,7 +2,7 @@
 
 > Qiita・Zennから、興味に合う技術記事を集めるパーソナライズニュースアプリ
 
-[公開版を試す](https://mytechpulse.net) ・ [機能一覧](./docs/BasicDesignSpecifications/FeaturesList.md) ・ [コントリビューションガイド](./CONTRIBUTING.md)
+[公開版を試す](https://mytechpulse.net) ・ [機能一覧](./docs/BasicDesignSpecifications/FeaturesList.md) ・ [構成の説明ページ](https://h4aruki.github.io/MyTechPulse/) ・ [コントリビューションガイド](./CONTRIBUTING.md)
 
 MyTechPulseは、複数の技術情報サイトを巡回する手間を減らし、短い時間で必要な記事を見つけるためのWebアプリです。登録した興味タグと記事の閲覧傾向をもとに、Qiita・Zennの新しい記事を優先度順に表示します。
 
@@ -85,6 +85,7 @@ sequenceDiagram
 アイコンに無いものとして、ログイン状態の保持にサーバー側セッション（HttpOnly Cookie）、パスワードの保護にbcryptを使っています。
 
 構成の詳細は[システム構成図](./docs/BasicDesignSpecifications/SystemArchitectureDiagram.md)、設計判断の理由は[`docs/adr/`](./docs/adr/)を参照してください。
+技術構成、ドメイン、判断の理由を1枚にまとめた[構成の説明ページ](https://h4aruki.github.io/MyTechPulse/)もあります。
 
 ## 開発を始める
 
