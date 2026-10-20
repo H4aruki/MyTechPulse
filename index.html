@@ -79,12 +79,86 @@ a.iss:hover{text-decoration:underline}
 .srclist{font-size:.9rem;margin:4px 0 10px}
 .srclist li{margin:3px 0}
 
+/* 図（ER 図・インフラ構成図・CI/CD の流れ図） */
+.fig{margin:12px 0 8px;border:1px solid var(--line);border-radius:12px;background:#fbfcfe;padding:12px}
+.fig figcaption{font-size:.82rem;color:var(--sub);margin-top:8px}
+.figscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.figscroll>svg{display:block;width:100%;height:auto}
+.fig.er .figscroll>svg{min-width:760px;max-width:960px;margin:0 auto}
+.fig.infra .figscroll>svg{min-width:660px}
+.scrollhint{display:none;font-size:.78rem;color:var(--sub);margin:0 0 4px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.8rem;color:var(--sub);margin-top:8px}
+.legend span{white-space:nowrap}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px;border:1.5px solid}
+svg .en{font:700 13px var(--mono);fill:var(--ink)}
+svg .ja{font-size:11px;fill:var(--sub)}
+svg .col{font:12px var(--mono);fill:var(--ink)}
+svg .col.pk{font-weight:700;text-decoration:underline}
+svg .col.fk{fill:#3d5a99}
+svg .key{font:700 10px var(--mono);fill:#8a6200}
+svg .rel{fill:none;stroke:#6b7a99;stroke-width:1.6}
+svg .card{font:700 11px sans-serif;fill:#c0392b}
+svg .bx{fill:#fff;stroke:#9fb6e6;stroke-width:1.5}
+svg .bx.edge{fill:#fff6ee;stroke:#f39c4a}
+svg .bx.db{fill:#f3fbf6;stroke:#7fb89a}
+svg .bx.ext{fill:#fffaf0;stroke:#e0b46a}
+svg .bx.ng{fill:#fdecea;stroke:#c0392b;stroke-dasharray:5 4}
+svg .zone{fill:#f6f8fc;stroke:#c9d2e3;stroke-width:2;stroke-dasharray:7 5}
+svg .zt{font-size:12px;font-weight:700;fill:var(--sub)}
+svg .t1{font-size:14px;font-weight:700;fill:var(--ink)}
+svg .t2{font-size:11.5px;fill:var(--sub)}
+svg .ar{fill:none;stroke:#2f6fde;stroke-width:2}
+svg .ar.ng{stroke:#c0392b;stroke-dasharray:6 4}
+svg .no circle{fill:#2f6fde}
+svg .no text{font-size:11px;font-weight:700;fill:#fff}
+svg .lb{font-size:11px;fill:var(--ink)}
+svg .lb.ng{fill:#c0392b;font-weight:700}
+/* 要求の通り道を動く点 */
+svg .comet{fill:none;stroke:#ff7a1a;stroke-width:7;stroke-linecap:round;stroke-dasharray:10 110;stroke-dashoffset:10;opacity:0;animation:comet-go 10s linear infinite both;animation-delay:var(--d)}
+svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
+@keyframes comet-go{0%{stroke-dashoffset:10;opacity:0}1%{opacity:1}8%{stroke-dashoffset:-100;opacity:1}9%,100%{stroke-dashoffset:-100;opacity:0}}
+@keyframes comet-back{0%{stroke-dashoffset:-100;opacity:0}1%{opacity:1}8%{stroke-dashoffset:10;opacity:1}9%,100%{stroke-dashoffset:10;opacity:0}}
+/* CI/CD の流れ図 */
+.pipe{display:flex;flex-direction:column;gap:0}
+.pstage{border:2px dashed #c9d2e3;border-radius:12px;padding:10px 12px;background:#fff}
+.pstage.main{border-color:#9fb6e6}
+.pstage.srv{border-color:#7fb89a;background:#f8fcf9;margin-top:8px}
+.ph{font-size:.8rem;font-weight:700;color:var(--sub);margin-bottom:6px}
+.ph .when{font-weight:600;color:var(--accent);margin-left:6px}
+.pjobs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.pseq{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px 22px}
+.pseq>.pn{flex:1 1 140px;position:relative}
+.pseq>.pn:not(:last-child)::after{content:"→";position:absolute;right:-18px;top:50%;transform:translateY(-50%);color:var(--accent);font-weight:700}
+.pn{background:#fff;border:1.5px solid #9fb6e6;border-radius:9px;padding:6px 9px;font-size:.84rem;line-height:1.45;animation:pn-lit 14s linear infinite both;animation-delay:calc(var(--i) * .7s)}
+.pn b{display:block;font-size:.86rem}
+.pn small{color:var(--sub)}
+.pn.trig{border-color:#e0b46a;background:#fffaf0}
+.pn.gate{border-color:#f39c4a;background:#fff6ee}
+.pn.pub{border-color:#f39c4a;background:#fff6ee}
+.pn.srvn{border-color:#7fb89a;background:#f3fbf6}
+.pn.static{animation:none}
+@keyframes pn-lit{0%,100%{box-shadow:none}1.5%,6%{box-shadow:0 0 0 3px #ff7a1a,0 0 12px rgba(255,122,26,.45)}9%{box-shadow:none}}
+.pdown{text-align:center;color:var(--accent);font-weight:700;font-size:.82rem;padding:4px 0;line-height:1.4}
+.pdown span{display:block;font-weight:600;color:var(--sub)}
+.pfail{margin-top:8px;border-left:4px solid var(--ng);background:var(--ng-soft);border-radius:0 8px 8px 0;padding:6px 10px;font-size:.84rem}
+.pside{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.pside .pn{border-style:dashed;background:#fbfcfe}
+
 @media (max-width:900px){
   .wrap{grid-template-columns:1fr;padding:14px 12px 60px}
   nav.toc{position:static;max-height:none}
   .arch{grid-template-columns:1fr}
   .grid2{grid-template-columns:1fr}
   section{padding:18px 16px}
+  .scrollhint{display:block}
+  .pjobs,.pside{grid-template-columns:1fr}
+  .pseq{flex-direction:column;gap:18px}
+  .pseq>.pn{flex:none}
+  .pseq>.pn:not(:last-child)::after{content:"↓";right:auto;left:50%;top:auto;bottom:-18px;transform:translateX(-50%)}
+}
+@media (prefers-reduced-motion: reduce){
+  svg .comet{display:none;animation:none}
+  .pn{animation:none}
 }
 @media print{
   body{background:#fff;font-size:11pt}
@@ -95,6 +169,9 @@ a.iss:hover{text-decoration:underline}
   section{break-inside:avoid-page;border-color:#bbb}
   pre{background:#f4f4f4;color:#000;border:1px solid #ccc;white-space:pre-wrap}
   a{color:#000}
+  svg .comet{display:none}
+  .pn{animation:none}
+  .figscroll{overflow:visible}
 }
 </style>
 </head>
@@ -176,6 +253,101 @@ a.iss:hover{text-decoration:underline}
     </div>
   </div>
   <h3>記事一覧を1回開いたときに通る道</h3>
+  <figure class="fig infra">
+    <p class="scrollhint">図は横にスクロールできます。</p>
+    <div class="figscroll">
+    <svg viewBox="0 0 1000 590" role="img" aria-labelledby="infra-title infra-desc">
+      <title id="infra-title">要求の通り道の図</title>
+      <desc id="infra-desc">ブラウザは Cloudflare Pages から画面を受け取ります。API への要求は Cloudflare のプロキシを通って Lightsail のサーバーに届き、Caddy、Go の API の順に渡ります。API は PostgreSQL から興味度を読み、Qiita と Zenn に問い合わせ、結果を同じ道で返します。Cloudflare を通らない直接のアクセスは、Caddy が 403 で断ります。</desc>
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2f6fde"/></marker>
+        <marker id="ahng" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c0392b"/></marker>
+      </defs>
+      <!-- 区画 -->
+      <rect class="zone" x="200" y="20" width="250" height="300" rx="12"/>
+      <text class="zt" x="214" y="40">Cloudflare</text>
+      <rect class="zone" x="480" y="150" width="320" height="420" rx="12"/>
+      <text class="zt" x="494" y="170">AWS Lightsail（東京・メモリ 1GB）の1台</text>
+      <text class="zt" x="494" y="186" style="font-weight:400">Docker Compose で3つのコンテナを動かす</text>
+      <rect class="zone" x="830" y="250" width="160" height="230" rx="12"/>
+      <text class="zt" x="844" y="270">外部の API</text>
+      <!-- 箱 -->
+      <rect class="bx" x="20" y="185" width="150" height="100" rx="9"/>
+      <text class="t1" x="34" y="212">ブラウザ</text>
+      <text class="t2" x="34" y="232">トップページ（静的）</text>
+      <text class="t2" x="34" y="248">ログイン後の画面</text>
+      <text class="t2" x="34" y="264">（React）</text>
+      <rect class="bx edge" x="220" y="55" width="210" height="80" rx="9"/>
+      <text class="t1" x="234" y="80">Cloudflare Pages</text>
+      <text class="t2" x="234" y="100">mytechpulse.net</text>
+      <text class="t2" x="234" y="118">画面のファイルを配る</text>
+      <rect class="bx edge" x="220" y="195" width="210" height="90" rx="9"/>
+      <text class="t1" x="234" y="220">Cloudflare のプロキシ</text>
+      <text class="t2" x="234" y="240">api.mytechpulse.net の手前</text>
+      <text class="t2" x="234" y="258">本当の接続元 IP を</text>
+      <text class="t2" x="234" y="274">ヘッダーに入れて渡す</text>
+      <rect class="bx ng" x="510" y="40" width="260" height="66" rx="9"/>
+      <text class="t1" x="524" y="66">Cloudflare を通らない</text>
+      <text class="t1" x="524" y="88">直接のアクセス</text>
+      <rect class="bx" x="510" y="200" width="260" height="86" rx="9"/>
+      <text class="t1" x="524" y="224">Caddy 2</text>
+      <text class="t2" x="524" y="243">外に開けるのは 80番と443番だけ</text>
+      <text class="t2" x="524" y="260">HTTPS と証明書の自動更新</text>
+      <text class="t2" x="524" y="277">送り元が Cloudflare か確かめる</text>
+      <rect class="bx" x="510" y="320" width="260" height="76" rx="9"/>
+      <text class="t1" x="524" y="344">Go の API</text>
+      <text class="t2" x="524" y="363">サーバーの中だけで待ち受ける</text>
+      <text class="t2" x="524" y="380">root 以外の利用者で動く</text>
+      <rect class="bx db" x="510" y="430" width="260" height="76" rx="9"/>
+      <text class="t1" x="524" y="454">PostgreSQL 17</text>
+      <text class="t2" x="524" y="473">サーバーの中だけで待ち受ける</text>
+      <text class="t2" x="524" y="490">記事は保存しない</text>
+      <text class="t2" x="494" y="536">このほか、反映のときだけ、表の形を変える</text>
+      <text class="t2" x="494" y="553">コンテナが動いて終わる。バックアップも、この中。</text>
+      <rect class="bx ext" x="845" y="290" width="130" height="66" rx="9"/>
+      <text class="t1" x="857" y="315">Qiita API v2</text>
+      <text class="t2" x="857" y="334">qiita.com</text>
+      <text class="t2" x="857" y="349">タグごとに20件</text>
+      <rect class="bx ext" x="845" y="396" width="130" height="66" rx="9"/>
+      <text class="t1" x="857" y="421">Zenn API</text>
+      <text class="t2" x="857" y="440">zenn.dev</text>
+      <text class="t2" x="857" y="455">タグごとに5件</text>
+      <!-- 矢印 -->
+      <path id="p1" class="ar" d="M220 95 H190 V210 H172" marker-end="url(#ah)"/>
+      <path id="p2" class="ar" d="M172 245 H218" marker-end="url(#ah)"/>
+      <path id="p3" class="ar" d="M432 240 H508" marker-end="url(#ah)"/>
+      <path class="ar ng" d="M640 108 V198" marker-end="url(#ahng)"/>
+      <path id="p5" class="ar" d="M640 288 V318" marker-end="url(#ah)"/>
+      <path id="p6a" class="ar" d="M640 398 V428" marker-end="url(#ah)"/>
+      <path id="p6b" class="ar" d="M772 345 H805 V323 H843" marker-end="url(#ah)"/>
+      <path id="p6c" class="ar" d="M772 370 H805 V429 H843" marker-end="url(#ah)"/>
+      <!-- 文字と番号（下の手順の番号と同じ） -->
+      <text class="lb ng" x="650" y="128">403（本文なし）で断る</text>
+      <text class="lb ng" x="650" y="144">API には届かない</text>
+      <g class="no"><circle cx="190" cy="152" r="10"/><text x="190" y="156" text-anchor="middle">1</text></g>
+      <g class="no"><circle cx="195" cy="268" r="10"/><text x="195" y="272" text-anchor="middle">2</text></g>
+      <g class="no"><circle cx="232" cy="303" r="10"/><text x="232" y="307" text-anchor="middle">7</text></g>
+      <text class="lb" x="248" y="307">同じ道を通って JSON で戻る</text>
+      <g class="no"><circle cx="470" cy="222" r="10"/><text x="470" y="226" text-anchor="middle">3</text></g>
+      <g class="no"><circle cx="760" cy="214" r="10"/><text x="760" y="218" text-anchor="middle">4</text></g>
+      <g class="no"><circle cx="658" cy="303" r="10"/><text x="658" y="307" text-anchor="middle">5</text></g>
+      <g class="no"><circle cx="658" cy="413" r="10"/><text x="658" y="417" text-anchor="middle">6</text></g>
+      <g class="no"><circle cx="818" cy="300" r="10"/><text x="818" y="304" text-anchor="middle">6</text></g>
+      <!-- 動く点（動きを減らす設定では出さない） -->
+      <path class="comet" pathLength="100" style="--d:0s" d="M220 95 H190 V210 H172"/>
+      <path class="comet" pathLength="100" style="--d:1s" d="M172 245 H218"/>
+      <path class="comet" pathLength="100" style="--d:2s" d="M432 240 H508"/>
+      <path class="comet" pathLength="100" style="--d:3.2s" d="M640 288 V318"/>
+      <path class="comet" pathLength="100" style="--d:4.2s" d="M640 398 V428"/>
+      <path class="comet" pathLength="100" style="--d:5.2s" d="M772 345 H805 V323 H843"/>
+      <path class="comet" pathLength="100" style="--d:5.2s" d="M772 370 H805 V429 H843"/>
+      <path class="comet back" pathLength="100" style="--d:6.4s" d="M640 288 V318"/>
+      <path class="comet back" pathLength="100" style="--d:7.2s" d="M432 240 H508"/>
+      <path class="comet back" pathLength="100" style="--d:8s" d="M172 245 H218"/>
+    </svg>
+    </div>
+    <figcaption>丸の番号は、下の手順の番号です。橙の点が要求、緑の点が返す結果の流れです（動きを減らす設定にしている端末では、点は出ません）。</figcaption>
+  </figure>
   <ol class="steps">
     <li>ブラウザは、Cloudflare Pages から画面のファイルを受け取ります。</li>
     <li>画面は <code>api.mytechpulse.net</code> に、記事一覧を JSON で求めます。画面と API はドメインが違うので、Cookie を付けたクロスオリジンの通信になります。</li>
@@ -397,6 +569,274 @@ a.iss:hover{text-decoration:underline}
     <tr><td>アンケート（6表）</td><td>質問の定義、表示した記録、回答、回答した時点の上位5タグ。</td></tr>
   </table></div>
   <div class="callout ng"><b>記事は DB に保存していません。</b> 一覧を開くたびに Qiita と Zenn から取ってきて、採点して返すだけです。既読の管理や、記事の保存もありません。</div>
+  <h3 id="er">表のつながり（ER 図）</h3>
+  <p>13個の表と、表どうしのつながりを図にしました。表の名前と列の名前は、DB の中の実際の名前です。列は、つながりに使う列と、主な列だけを載せています。</p>
+  <figure class="fig er">
+    <p class="scrollhint">図は横にスクロールできます。</p>
+    <div class="figscroll">
+    <svg viewBox="0 0 960 1130" role="img" aria-labelledby="er-title er-desc">
+      <title id="er-title">DB の ER 図</title>
+      <desc id="er-desc">利用者の表を中心に、興味度、タグ、ログインのセッション、パスキーの3つの表、アンケートの6つの表がつながっています。</desc>
+      <g class="ent">
+      <rect x="20" y="20" width="250" height="130" rx="8" fill="#fff" stroke="#b26a00" stroke-width="1.5"/>
+      <path d="M20 28a8 8 0 0 1 8-8h234a8 8 0 0 1 8 8v34h-250z" fill="#fff3df" stroke="#b26a00" stroke-width="1.5"/>
+      <text x="30" y="38" class="en">auth_session</text>
+      <text x="30" y="54" class="ja">ログインのセッション</text>
+      <text x="30" y="77" class="col pk">token_hash</text>
+      <text x="260" y="77" class="key" text-anchor="end">PK</text>
+      <text x="30" y="97" class="col fk">user_ID</text>
+      <text x="260" y="97" class="key" text-anchor="end">FK</text>
+      <text x="30" y="117" class="col">expires_at</text>
+      <text x="30" y="137" class="col">created_at</text>
+      </g>
+      <g class="ent">
+      <rect x="20" y="180" width="250" height="110" rx="8" fill="#fff" stroke="#b26a00" stroke-width="1.5"/>
+      <path d="M20 188a8 8 0 0 1 8-8h234a8 8 0 0 1 8 8v34h-250z" fill="#fff3df" stroke="#b26a00" stroke-width="1.5"/>
+      <text x="30" y="198" class="en">auth_webauthn_user</text>
+      <text x="30" y="214" class="ja">パスキー用の利用者番号</text>
+      <text x="30" y="237" class="col pk">user_ID</text>
+      <text x="260" y="237" class="key" text-anchor="end">PK FK</text>
+      <text x="30" y="257" class="col">user_handle</text>
+      <text x="260" y="257" class="key" text-anchor="end">UQ</text>
+      <text x="30" y="277" class="col">created_at</text>
+      </g>
+      <g class="ent">
+      <rect x="20" y="320" width="250" height="170" rx="8" fill="#fff" stroke="#b26a00" stroke-width="1.5"/>
+      <path d="M20 328a8 8 0 0 1 8-8h234a8 8 0 0 1 8 8v34h-250z" fill="#fff3df" stroke="#b26a00" stroke-width="1.5"/>
+      <text x="30" y="338" class="en">auth_passkey</text>
+      <text x="30" y="354" class="ja">登録したパスキー</text>
+      <text x="30" y="377" class="col pk">id</text>
+      <text x="260" y="377" class="key" text-anchor="end">PK</text>
+      <text x="30" y="397" class="col fk">user_ID</text>
+      <text x="260" y="397" class="key" text-anchor="end">FK</text>
+      <text x="30" y="417" class="col">credential_id</text>
+      <text x="260" y="417" class="key" text-anchor="end">UQ</text>
+      <text x="30" y="437" class="col">public_key</text>
+      <text x="30" y="457" class="col">sign_count</text>
+      <text x="30" y="477" class="col">name</text>
+      </g>
+      <g class="ent">
+      <rect x="20" y="520" width="250" height="170" rx="8" fill="#fff" stroke="#b26a00" stroke-width="1.5"/>
+      <path d="M20 528a8 8 0 0 1 8-8h234a8 8 0 0 1 8 8v34h-250z" fill="#fff3df" stroke="#b26a00" stroke-width="1.5"/>
+      <text x="30" y="538" class="en">auth_webauthn_challenge</text>
+      <text x="30" y="554" class="ja">パスキーの途中経過</text>
+      <text x="30" y="577" class="col pk">id</text>
+      <text x="260" y="577" class="key" text-anchor="end">PK</text>
+      <text x="30" y="597" class="col">purpose</text>
+      <text x="30" y="617" class="col fk">user_ID</text>
+      <text x="260" y="617" class="key" text-anchor="end">FK 空可</text>
+      <text x="30" y="637" class="col">session_data</text>
+      <text x="30" y="657" class="col">expires_at</text>
+      <text x="30" y="677" class="col">used_at</text>
+      </g>
+      <g class="ent">
+      <rect x="330" y="330" width="250" height="130" rx="8" fill="#fff" stroke="#2f6fde" stroke-width="1.5"/>
+      <path d="M330 338a8 8 0 0 1 8-8h234a8 8 0 0 1 8 8v34h-250z" fill="#e8f0fd" stroke="#2f6fde" stroke-width="1.5"/>
+      <text x="340" y="348" class="en">user</text>
+      <text x="340" y="364" class="ja">利用者</text>
+      <text x="340" y="387" class="col pk">user_ID</text>
+      <text x="570" y="387" class="key" text-anchor="end">PK</text>
+      <text x="340" y="407" class="col">user_name</text>
+      <text x="570" y="407" class="key" text-anchor="end">UQ</text>
+      <text x="340" y="427" class="col">password</text>
+      <text x="340" y="447" class="col">role</text>
+      </g>
+      <g class="ent">
+      <rect x="330" y="516" width="250" height="110" rx="8" fill="#fff" stroke="#2f6fde" stroke-width="1.5"/>
+      <path d="M330 524a8 8 0 0 1 8-8h234a8 8 0 0 1 8 8v34h-250z" fill="#e8f0fd" stroke="#2f6fde" stroke-width="1.5"/>
+      <text x="340" y="534" class="en">recommend</text>
+      <text x="340" y="550" class="ja">興味度</text>
+      <text x="340" y="573" class="col pk">user_ID</text>
+      <text x="570" y="573" class="key" text-anchor="end">PK FK</text>
+      <text x="340" y="593" class="col pk">tag_ID</text>
+      <text x="570" y="593" class="key" text-anchor="end">PK FK</text>
+      <text x="340" y="613" class="col">match_int</text>
+      </g>
+      <g class="ent">
+      <rect x="330" y="682" width="250" height="90" rx="8" fill="#fff" stroke="#2f6fde" stroke-width="1.5"/>
+      <path d="M330 690a8 8 0 0 1 8-8h234a8 8 0 0 1 8 8v34h-250z" fill="#e8f0fd" stroke="#2f6fde" stroke-width="1.5"/>
+      <text x="340" y="700" class="en">tag</text>
+      <text x="340" y="716" class="ja">タグ</text>
+      <text x="340" y="739" class="col pk">tag_ID</text>
+      <text x="570" y="739" class="key" text-anchor="end">PK</text>
+      <text x="340" y="759" class="col">tag_name</text>
+      <text x="570" y="759" class="key" text-anchor="end">UQ</text>
+      </g>
+      <g class="ent">
+      <rect x="640" y="246" width="250" height="190" rx="8" fill="#fff" stroke="#1f8a4c" stroke-width="1.5"/>
+      <path d="M640 254a8 8 0 0 1 8-8h234a8 8 0 0 1 8 8v34h-250z" fill="#e5f5ec" stroke="#1f8a4c" stroke-width="1.5"/>
+      <text x="650" y="264" class="en">feedback_prompts</text>
+      <text x="650" y="280" class="ja">アンケートの表示記録</text>
+      <text x="650" y="303" class="col pk">id</text>
+      <text x="880" y="303" class="key" text-anchor="end">PK</text>
+      <text x="650" y="323" class="col fk">form_id</text>
+      <text x="880" y="323" class="key" text-anchor="end">FK</text>
+      <text x="650" y="343" class="col fk">user_ID</text>
+      <text x="880" y="343" class="key" text-anchor="end">FK</text>
+      <text x="650" y="363" class="col">status</text>
+      <text x="650" y="383" class="col">stage</text>
+      <text x="650" y="403" class="col">shown_at</text>
+      <text x="650" y="423" class="col">finished_at</text>
+      </g>
+      <g class="ent">
+      <rect x="640" y="492" width="250" height="190" rx="8" fill="#fff" stroke="#1f8a4c" stroke-width="1.5"/>
+      <path d="M640 500a8 8 0 0 1 8-8h234a8 8 0 0 1 8 8v34h-250z" fill="#e5f5ec" stroke="#1f8a4c" stroke-width="1.5"/>
+      <text x="650" y="510" class="en">feedback_submissions</text>
+      <text x="650" y="526" class="ja">アンケートの回答</text>
+      <text x="650" y="549" class="col pk">id</text>
+      <text x="880" y="549" class="key" text-anchor="end">PK</text>
+      <text x="650" y="569" class="col fk">form_id</text>
+      <text x="880" y="569" class="key" text-anchor="end">FK</text>
+      <text x="650" y="589" class="col fk">user_ID</text>
+      <text x="880" y="589" class="key" text-anchor="end">FK</text>
+      <text x="650" y="609" class="col fk">prompt_id</text>
+      <text x="880" y="609" class="key" text-anchor="end">FK UQ</text>
+      <text x="650" y="629" class="col">status</text>
+      <text x="650" y="649" class="col">started_at</text>
+      <text x="650" y="669" class="col">completed_at</text>
+      </g>
+      <g class="ent">
+      <rect x="330" y="828" width="250" height="150" rx="8" fill="#fff" stroke="#1f8a4c" stroke-width="1.5"/>
+      <path d="M330 836a8 8 0 0 1 8-8h234a8 8 0 0 1 8 8v34h-250z" fill="#e5f5ec" stroke="#1f8a4c" stroke-width="1.5"/>
+      <text x="340" y="846" class="en">feedback_interest_snapshots</text>
+      <text x="340" y="862" class="ja">回答時点の上位5タグ</text>
+      <text x="340" y="885" class="col pk">submission_id</text>
+      <text x="570" y="885" class="key" text-anchor="end">PK FK</text>
+      <text x="340" y="905" class="col pk">rank</text>
+      <text x="570" y="905" class="key" text-anchor="end">PK</text>
+      <text x="340" y="925" class="col fk">tag_ID</text>
+      <text x="570" y="925" class="key" text-anchor="end">FK 空可</text>
+      <text x="340" y="945" class="col">tag_name</text>
+      <text x="340" y="965" class="col">match_int</text>
+      </g>
+      <g class="ent">
+      <rect x="640" y="20" width="250" height="170" rx="8" fill="#fff" stroke="#1f8a4c" stroke-width="1.5"/>
+      <path d="M640 28a8 8 0 0 1 8-8h234a8 8 0 0 1 8 8v34h-250z" fill="#e5f5ec" stroke="#1f8a4c" stroke-width="1.5"/>
+      <text x="650" y="38" class="en">feedback_forms</text>
+      <text x="650" y="54" class="ja">アンケートの版</text>
+      <text x="650" y="77" class="col pk">id</text>
+      <text x="880" y="77" class="key" text-anchor="end">PK</text>
+      <text x="650" y="97" class="col">form_key</text>
+      <text x="880" y="97" class="key" text-anchor="end">UQ※</text>
+      <text x="650" y="117" class="col">version</text>
+      <text x="880" y="117" class="key" text-anchor="end">UQ※</text>
+      <text x="650" y="137" class="col">title</text>
+      <text x="650" y="157" class="col">status</text>
+      <text x="650" y="177" class="col">cooldown_days</text>
+      </g>
+      <g class="ent">
+      <rect x="640" y="924" width="250" height="190" rx="8" fill="#fff" stroke="#1f8a4c" stroke-width="1.5"/>
+      <path d="M640 932a8 8 0 0 1 8-8h234a8 8 0 0 1 8 8v34h-250z" fill="#e5f5ec" stroke="#1f8a4c" stroke-width="1.5"/>
+      <text x="650" y="942" class="en">feedback_questions</text>
+      <text x="650" y="958" class="ja">アンケートの質問</text>
+      <text x="650" y="981" class="col pk">id</text>
+      <text x="880" y="981" class="key" text-anchor="end">PK</text>
+      <text x="650" y="1001" class="col fk">form_id</text>
+      <text x="880" y="1001" class="key" text-anchor="end">FK</text>
+      <text x="650" y="1021" class="col">question_key</text>
+      <text x="650" y="1041" class="col">question_text</text>
+      <text x="650" y="1061" class="col">sort_order</text>
+      <text x="650" y="1081" class="col fk">display_if_question_id</text>
+      <text x="880" y="1081" class="key" text-anchor="end">FK 空可</text>
+      <text x="650" y="1101" class="col">display_if_score_max</text>
+      </g>
+      <g class="ent">
+      <rect x="640" y="738" width="250" height="130" rx="8" fill="#fff" stroke="#1f8a4c" stroke-width="1.5"/>
+      <path d="M640 746a8 8 0 0 1 8-8h234a8 8 0 0 1 8 8v34h-250z" fill="#e5f5ec" stroke="#1f8a4c" stroke-width="1.5"/>
+      <text x="650" y="756" class="en">feedback_answers</text>
+      <text x="650" y="772" class="ja">質問ごとの点数</text>
+      <text x="650" y="795" class="col pk">submission_id</text>
+      <text x="880" y="795" class="key" text-anchor="end">PK FK</text>
+      <text x="650" y="815" class="col pk">question_id</text>
+      <text x="880" y="815" class="key" text-anchor="end">PK FK</text>
+      <text x="650" y="835" class="col fk">form_id</text>
+      <text x="880" y="835" class="key" text-anchor="end">FK</text>
+      <text x="650" y="855" class="col">score</text>
+      </g>
+      <path d="M330 345 L300 345 L300 85 L270 85" class="rel"/>
+      <text x="324" y="340" class="card" text-anchor="end">1</text>
+      <text x="276" y="80" class="card" text-anchor="start">多</text>
+      <path d="M330 372 L285 372 L285 235 L270 235" class="rel"/>
+      <text x="324" y="367" class="card" text-anchor="end">1</text>
+      <text x="276" y="230" class="card" text-anchor="start">0〜1</text>
+      <path d="M330 405 L270 405" class="rel"/>
+      <text x="324" y="400" class="card" text-anchor="end">1</text>
+      <text x="276" y="400" class="card" text-anchor="start">多</text>
+      <path d="M330 440 L300 440 L300 605 L270 605" class="rel"/>
+      <text x="324" y="435" class="card" text-anchor="end">0〜1</text>
+      <text x="276" y="600" class="card" text-anchor="start">多</text>
+      <path d="M430 460 L430 516" class="rel"/>
+      <text x="435" y="478" class="card" text-anchor="start">1</text>
+      <text x="435" y="502" class="card" text-anchor="start">多</text>
+      <path d="M480 682 L480 626" class="rel"/>
+      <text x="485" y="668" class="card" text-anchor="start">1</text>
+      <text x="485" y="644" class="card" text-anchor="start">多</text>
+      <path d="M455 772 L455 828" class="rel"/>
+      <text x="460" y="790" class="card" text-anchor="start">0〜1</text>
+      <text x="460" y="814" class="card" text-anchor="start">多</text>
+      <path d="M580 350 L640 350" class="rel"/>
+      <text x="586" y="345" class="card" text-anchor="start">1</text>
+      <text x="634" y="345" class="card" text-anchor="end">多</text>
+      <path d="M580 430 L615 430 L615 520 L640 520" class="rel"/>
+      <text x="586" y="425" class="card" text-anchor="start">1</text>
+      <text x="634" y="515" class="card" text-anchor="end">多</text>
+      <path d="M640 650 L610 650 L610 900 L580 900" class="rel"/>
+      <text x="634" y="645" class="card" text-anchor="end">1</text>
+      <text x="586" y="895" class="card" text-anchor="start">0〜5</text>
+      <path d="M765 190 L765 246" class="rel"/>
+      <text x="770" y="208" class="card" text-anchor="start">1</text>
+      <text x="770" y="232" class="card" text-anchor="start">多</text>
+      <path d="M765 436 L765 492" class="rel"/>
+      <text x="770" y="454" class="card" text-anchor="start">1</text>
+      <text x="770" y="478" class="card" text-anchor="start">0〜1</text>
+      <path d="M765 682 L765 738" class="rel"/>
+      <text x="770" y="700" class="card" text-anchor="start">1</text>
+      <text x="770" y="724" class="card" text-anchor="start">多</text>
+      <path d="M765 924 L765 868" class="rel"/>
+      <text x="770" y="910" class="card" text-anchor="start">1</text>
+      <text x="770" y="886" class="card" text-anchor="start">多</text>
+      <path d="M890 100 L915 100 L915 590 L890 590" class="rel"/>
+      <text x="896" y="95" class="card" text-anchor="start">1</text>
+      <text x="896" y="585" class="card" text-anchor="start">多</text>
+      <path d="M890 140 L935 140 L935 990 L890 990" class="rel"/>
+      <text x="896" y="135" class="card" text-anchor="start">1</text>
+      <text x="896" y="985" class="card" text-anchor="start">多</text>
+      <path d="M640 976 L622 976 L622 1076 L640 1076" class="rel"/>
+      <text x="636" y="970" class="card" text-anchor="end">0〜1</text>
+      <text x="636" y="1092" class="card" text-anchor="end">多</text>
+    </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:#2f6fde;background:#e8f0fd"></i>利用者・タグ・興味度</span>
+      <span><i style="border-color:#b26a00;background:#fff3df"></i>ログインとパスキー</span>
+      <span><i style="border-color:#1f8a4c;background:#e5f5ec"></i>アンケート</span>
+      <span><b>PK</b> 行を1つに決める列（主キー）</span>
+      <span><b>FK</b> ほかの表の行を指す列</span>
+      <span><b>UQ</b> 同じ値を2回は入れられない列</span>
+      <span><b>UQ※</b> form_key と version の組で重複なし</span>
+      <span><b>空可</b> 空のこともある</span>
+    </div>
+    <figcaption>線の端の赤い文字は、相手の表から見た行の数です。「1」はちょうど1行、「0〜1」は無いか1行、「多」は0行以上を表します。たとえば user と auth_session の線は、user 側が「1」、auth_session 側が「多」です。1人の利用者が、ログイン中の端末の数だけセッションを持てる、という意味です。</figcaption>
+  </figure>
+  <h3>表ごとの役割</h3>
+  <div class="tbl"><table>
+    <tr><th>表</th><th>何のための表か</th><th>つながり</th></tr>
+    <tr><td><code>user</code></td><td>会員登録した人。利用者名、パスワードのハッシュ、役割を持ちます。</td><td>ほとんどの表が、この表の利用者を指します。</td></tr>
+    <tr><td><code>tag</code></td><td>技術のタグの名前。名前は重複しません。</td><td>興味度と、回答時点の上位5タグから指されます。</td></tr>
+    <tr><td><code>recommend</code></td><td>どの利用者が、どのタグに、どれくらい興味があるか（0〜10000）。</td><td>利用者とタグの組で1行です。1人が多くのタグを持ち、1つのタグを多くの人が持ちます。</td></tr>
+    <tr><td><code>auth_session</code></td><td>ログイン中の端末ごとの記録。トークンの SHA-256 と有効期限。</td><td>1人の利用者が、何件でも持てます。</td></tr>
+    <tr><td><code>auth_webauthn_user</code></td><td>パスキーで利用者を表す、32バイトの乱数。連番の利用者の番号から作ると推測されるので、別に持ちます。</td><td>利用者1人につき、無いか1行です。</td></tr>
+    <tr><td><code>auth_passkey</code></td><td>登録したパスキー。公開鍵と名前を持ちます。秘密鍵は持ちません。</td><td>1人の利用者が複数持てます（上限の10個は、DB ではなく API が守ります）。</td></tr>
+    <tr><td><code>auth_webauthn_challenge</code></td><td>パスキーの登録やログインの途中で使う、使い捨ての番号。期限と、使ったかどうかを持ちます。</td><td>登録のときは利用者を指します。ログインのときは、まだ誰か分からないので、利用者を指しません。</td></tr>
+    <tr><td><code>feedback_forms</code></td><td>アンケートの版。題名、公開の状態、次に出すまでの日数（60日）を持ちます。公開中の版は1つだけです。</td><td>質問、表示記録、回答から指されます。</td></tr>
+    <tr><td><code>feedback_questions</code></td><td>アンケートの質問の文と順番。追加の質問を出す条件も持ちます。</td><td>1つの版が質問を複数持ちます。追加の質問は、同じ版の最初の質問を指します。</td></tr>
+    <tr><td><code>feedback_prompts</code></td><td>アンケートを、誰に、いつ出したか。答えたか、閉じたかも持ちます。</td><td>利用者と版を指します。</td></tr>
+    <tr><td><code>feedback_submissions</code></td><td>出したアンケート1回分の回答の状況（途中か、完了か）。</td><td>1回の表示に、回答は無いか1件です。出した本人と同じ版だけを指せるようにしてあります。</td></tr>
+    <tr><td><code>feedback_answers</code></td><td>質問ごとの点数（1〜5）。</td><td>回答1件が、質問の数だけ行を持ちます。質問は、回答と同じ版のものだけを指せます。</td></tr>
+    <tr><td><code>feedback_interest_snapshots</code></td><td>回答した時点の、興味の上位5タグとその値。</td><td>回答1件に、最大5行です。タグが消えても、名前と値は残ります（タグを指す列だけが空になります）。</td></tr>
+  </table></div>
+  <p>利用者を消すと、その人の興味度、セッション、パスキー、アンケートの記録も一緒に消えます。タグを消すと、そのタグの興味度も消えます。アンケートの版と質問は、回答の意味を保つため、一緒には消えません。</p>
+  <p>このほかに、マイグレーションの道具が、どこまで適用したかを記録する表を自分で作ります。アプリのデータではないので、13個には数えず、図にも入れていません。</p>
   <h3>タグ名のそろえ方</h3>
   <p>タグ名は、前後の空白を除き、小文字にしてから比べます。たとえば「Go」と「 go 」は同じタグです。新しいタグを作るときは、そろえた名前で DB に鍵をかけてから、もう一度探します。2人が同時に同じタグを登録しても、タグは1つしかできません。</p>
   <h3>表の形の変え方</h3>
@@ -420,6 +860,74 @@ a.iss:hover{text-decoration:underline}
   </ul>
   <h3>自動デプロイの流れ</h3>
   <p>main に変更が入ると、人の承認なしで本番に反映します。ただし、変わったのが文書と試験だけなら、反映しません。比べる相手は、最後に反映に成功したコミットです。たとえば 2026-10-20 の main の変更は文書と開発用の設定だけだったので、反映は行われていません。</p>
+  <figure class="fig cicd">
+    <div class="pipe" role="group" aria-label="CI と自動デプロイの流れ図">
+      <div class="pstage">
+        <div class="ph">きっかけ</div>
+        <div class="pjobs">
+          <div class="pn trig" style="--i:0"><b>PR を作る・開き直す・更新する</b><small>検査だけ動く</small></div>
+          <div class="pn trig" style="--i:0"><b>どの枝への push でも</b><small>検査だけ動く</small></div>
+          <div class="pn trig" style="--i:0"><b>main への push</b><small>PR を取り込んだとき。検査のあと、反映へ進む</small></div>
+        </div>
+      </div>
+      <div class="pdown">▼</div>
+      <div class="pstage">
+        <div class="ph">検査（GitHub Actions。同時に動く）</div>
+        <div class="pjobs">
+          <div class="pn" style="--i:1"><b>画面の検査</b><small>API の型の作り直しで差が出ないか、oxlint、Vitest（カバレッジつき）、型の確認とビルド</small></div>
+          <div class="pn" style="--i:1"><b>API の検査</b><small>gofmt、go vet、データ競合の検出つきの試験（使い捨ての PostgreSQL を使う）、ビルド</small></div>
+          <div class="pn" style="--i:1"><b>自動生成のずれ</b><small>SQL から作るコードと API の仕様書が、作り直したものと同じか</small></div>
+          <div class="pn" style="--i:1"><b>API のイメージの検査</b><small>公開せずにビルドし、起動、応答、root 以外で動くかを確かめる</small></div>
+          <div class="pn" style="--i:1"><b>設定まわりの検査</b><small>Caddy の設定の書き間違い、外部の部品の固定、文書のリンクなど</small></div>
+          <div class="pn gate" style="--i:1"><b>本番への反映が要るか</b><small>main への push のときだけ。前に反映できたコミットと比べ、文書と試験だけの変更なら反映しない</small></div>
+        </div>
+      </div>
+      <div class="pdown">▼<span>PR とほかの枝はここで終わり。main は、全部が通り、反映が要るときだけ進む</span></div>
+      <div class="pstage main">
+        <div class="ph">配布物を1回だけ作る<span class="when">main のときだけ</span></div>
+        <div class="pseq">
+          <div class="pn" style="--i:2"><b>API のイメージを作る</b><small>GHCR に置く</small></div>
+          <div class="pn" style="--i:3"><b>番号で取り直して検査</b><small>中身から決まる番号（ダイジェスト）で固定</small></div>
+          <div class="pn" style="--i:4"><b>画面を検査してビルド</b><small>本番の API の URL を入れて1回だけ</small></div>
+          <div class="pn" style="--i:5"><b>一覧表を作って保存</b><small>画面、運用のファイル、イメージの番号と SHA-256（90日保存）</small></div>
+        </div>
+      </div>
+      <div class="pdown">▼</div>
+      <div class="pstage main">
+        <div class="ph">本番への反映<span class="when">同時に2つは動かさない</span></div>
+        <div class="pseq">
+          <div class="pn" style="--i:6"><b>配布物を照合</b><small>一覧表の SHA-256 と比べる</small></div>
+          <div class="pn" style="--i:7"><b>サーバーへ送る</b><small>SSH。つなぐ相手の身元も確かめる</small></div>
+        </div>
+        <div class="pstage srv">
+          <div class="ph">Lightsail のサーバーの上で動くスクリプト</div>
+          <div class="pseq">
+            <div class="pn srvn" style="--i:8"><b>鍵を取る</b><small>ほかの反映が動いていたら止まる</small></div>
+            <div class="pn srvn" style="--i:9"><b>中身を確かめる</b><small>届いたファイルを照合</small></div>
+            <div class="pn srvn" style="--i:10"><b>戻し先を記録</b><small>今動いているイメージ</small></div>
+            <div class="pn srvn" style="--i:11"><b>新しいイメージを取る</b><small>GHCR から、固定した番号で</small></div>
+            <div class="pn srvn" style="--i:12"><b>DB のバックアップ</b><small>取ったあと、読めるかも確かめる</small></div>
+            <div class="pn srvn" style="--i:13"><b>表の形を変える</b><small>マイグレーション。失敗したら入れ替えない</small></div>
+            <div class="pn srvn" style="--i:14"><b>API を入れ替える</b><small>準備ができるまで最大60秒待つ</small></div>
+            <div class="pn srvn" style="--i:15"><b>入口から確かめる</b><small>Caddy を通して応答が返るか</small></div>
+          </div>
+          <div class="pfail"><b>入れ替えか、入口の確認に失敗したとき:</b> 確認なしで、記録しておいた前のイメージに戻します。DB は戻しません。この回の反映は失敗になり、画面は公開しません。それより前の手順で失敗したときは、API を入れ替えずにそこで止まります。</div>
+        </div>
+        <div class="pdown">▼<span>API の反映に成功したときだけ</span></div>
+        <div class="pseq">
+          <div class="pn pub" style="--i:16"><b>画面の今の公開を記録</b><small>画面だけを戻すときの戻し先</small></div>
+          <div class="pn pub" style="--i:17"><b>Cloudflare Pages へ公開</b><small>作り直さず、照合した画面をそのまま出す</small></div>
+          <div class="pn pub" style="--i:18"><b>公開後の確認</b><small>トップページ、ログイン後の画面、API の準備の確認に届くか</small></div>
+        </div>
+      </div>
+      <div class="pside">
+        <div class="pn static"><b>毎週月曜 12:17 JST</b><small>Cloudflare の IP 範囲が、Caddy の設定と同じか点検する。違えば失敗し、通知が届く</small></div>
+        <div class="pn static"><b>手動で動かすもの</b><small>配布物だけを作る。画面だけを出し直す、または前の公開に戻す</small></div>
+        <div class="pn static"><b>毎日のバックアップ</b><small>GitHub Actions ではなく、サーバーの cron で行う想定。そのため図の流れには入れていない</small></div>
+      </div>
+    </div>
+    <figcaption>橙の枠が光る順に、main への push から本番の反映まで進みます（動きを減らす設定にしている端末では光りません）。同じ段の箱が同時に光るのは、同時に動くことを表しています。</figcaption>
+  </figure>
   <ol class="steps">
     <li><b>検査。</b> GitHub Actions で、画面と API の検査をすべて通します。1つでも落ちたら止まります。</li>
     <li><b>配布物を1回だけ作る。</b> API のイメージ、画面のファイル、運用のファイル、それらの一覧表を作ります。イメージは GHCR に置き、中身から決まる番号（ダイジェスト）で固定します。同じ番号なら、何度取っても同じ中身です。</li>
@@ -823,6 +1331,12 @@ a.iss:hover{text-decoration:underline}
     <li><a href="https://github.com/H4aruki/MyTechPulse/issues/13">#13</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/14">#14</a>: 名前の重複と障害を見分けられなかった不具合と、HTTP ステータスで返すと決めた経緯</li>
     <li><a href="https://github.com/H4aruki/MyTechPulse/issues/34">#34</a>: Caddy と GitHub Actions を採った判断</li>
     <li>作業記録（オーナーが Obsidian に残している記録。非公開）: 2026-07-09、07-11、07-16、08-23、08-27 の分。エラーの返し方、画面の技術、Caddy、CI を入れたときの記録</li>
+  </ul>
+  <h3>図の元にしたファイル（main）</h3>
+  <ul class="srclist">
+    <li>ER 図: <a href="https://github.com/H4aruki/MyTechPulse/tree/main/server/db/migrations">server/db/migrations</a> の 00001〜00007（表の定義の正本）と <a href="https://github.com/H4aruki/MyTechPulse/blob/main/server/db/sqlc/legacy_schema.sql">server/db/sqlc/legacy_schema.sql</a>。<a href="https://github.com/H4aruki/MyTechPulse/blob/main/docs/BasicDesignSpecifications/DataBaseArchitecture.md">DB の設計書</a>と突き合わせ、違うところは実装に合わせた</li>
+    <li>要求の通り道の図: <a href="https://github.com/H4aruki/MyTechPulse/blob/main/docker-compose.yml">docker-compose.yml</a>、<a href="https://github.com/H4aruki/MyTechPulse/blob/main/Caddyfile">Caddyfile</a>、<a href="https://github.com/H4aruki/MyTechPulse/tree/main/ops/caddy">ops/caddy</a>、<a href="https://github.com/H4aruki/MyTechPulse/blob/main/docs/adr/0003-host-on-cloudflare-pages-and-lightsail.md">設計判断の記録（Lightsail に同居させる）</a></li>
+    <li>CI と自動デプロイの流れ図: <a href="https://github.com/H4aruki/MyTechPulse/blob/main/.github/workflows/ci.yml">ci.yml</a>、<a href="https://github.com/H4aruki/MyTechPulse/blob/main/.github/workflows/release.yml">release.yml</a>、<a href="https://github.com/H4aruki/MyTechPulse/blob/main/.github/workflows/cloudflare-ips.yml">cloudflare-ips.yml</a>、<a href="https://github.com/H4aruki/MyTechPulse/blob/main/.github/workflows/cutover-frontend.yml">cutover-frontend.yml</a>、<a href="https://github.com/H4aruki/MyTechPulse/blob/main/ops/deploy_go.sh">ops/deploy_go.sh</a>、<a href="https://github.com/H4aruki/MyTechPulse/blob/main/ops/backup_db.sh">ops/backup_db.sh</a>、<a href="https://github.com/H4aruki/MyTechPulse/blob/main/docs/deploy/ci-and-release.md">CI と配布物の手順書</a></li>
   </ul>
   <h3>これから</h3>
   <ul class="srclist">
