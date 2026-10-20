@@ -174,7 +174,7 @@ bash ops/deploy_go_test.sh
 | Restrict deletions | `main` を消せない |
 | Block force pushes | 履歴を書き換える強制 push を禁止 |
 | Require a pull request before merging | 直接 push できない。承認の必須人数は 0（1人開発のため） |
-| Require status checks to pass | **必須チェック4つ（フロントエンドの書き方チェック、Goバックエンドの検査、sqlcとOpenAPIの生成差分、Go APIのimage検査）が緑でないと取り込めない** |
+| Require status checks to pass | **必須チェック5つ（フロントエンドの書き方チェック、Goバックエンドの検査、sqlcとOpenAPIの生成差分、Go APIのimage検査、設定まわりの仕掛けの確認）が緑でないと取り込めない** |
 | Allowed merge methods | **Squash のみ**。1機能=1コミットを守るため、他の取り込み方は選べない |
 
 例外（bypass）は誰にも許可していないため、オーナー自身もこのルールに従います。
