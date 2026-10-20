@@ -2,7 +2,7 @@
 
 > Qiita・Zennから、興味に合う技術記事を集めるパーソナライズニュースアプリ
 
-[公開版を試す](https://mytechpulse.net) ・ [機能一覧](./docs/BasicDesignSpecifications/FeaturesList.md) ・ [コントリビューションガイド](./CONTRIBUTING.md)
+[公開版を試す](https://mytechpulse.net) ・ [機能一覧](./docs/BasicDesignSpecifications/FeaturesList.md) ・ [構成の説明ページ](https://h4aruki.github.io/MyTechPulse/) ・ [コントリビューションガイド](./CONTRIBUTING.md)
 
 MyTechPulseは、複数の技術情報サイトを巡回する手間を減らし、短い時間で必要な記事を見つけるためのWebアプリです。登録した興味タグと記事の閲覧傾向をもとに、Qiita・Zennの新しい記事を優先度順に表示します。
 
@@ -71,7 +71,7 @@ sequenceDiagram
 
 記事を集める期間の条件は提供元で異なります。Qiitaは直近5日、Zennは直近2週間を対象とし、該当するZenn記事が1件も無かった場合のみ、期間の条件を外して補います。
 
-並べ替えの点数は、Zennが興味の強さの合計、Qiitaがそれに反響の大きさを掛けた値です。Zennは取得の時点で提供元のトレンド順に絞り込まれているため、反響を重ねて数えていません。
+並べ替えの点数は、Zennが興味の強さの合計、Qiitaがそれに反響の大きさを掛けた値です。Zennに反響を掛けない理由は、IssueやPRのコメントには残っていません。移行設計には「提供元側の並び順を利用するため」とあります（[PR #145](https://github.com/H4aruki/MyTechPulse/pull/145)）。
 
 ## 技術スタック
 
@@ -85,6 +85,7 @@ sequenceDiagram
 アイコンに無いものとして、ログイン状態の保持にサーバー側セッション（HttpOnly Cookie）、パスワードの保護にbcryptを使っています。
 
 構成の詳細は[システム構成図](./docs/BasicDesignSpecifications/SystemArchitectureDiagram.md)、設計判断の理由は[`docs/adr/`](./docs/adr/)を参照してください。
+技術構成、ドメイン、判断の理由を1枚にまとめた[構成の説明ページ](https://h4aruki.github.io/MyTechPulse/)もあります。
 
 ## 開発を始める
 
@@ -114,7 +115,6 @@ Copy-Item server\.env.example server\.env
 - ダークモード
 - AI要約・自動カテゴリ分類
 - 利用規約・プライバシーポリシー
-- ログイン試行回数の制限とパスワード強度チェック
 - バックアップの外部保管
 
 優先順位と進捗は[TASKS.md](./TASKS.md)で管理しています。

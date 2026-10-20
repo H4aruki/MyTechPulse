@@ -44,12 +44,13 @@
 | 403 | `csrf_header_required` | 書き込み操作に必要な専用ヘッダーが無い |
 | 409 | `username_taken` | 会員登録で、その利用者名がすでに使われている |
 | 422 | `validation_failed` | 入力の形や長さが決まりに合わない。`errors`に項目ごとの指摘が入る |
+| 429 | `too_many_requests` | ログインの試行が多すぎる。`Retry-After`（秒）が付く。利用者名ごと・接続元IPごとの数え方は[ログイン](Details/Auth.md#2-a-2-2-ログイン)を参照 |
 | 500 | `internal_error` | サーバー内部の失敗。原因は応答に出さない |
 | 503 | `providers_unavailable` | 記事の取得先（QiitaとZenn）が両方とも使えない |
 | 503 | `service_unavailable` | データベースに接続できない（`/health/ready`など） |
 
 - 内部の失敗の原因、SQL、入力されたパスワードなどは、エラー応答に含めない
-- 画面側は、401だけを「ログインし直し」として扱い、それ以外の失敗は`detail`を表示して再試行できるようにしている（`frontend/src/api/client.ts`）
+- 画面側は、401だけを「ログインし直し」として扱い、それ以外の失敗は`detail`を表示して再試行できるようにしている（`frontend/src/api/client.ts`）。ログイン画面の429だけは、サーバーの説明ではなく、待つよう案内する固定の文言を出す（[ログイン画面](../Screen/Details/Login.md)）
 
 ## 3. 本人確認のしくみ
 

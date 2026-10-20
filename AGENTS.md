@@ -136,11 +136,10 @@ node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/
 
 ## パーソナライズの重要仕様
 
-1. タグの興味度は0〜1の小数ですが、DBの `recommend.match_int` には10000倍した整数（固定小数点）で保存します（`interest.Scale`）。
+1. タグの興味度は0〜1の小数ですが、DBの `recommend.match_int` には10000倍した整数（固定小数点）で保存します（`interest.Scale`）。会員登録時は、選んだタグだけに10000（1.0）の行を作ります（`interest.InitialSelected`）。選ばなかったタグには行を作らず、興味度0と同じ扱いにします（[Issue #240](https://github.com/H4aruki/MyTechPulse/issues/240)）。`match_int = 1` をやめたのは、1万倍の尺度では0.0001になり、クリック1回でそのタグだけが大きく跳ねるためです（[Issue #201](https://github.com/H4aruki/MyTechPulse/issues/201)、[PR #203](https://github.com/H4aruki/MyTechPulse/pull/203)）。
 2. 記事クリック時は、全タグの興味度を0.8倍（`DecayNumerator / DecayDenominator` = 8/10）に減衰し、クリックした記事のタグへ0.2（`ClickBoost` = 2000）を加えます。上限は1です。
-3. 記事取得は、興味度上位5タグを使います（興味度0のタグは入れない。同じ強さは正規化したタグ名の順。`interest.Top`。アンケートの興味スナップショットも同じ選び方）。QiitaとZennから並行取得し、Qiitaは直近5日、Zennは直近14日（タグで見つけた新しいものが0件なら古いものを使う）で絞ります。順位は `タグ重みの合計 × (likes + 1)` で付け（Zennは重みの合計だけ）、提供元ごとに上位10件を返します。
+3. 記事取得は、興味度上位5タグを使います（興味度0のタグは入れない。同じ強さは正規化したタグ名の順。`interest.Top`。アンケートの興味スナップショットも同じ選び方）。QiitaとZennから並行取得し、Qiitaは直近5日、Zennは直近14日（タグで見つけた新しいものが0件なら古いものを使う）で絞ります。順位は提供元で違います。Qiitaはタグ重みの合計 × (likes + 1)、Zennはタグ重みの合計のみです。提供元ごとに上位10件を返します。Zennに likes を掛けない理由は、IssueやPRのコメントには残っていません。移行設計（`docs/superpowers/specs/2026-09-14-go-backend-migration-design.md`）には「提供元側の並び順を利用するため」とあります（実装は [PR #145](https://github.com/H4aruki/MyTechPulse/pull/145)）。
    - 興味度が0より大きいタグが5つに満たないときは、提供元ごとに1回だけ、タグを問わない人気の記事（`provider.Client.Popular`）も取り、空いた枠の候補にします。点数0の記事どうしは、いいね数の多い順です。
-   - 会員登録時は、選んだタグだけに1（`interest.InitialSelected` = 10000）の行を作ります。選ばなかったタグには行を作りません（#240）。
 4. タグの比較は、前後の空白を除いて小文字にそろえて行います（`interest.NormalizeTag`）。大文字小文字だけが違うタグが、DBに複数あってはいけません。
 5. 外部提供元の片方だけが失敗したときは、成功した側の記事を返し、本文の `warnings` に知らせます。両方失敗したときだけエラーです。
 
