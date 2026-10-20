@@ -21,12 +21,18 @@ header.hero h1{margin:0 0 6px;font-size:1.55rem;line-height:1.4}
 header.hero p{margin:4px 0;opacity:.92}
 .badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .badge{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);border-radius:999px;padding:2px 12px;font-size:.82rem}
-nav.toc{position:sticky;top:16px;align-self:start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 14px 10px;max-height:calc(100vh - 32px);overflow:auto}
+nav.toc{position:sticky;top:16px;align-self:start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 14px 10px;max-height:calc(100vh - 32px);overflow:auto;overscroll-behavior:contain}
 nav.toc h2{font-size:.85rem;margin:0 0 6px;color:var(--sub);letter-spacing:.05em}
 nav.toc ol{margin:0;padding-left:1.3em;font-size:.9rem}
 nav.toc li{margin:3px 0}
 nav.toc a{color:var(--ink);text-decoration:none}
 nav.toc a:hover{color:var(--accent)}
+nav.toc>ol>li{margin:6px 0}
+nav.toc>ol>li>a{font-weight:600}
+nav.toc ol ol{list-style:none;margin:3px 0 6px 2px;padding:0 0 0 10px;border-left:2px solid var(--line);font-size:.8rem;line-height:1.5}
+nav.toc ol ol li{margin:2px 0}
+nav.toc ol ol a{color:var(--sub);display:block;padding:1px 0}
+nav.toc ol ol a:hover{color:var(--accent)}
 main{min-width:0}
 section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:20px}
 section>h2{margin:0 0 12px;font-size:1.25rem;display:flex;align-items:baseline;gap:10px}
@@ -87,6 +93,29 @@ a.iss:hover{text-decoration:underline}
 .fig.er .figscroll>svg{min-width:760px;max-width:960px;margin:0 auto}
 .fig.infra .figscroll>svg{min-width:660px}
 .scrollhint{display:none;font-size:.78rem;color:var(--sub);margin:0 0 4px}
+/* 図の拡大（figure に zoomable を付けた図だけ。スクリプトが無いときは何も変わらない） */
+.zoomtools{display:flex;justify-content:flex-end;margin:0 0 6px}
+.zoombtn{display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:.8rem;color:var(--accent);background:var(--accent-soft);border:1px solid #c5d6f6;border-radius:999px;padding:2px 12px;cursor:zoom-in}
+.zoombtn:hover{background:#dbe7fc}
+.zoombtn:focus-visible,.zoom-ready .figscroll:focus-visible,dialog.zoom button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.zoombtn svg{width:14px;height:14px}
+.zoombtn .tap{display:none}
+@media (hover:none){.zoombtn .click{display:none}.zoombtn .tap{display:inline}}
+.zoom-ready .figscroll{cursor:zoom-in}
+html.zoom-open{overflow:hidden}
+dialog.zoom{width:calc(100vw - 32px);height:calc(100vh - 32px);height:calc(100dvh - 32px);max-width:none;max-height:none;margin:auto;padding:0;border:none;border-radius:12px;background:#fff;color:var(--ink);overflow:hidden}
+dialog.zoom::backdrop{background:rgba(15,23,41,.72)}
+dialog.zoom .zoom-in{display:flex;flex-direction:column;height:100%}
+dialog.zoom .zoom-bar{display:flex;align-items:center;gap:8px;padding:8px 10px 8px 16px;border-bottom:1px solid var(--line);background:#f7f9fc}
+dialog.zoom .zoom-bar h2{flex:1;margin:0;font-size:.95rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+dialog.zoom .zoom-bar button{font:inherit;font-size:.85rem;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:4px 12px;cursor:pointer}
+dialog.zoom .zoom-bar .zoom-close{font-weight:700}
+dialog.zoom .zoom-body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:12px;background:#fbfcfe;cursor:zoom-out}
+dialog.zoom .zoom-body>svg{display:block;margin:0 auto;height:auto;width:max(100%,1000px);max-width:1400px;cursor:auto}
+dialog.zoom.fit .zoom-body{display:flex;flex-direction:column}
+dialog.zoom.fit .zoom-body>svg{flex:1 1 0;min-height:0;width:100%;max-width:none}
+dialog.zoom .legend{max-width:1400px;margin:10px auto 0;cursor:auto}
+@media (max-width:900px){dialog.zoom{width:calc(100vw - 12px);height:calc(100vh - 12px);height:calc(100dvh - 12px)}}
 .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.8rem;color:var(--sub);margin-top:8px}
 .legend span{white-space:nowrap}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px;border:1.5px solid}
@@ -145,6 +174,9 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
 @media (max-width:900px){
   .wrap{grid-template-columns:1fr;padding:14px 12px 60px}
   nav.toc{position:static;max-height:none}
+  nav.toc ol ol{display:flex;flex-wrap:wrap;gap:2px 14px;font-size:.78rem}
+  nav.toc ol ol li{margin:0}
+  nav.toc ol ol a{padding:3px 0}
   .arch{grid-template-columns:1fr}
   .grid2{grid-template-columns:1fr}
   section{padding:18px 16px}
@@ -168,6 +200,8 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
   a{color:#000}
   svg .comet{display:none}
   .figscroll{overflow:visible}
+  .zoomtools,dialog.zoom{display:none !important}
+  .zoom-ready .figscroll{cursor:auto}
 }
 </style>
 </head>
@@ -186,16 +220,88 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
 <nav class="toc" aria-label="目次">
   <h2>目次</h2>
   <ol>
-    <li><a href="#overview">プロダクトの概要</a></li>
-    <li><a href="#system">システム全体図</a></li>
-    <li><a href="#feed">記事一覧ができるまで</a></li>
-    <li><a href="#learning">興味の学習</a></li>
-    <li><a href="#auth">会員登録とログイン</a></li>
-    <li><a href="#data">データの持ち方</a></li>
-    <li><a href="#ops">デプロイと運用</a></li>
-    <li><a href="#tech">技術の選択と理由</a></li>
+    <li><a href="#overview">プロダクトの概要</a>
+      <ol>
+        <li><a href="#overview-flow">利用者から見た流れ</a></li>
+      </ol>
+    </li>
+    <li><a href="#system">システム全体図</a>
+      <ol>
+        <li><a href="#system-path">記事一覧を開いたときに通る道</a></li>
+        <li><a href="#system-modules">API の中の分け方</a></li>
+      </ol>
+    </li>
+    <li><a href="#feed">記事一覧ができるまで</a>
+      <ol>
+        <li><a href="#feed-example">例: Go だけを選んだ人</a></li>
+        <li><a href="#score">採点のしかた</a></li>
+        <li><a href="#feed-failure">うまくいかなかったとき</a></li>
+      </ol>
+    </li>
+    <li><a href="#learning">興味の学習</a>
+      <ol>
+        <li><a href="#learning-rules">決まり</a></li>
+        <li><a href="#learning-ex1">例1: 同じ種類の記事を続けて押す</a></li>
+        <li><a href="#learning-ex2">例2: 選ばなかったタグの記事を押す</a></li>
+        <li><a href="#learning-ex3">例3: 押さなくなったタグ</a></li>
+        <li><a href="#learning-other">そのほかの決まり</a></li>
+      </ol>
+    </li>
+    <li><a href="#auth">会員登録とログイン</a>
+      <ol>
+        <li><a href="#auth-signup">会員登録の流れ</a></li>
+        <li><a href="#auth-login">ログインの流れ</a></li>
+        <li><a href="#auth-session">セッションの決まり</a></li>
+        <li><a href="#auth-limit">ログイン試行の制限</a></li>
+        <li><a href="#auth-csrf">CSRF と CORS</a></li>
+        <li><a href="#auth-passkey">パスキー</a></li>
+      </ol>
+    </li>
+    <li><a href="#data">データの持ち方</a>
+      <ol>
+        <li><a href="#er">表のつながり（ER 図）</a></li>
+        <li><a href="#data-tables">表ごとの役割</a></li>
+        <li><a href="#data-tags">タグ名のそろえ方</a></li>
+        <li><a href="#data-migration">表の形の変え方</a></li>
+        <li><a href="#data-int">値を整数で持つ理由</a></li>
+      </ol>
+    </li>
+    <li><a href="#ops">デプロイと運用</a>
+      <ol>
+        <li><a href="#ops-server">本番のサーバー</a></li>
+        <li><a href="#ops-deploy">自動デプロイの流れ</a></li>
+        <li><a href="#ops-ci">CI で確かめていること</a></li>
+        <li><a href="#ops-backup">バックアップ</a></li>
+      </ol>
+    </li>
+    <li><a href="#tech">技術の選択と理由</a>
+      <ol>
+        <li><a href="#tech-ui">画面</a></li>
+        <li><a href="#tech-ui-lib">画面のデータ取得とフォーム</a></li>
+        <li><a href="#tech-ui-test">画面の検査</a></li>
+        <li><a href="#tech-api">API（Go と Huma）</a></li>
+        <li><a href="#tech-arch">API の構成</a></li>
+        <li><a href="#tech-db-kind">DB の種類</a></li>
+        <li><a href="#tech-dbaccess">DB の扱い方</a></li>
+        <li><a href="#tech-migration">表の形の変え方</a></li>
+        <li><a href="#tech-db">DB の置き場所</a></li>
+        <li><a href="#tech-auth">ログイン状態の持ち方</a></li>
+        <li><a href="#tech-error">エラーの返し方</a></li>
+        <li><a href="#tech-hosting">置き場所</a></li>
+        <li><a href="#tech-caddy">HTTPS の入口</a></li>
+        <li><a href="#tech-ci">CI と配布</a></li>
+      </ol>
+    </li>
     <li><a href="#tradeoffs">制約とトレードオフ</a></li>
-    <li><a href="#future">まだ本番にないもの</a></li>
+    <li><a href="#future">まだ本番にないもの</a>
+      <ol>
+        <li><a href="#future-zero">選ばなかったタグを 0 から始める</a></li>
+        <li><a href="#future-click">クリックで好きなタグを登録できる問題</a></li>
+        <li><a href="#future-prefetch">記事を前もって集めておく</a></li>
+        <li><a href="#future-save">記事の保存</a></li>
+        <li><a href="#future-other">そのほか</a></li>
+      </ol>
+    </li>
     <li><a href="#unknown">未確認のこと</a></li>
     <li><a href="#sources">出典</a></li>
   </ol>
@@ -207,7 +313,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
   <h2><span class="no">01</span>プロダクトの概要</h2>
   <p class="oneliner">Qiita と Zenn から、利用者の興味に合う新しい技術記事を集めて並べる Web アプリです。</p>
   <p>画面は <code>https://mytechpulse.net</code> で、API は <code>https://api.mytechpulse.net</code> です。</p>
-  <h3>利用者から見た流れ</h3>
+  <h3 id="overview-flow">利用者から見た流れ</h3>
   <ol class="steps">
     <li><b>会員登録。</b> 1つ目の画面で、利用者名とパスワードを決めます。2つ目の画面で、興味のあるタグを選びます。候補は100個で、「プログラミング言語」や「クラウド / インフラ」など9つの分類に分かれています。分類ごとにまとめて選ぶこともできます。1個以上選べば登録できます。</li>
     <li><b>記事一覧。</b> 登録やログインが済むと、記事一覧が開きます。Qiita の記事と Zenn の記事を、それぞれ最大10件、点数の高い順に表示します。</li>
@@ -248,7 +354,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
       <div class="node ext"><b>Zenn API</b><small>タグごとに5件<br>トークン不要。公式の仕様書はない</small></div>
     </div>
   </div>
-  <h3>記事一覧を1回開いたときに通る道</h3>
+  <h3 id="system-path">記事一覧を1回開いたときに通る道</h3>
   <figure class="fig infra">
     <p class="scrollhint">図は横にスクロールできます。</p>
     <div class="figscroll">
@@ -354,7 +460,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
     <li>集めた記事を採点して並べ、JSON で返します。詳しくは<a href="#feed">記事一覧ができるまで</a>に書きます。</li>
   </ol>
   <p>Cloudflare の IP 範囲は変わることがあります。そのため、毎週月曜の 12:17 JST に、最新の範囲と設定を比べる点検が動きます。違いがあれば点検が失敗し、オーナーに GitHub から通知が届きます。設定を自動では書き換えません。</p>
-  <h3>API の中の分け方</h3>
+  <h3 id="system-modules">API の中の分け方</h3>
   <p>API は1つのプログラムですが、中を役割ごとに分けています。</p>
   <div class="tbl"><table>
     <tr><th>役割</th><th>受け持つこと</th></tr>
@@ -383,7 +489,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
     <li><b>採点して並べる。</b> 点数の出し方は下の<a href="#score">採点のしかた</a>のとおりです。点数が同じなら、新しい記事を先にします。</li>
     <li><b>返す。</b> Qiita と Zenn を分けて、それぞれ上位10件を返します。</li>
   </ol>
-  <h3>例: Go だけを選んで登録した人</h3>
+  <h3 id="feed-example">例: Go だけを選んで登録した人</h3>
   <p>この人の興味度は、Go が 10000（1.0）です。タグ表にあるほかのタグは、すべて 8000（0.8）です。タグ表が登録画面の100個だけなら、99個が 8000 になります。上位5タグは、Go と、8000 の中から名前順で先に来る4つです。調査のコメントでは、Android、Angular、Ansible、Astro の4つでした。この5タグで Qiita と Zenn を検索します。つまり、Qiita と Zenn への10回の検索のうち8回が、選んでいないタグに使われます。Go しか選んでいないのに、Android や Angular の記事も並びます。この動きを変える案は、<a href="#future">まだ本番にないもの</a>に書きます。</p>
   <h3 id="score">採点のしかた</h3>
   <div class="formula">
@@ -400,7 +506,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
   </table></div>
   <p>Zenn の記事には、検索に使ったタグを記事のタグとして足しています。Qiita と Zenn は別々の列で返すので、点数の桁が違っても混ざりません。</p>
   <p>Zenn にいいね数を掛けない理由は、移行の設計書に「提供元側の並び順を利用するため」とあります。Zenn を呼ぶときに並び順は指定していないので、Zenn の既定の並び順で返ってきます。既定はトレンド順です。2026年10月20日に、並び順を指定しない場合と、トレンド順（その日の分）を指定した場合で同じ5件が同じ順で返ること、新着順を指定した場合とは順番が違うことを確かめました。Zenn に公式の仕様書はないので、この既定は Zenn 側の都合で変わることがあります。</p>
-  <h3>うまくいかなかったとき</h3>
+  <h3 id="feed-failure">うまくいかなかったとき</h3>
   <div class="tbl"><table>
     <tr><th>起きたこと</th><th>返すもの</th></tr>
     <tr><td>Qiita か Zenn の片方だけが失敗した</td><td>成功した側の記事を返します。画面には「一部の記事を取得できませんでした。」と出ます。</td></tr>
@@ -419,14 +525,14 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
 <section id="learning">
   <h2><span class="no">04</span>興味の学習</h2>
   <p>興味度は、タグごとに 0〜1 の値です。DB には、10000 倍した整数（0〜10000）で保存し、計算も整数で行います。</p>
-  <h3>決まり</h3>
+  <h3 id="learning-rules">決まり</h3>
   <ul>
     <li>会員登録のとき、選んだタグは 10000（1.0）になります。タグ表にある、選ばなかったすべてのタグは 8000（0.8）になります。</li>
     <li>記事を1回押すたびに、まず、その人のすべてのタグの値を 0.8 倍します。端数は切り捨てます。</li>
     <li>次に、押した記事に付いているタグに 2000（0.2）を足します。上限は 10000 です。</li>
     <li>押した記事のタグを、その人がまだ持っていなければ、2000 で新しく作ります。</li>
   </ul>
-  <h3>例1: 同じ種類の記事を続けて押す</h3>
+  <h3 id="learning-ex1">例1: 同じ種類の記事を続けて押す</h3>
   <p>Go と React を選んで登録した人がいるとします。Docker は選んでいないので 8000 です。この人が、Go のタグが付いた記事を押していくと、値は次のように変わります。</p>
   <div class="tbl"><table>
     <tr><th>タグ</th><th>登録直後</th><th>1回押した後</th><th>2回押した後</th><th>4回押した後</th></tr>
@@ -435,11 +541,11 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
     <tr><td>Docker（選ばなかった）</td><td>8000</td><td>6400</td><td>5120</td><td>3276</td></tr>
   </table></div>
   <p>Go は、0.8 倍して 2000 を足すと 10000 に戻るので、上限のまま動きません。React は、選んだタグなのに、4回で半分以下になります。</p>
-  <h3>例2: 選ばなかったタグの記事を1回押す</h3>
+  <h3 id="learning-ex2">例2: 選ばなかったタグの記事を1回押す</h3>
   <p>同じ人が、登録直後に Docker の記事を1回だけ押したとします。Docker は 8000 × 0.8 ＋ 2000 で 8400 になります。Go と React は 0.8 倍されて 8000 です。たった1回で、選んでいない Docker が一番上に来ます。</p>
-  <h3>例3: 押さなくなったタグ</h3>
+  <h3 id="learning-ex3">例3: 押さなくなったタグ</h3>
   <p>10000 のタグでも、そのタグの付かない記事を押し続けると、値は 8000、6400、5120、4096 と下がります。10回で 1072 になります。</p>
-  <h3>そのほかの決まり</h3>
+  <h3 id="learning-other">そのほかの決まり</h3>
   <ul>
     <li>1回のクリックで送れるタグは1〜50個です。1個のタグ名は1〜50文字です。</li>
     <li>同じ人のクリックが同時に届いても、DB でその人の行を押さえて、1件ずつ順に計算します。値が食い違うことはありません。</li>
@@ -468,14 +574,14 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
 
 <section id="auth">
   <h2><span class="no">05</span>会員登録とログイン</h2>
-  <h3>会員登録の流れ</h3>
+  <h3 id="auth-signup">会員登録の流れ</h3>
   <ol class="steps">
     <li><b>入力を確かめる。</b> 利用者名は、前後の空白を除いて1〜50文字です。タグは1〜128個で、1個は1〜50文字です。大文字と小文字だけが違うタグは、1つにまとめます。</li>
     <li><b>パスワードを確かめる。</b> 条件は4つです。12文字以上であること。72バイト以下であること。利用者名と同じでないこと（大文字と小文字は区別しません）。よく使われるパスワードの一覧（184語）に無いことです。記号や数字を必ず入れる、といった決まりはありません。</li>
     <li><b>まとめて保存する。</b> 利用者、タグ表に無いタグ、興味度、最初のセッションを、1つのトランザクションで作ります。途中で1つでも失敗したら、全部を取り消します。利用者名がすでに使われていたら、409 を返します。</li>
     <li><b>ログイン状態で戻す。</b> セッションの Cookie を付けて返すので、登録した直後から記事一覧を開けます。</li>
   </ol>
-  <h3>ログインの流れ</h3>
+  <h3 id="auth-login">ログインの流れ</h3>
   <ol class="steps">
     <li><b>締め出し中か確かめる。</b> その利用者名か接続元 IP が締め出し中なら、照合する前に 429 を返します。</li>
     <li><b>パスワードを照合する。</b> bcrypt（コスト12）で照合します。利用者名が存在しないときも、用意したダミーのハッシュと照合して、同じくらい時間をかけます。どちらの場合も、同じ 401 を返します。応答の中身や速さから、利用者名があるかどうかは分かりません。</li>
@@ -483,13 +589,13 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
     <li><b>ついでに掃除する。</b> 期限の切れたセッションを、ログインのたびに消します。</li>
   </ol>
   <p>パスワードの4つの条件は、新しく登録するときだけに使います。ログインの照合には使いません。条件ができる前に短いパスワードで登録した人も、そのままログインできます。</p>
-  <h3>セッションの決まり</h3>
+  <h3 id="auth-session">セッションの決まり</h3>
   <ul>
     <li>有効期限は、ログインした時刻からちょうど24時間です。使っている間に延びることはありません。10:00 にログインしたら、翌日の 10:00 にまたログインが必要です。</li>
     <li>本番の Cookie の名前は <code>__Host-</code> で始まります。この名前の Cookie は、ブラウザがほかのサブドメインから上書きさせません。HttpOnly なので JavaScript からは読めません。Secure なので https でしか送りません。SameSite=Lax です。</li>
     <li>ログアウトすると、その端末のセッションだけを DB から消します。ほかの端末は、ログインしたままです。</li>
   </ul>
-  <h3>ログイン試行の制限</h3>
+  <h3 id="auth-limit">ログイン試行の制限</h3>
   <p>同じ利用者名でパスワードを間違え続けると、しばらく受け付けなくなります。失敗の数え方は次のとおりです。</p>
   <div class="tbl"><table>
     <tr><th>同じ利用者名での失敗</th><th>その後の扱い</th></tr>
@@ -508,9 +614,9 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
     <li>回数は API のメモリの中だけで数えます。API を再起動すると、数え直しになります。</li>
     <li>接続元 IP は、Cloudflare が付ける <code>CF-Connecting-IP</code> から読みます。本番でこのヘッダーを読む設定が空なら、API は起動しません。</li>
   </ul>
-  <h3>他のサイトからの悪用を防ぐしくみ（CSRF と CORS）</h3>
+  <h3 id="auth-csrf">他のサイトからの悪用を防ぐしくみ（CSRF と CORS）</h3>
   <p>ログイン状態は Cookie で持つので、別のサイトから勝手に要求を送られると、Cookie が付いてしまうおそれがあります。そこで、データを変える要求には2つの条件を付けています。送り元のページが <code>https://mytechpulse.net</code> であること。<code>X-MTP-CSRF: 1</code> という専用のヘッダーが付いていること。どちらかが欠けると 403 を返します。ほかのサイトのフォームからは、このヘッダーを付けて送れません。CORS でも、許可する送り元を1つずつ完全一致で決めています。「どこからでも可」にはしていません。</p>
-  <h3>パスキー</h3>
+  <h3 id="auth-passkey">パスキー</h3>
   <ul>
     <li>設定画面で、1人10個まで登録できます。名前は1〜64文字で、目に見えない文字は使えません。名前を付けなければ「パスキー」になります。</li>
     <li>ログイン画面では、利用者名を入れずにパスキーを選ぶだけでログインできます。利用者名の入力欄を押すと、ブラウザが候補としてパスキーを出す形にも対応しています。</li>
@@ -567,7 +673,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
   <div class="callout ng"><b>記事は DB に保存していません。</b> 一覧を開くたびに Qiita と Zenn から取ってきて、採点して返すだけです。既読の管理や、記事の保存もありません。</div>
   <h3 id="er">表のつながり（ER 図）</h3>
   <p>13個の表と、表どうしのつながりを図にしました。表の名前と列の名前は、DB の中の実際の名前です。列は、つながりに使う列と、主な列だけを載せています。</p>
-  <figure class="fig er">
+  <figure class="fig er zoomable">
     <p class="scrollhint">図は横にスクロールできます。</p>
     <div class="figscroll">
     <svg viewBox="0 0 960 1130" role="img" aria-labelledby="er-title er-desc">
@@ -814,7 +920,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
     </div>
     <figcaption>線の端の赤い文字は、相手の表から見た行の数です。「1」はちょうど1行、「0〜1」は無いか1行、「多」は0行以上を表します。たとえば user と auth_session の線は、user 側が「1」、auth_session 側が「多」です。1人の利用者が、ログイン中の端末の数だけセッションを持てる、という意味です。</figcaption>
   </figure>
-  <h3>表ごとの役割</h3>
+  <h3 id="data-tables">表ごとの役割</h3>
   <div class="tbl"><table>
     <tr><th>表</th><th>何のための表か</th><th>つながり</th></tr>
     <tr><td><code>user</code></td><td>会員登録した人。利用者名、パスワードのハッシュ、役割を持ちます。</td><td>ほとんどの表が、この表の利用者を指します。</td></tr>
@@ -833,17 +939,17 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
   </table></div>
   <p>利用者を消すと、その人の興味度、セッション、パスキー、アンケートの記録も一緒に消えます。タグを消すと、そのタグの興味度も消えます。アンケートの版と質問は、回答の意味を保つため、一緒には消えません。</p>
   <p>このほかに、マイグレーションの道具が、どこまで適用したかを記録する表を自分で作ります。アプリのデータではないので、13個には数えず、図にも入れていません。</p>
-  <h3>タグ名のそろえ方</h3>
+  <h3 id="data-tags">タグ名のそろえ方</h3>
   <p>タグ名は、前後の空白を除き、小文字にしてから比べます。たとえば「Go」と「 go 」は同じタグです。新しいタグを作るときは、そろえた名前で DB に鍵をかけてから、もう一度探します。2人が同時に同じタグを登録しても、タグは1つしかできません。</p>
-  <h3>表の形の変え方</h3>
+  <h3 id="data-migration">表の形の変え方</h3>
   <p>表の形を変える手順（マイグレーション）は、今は7本です。1本目は、Python 版の頃から使ってきた3つの表と同じ形です。今の DB が同じ形なら何もせず、違っていれば止まります。変更は列や表の「追加」だけと決めていて、試験でも確かめています。理由は<a href="#tech-migration">技術の選択と理由</a>に書きます。</p>
-  <h3>値を整数で持つ理由</h3>
+  <h3 id="data-int">値を整数で持つ理由</h3>
   <p>0.8 倍のような計算を小数のまま繰り返すと、保存のたびに誤差が出ます。整数なら誤差が出ず、同じ操作をすれば毎回同じ結果になります。その代わり、0〜10000 からはみ出さないようにする処理と、割り算の切り捨てに気をつけています。</p>
 </section>
 
 <section id="ops">
   <h2><span class="no">07</span>デプロイと運用</h2>
-  <h3>本番のサーバー</h3>
+  <h3 id="ops-server">本番のサーバー</h3>
   <ul>
     <li>AWS Lightsail の東京にある、メモリ 1GB のサーバー1台です。費用は月約 $7 です。</li>
     <li>メモリが小さいので、2GB のスワップを作っています。スワップはなるべく使わない設定（swappiness=10）です。</li>
@@ -854,7 +960,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
     <li>API の説明画面（Swagger UI）を本番で有効にすると、API は起動しません。</li>
     <li>セッションの24時間、外部への問い合わせの5秒、全体の8秒、応答の 2MiB は、すべて既定値です。本番の設定ではこれらを変えていないので、既定値のまま動いています。</li>
   </ul>
-  <h3>自動デプロイの流れ</h3>
+  <h3 id="ops-deploy">自動デプロイの流れ</h3>
   <p>main に変更が入ると、人の承認なしで本番に反映します。ただし、変わったのが文書と試験だけなら、反映しません。比べる相手は、最後に反映に成功したコミットです。たとえば 2026-10-20 の main の変更は文書と開発用の設定だけだったので、反映は行われていません。</p>
   <figure class="fig cicd">
     <div class="pipe" role="group" aria-label="CI と自動デプロイの流れ図">
@@ -940,7 +1046,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
     <li><b>画面を公開する。</b> API の反映に成功したときだけ、画面を Cloudflare Pages に公開します。画面は新しい API に合わせて作られているので、先に出すと古い API と食い違うためです。</li>
   </ol>
   <p>本番は、2026-10-07 に Python 版から Go 版へ切り替えました。自動デプロイは 2026-10-08 から動いています。最後に反映が成功したのは 2026-10-19 09:59 JST です。</p>
-  <h3>CI で確かめていること</h3>
+  <h3 id="ops-ci">CI で確かめていること</h3>
   <div class="tbl"><table>
     <tr><th>検査</th><th>中身</th></tr>
     <tr><td>画面</td><td>API の型の作り直しで差が出ないか。oxlint での書き方の確認。Vitest の試験（カバレッジの計測つき）。TypeScript の型の確認とビルド。</td></tr>
@@ -949,7 +1055,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
     <tr><td>API のイメージ</td><td>実際にビルドして起動し、応答が返るか。root 以外で動いているか。</td></tr>
     <tr><td>設定まわり</td><td>Caddy の設定に書き間違いがないか（本番と同じ 2.10.2 で確かめる）。外部の部品（GitHub Actions の action）を固定しているか。文書どうしが食い違っていないか。</td></tr>
   </table></div>
-  <h3>バックアップ</h3>
+  <h3 id="ops-backup">バックアップ</h3>
   <ul>
     <li>PostgreSQL の標準の道具（pg_dump）で取ります。反映のたびに自動で取ります。毎日の取得は、cron で行う想定です（例として毎日 04:00）。</li>
     <li>7日より古いものは自動で消す決まりです。残したいものには目印のファイルを置けば、消されません。</li>
@@ -1180,7 +1286,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
   <h2><span class="no">10</span>まだ本番にないもの</h2>
   <p>ここに書くものは、どれも本番では動いていません。方針が決まっているものと、案の段階のものがあります。</p>
 
-  <h3>選ばなかったタグを 0 から始める <span class="pill warn">修正の PR が未マージ</span></h3>
+  <h3 id="future-zero">選ばなかったタグを 0 から始める <span class="pill warn">修正の PR が未マージ</span></h3>
   <p>修正は PR として出ていますが、まだ main に入っていません。本番では、選ばなかったタグは今も 8000（0.8）です。</p>
   <div class="rationale"><b>判断理由（方針は決定済み）</b>
     <p><b>決めたこと:</b> 会員登録のとき、選ばなかったタグには行を作らない。値は 0 として扱う。選んだタグは 1.0 のまま。</p>
@@ -1210,10 +1316,10 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
     </table></div>
   </div>
 
-  <h3>クリックで好きなタグを登録できてしまう問題を直す <span class="pill warn">未実装</span></h3>
+  <h3 id="future-click">クリックで好きなタグを登録できてしまう問題を直す <span class="pill warn">未実装</span></h3>
   <p>問題の中身は<a href="#feed">記事一覧ができるまで</a>の最後に書きました。直す順番は、上の「0 から始める」の次です。どちらも興味度の表とタグの表を直す作業で、同じ所を触るので、先に初期値の方針を固めたほうが手戻りが少ないためです。この順番は、オーナーが進め方を任せた上で決まりました。</p>
 
-  <h3>記事を前もって集めておく <span class="pill warn">方針だけ決定</span></h3>
+  <h3 id="future-prefetch">記事を前もって集めておく <span class="pill warn">方針だけ決定</span></h3>
   <p>今は一覧を開くたびに外部を呼んでいます。これを、決まった時刻にまとめて集め、DB に入れておく形に変えます。決まっている方針は次のとおりです。</p>
   <ul>
     <li>一覧は DB から読みます。一覧を開いたときには、外部の API を呼びません。</li>
@@ -1224,7 +1330,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
   </ul>
   <p>この作業は、上の2つが終わってからにします。めったに使われないタグを別の枠で集める基準は、初期値が直り、意味のないタグが増えなくなってからでないと決められないためです。</p>
 
-  <h3>記事の保存（お気に入り） <span class="pill warn">方針だけ決定</span></h3>
+  <h3 id="future-save">記事の保存（お気に入り） <span class="pill warn">方針だけ決定</span></h3>
   <div class="rationale"><b>判断理由（方針は決定済み）</b>
     <p><b>決めたこと:</b> 保存はログインした人だけが使えるようにし、サーバーに持つ。</p>
     <p><b>理由:</b> 別の端末からも見られるようにするためです。保存したことを、興味の学習にも使うためです。</p>
@@ -1249,7 +1355,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
     <p>退会したときは、保存も一緒に消します。</p>
   </div>
 
-  <h3>そのほか</h3>
+  <h3 id="future-other">そのほか</h3>
   <ul>
     <li><b>似たタグの記事で空き枠を埋める案</b> <span class="pill warn">後回し</span>。興味のあるタグに似たタグの記事を、空いた枠に出す案です。先に「人気の記事で埋める」案を採り、こちらは後に回しました。</li>
     <li><b>Lightsail のファイアウォールで送り元を絞る</b> <span class="pill warn">オーナーの手作業</span>。Caddy での制限は本番に入っています。サーバーの手前のファイアウォールでも Cloudflare の範囲だけを通す作業が残っています。</li>
@@ -1346,5 +1452,85 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
 <footer>MyTechPulse 整理ノート ・ 2026-10-20 時点の main が基準 ・ 秘密の情報は含めていません ・ 時刻はすべて JST</footer>
 </main>
 </div>
+<script>
+/* 図の拡大: class="zoomable" の figure をクリックすると、図を画面いっぱいに広げて見せる。
+   スクリプトや dialog が使えないブラウザでは何もしない（図はそのまま横にスクロールできる）。 */
+(function () {
+  if (typeof HTMLDialogElement !== "function") return;
+  var icon = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 10l4 4M6.5 4.5v4M4.5 6.5h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  var n = 0;
+  document.querySelectorAll("figure.zoomable").forEach(function (fig) {
+    var area = fig.querySelector(".figscroll");
+    var svg = area && area.querySelector("svg");
+    if (!svg) return;
+    n += 1;
+    var t = svg.querySelector("title");
+    var label = fig.getAttribute("data-zoom-label") || (t ? t.textContent.trim() : "図");
+    var headId = "zoom-head-" + n;
+
+    var dlg = document.createElement("dialog");
+    dlg.className = "zoom";
+    dlg.setAttribute("aria-labelledby", headId);
+    dlg.innerHTML = '<div class="zoom-in"><div class="zoom-bar"><h2 id="' + headId + '"></h2>' +
+      '<button type="button" class="zoom-fit" aria-pressed="false">全体を表示</button>' +
+      '<button type="button" class="zoom-close" aria-label="閉じる">閉じる ✕</button></div>' +
+      '<div class="zoom-body"></div></div>';
+    dlg.querySelector("h2").textContent = label + "（拡大）";
+    var body = dlg.querySelector(".zoom-body");
+    var copy = svg.cloneNode(true);
+    copy.querySelectorAll("[id]").forEach(function (el) { el.removeAttribute("id"); });
+    copy.removeAttribute("aria-labelledby");
+    copy.setAttribute("aria-label", label);
+    body.appendChild(copy);
+    var legend = fig.querySelector(".legend");
+    if (legend) body.appendChild(legend.cloneNode(true));
+    document.body.appendChild(dlg);
+
+    var tools = document.createElement("div");
+    tools.className = "zoomtools";
+    tools.innerHTML = '<button type="button" class="zoombtn" aria-haspopup="dialog">' + icon +
+      '<span class="click">クリックで拡大</span><span class="tap">タップで拡大</span></button>';
+    var btn = tools.querySelector("button");
+    btn.setAttribute("aria-label", label + "を拡大して表示");
+    fig.insertBefore(tools, fig.firstChild);
+    fig.classList.add("zoom-ready");
+    area.setAttribute("tabindex", "0");
+    area.setAttribute("role", "button");
+    area.setAttribute("aria-haspopup", "dialog");
+    area.setAttribute("aria-label", label + "。クリックで拡大して表示");
+
+    var opener = btn;
+    function open(from) {
+      opener = from || btn;
+      dlg.classList.remove("fit");
+      fitBtn.setAttribute("aria-pressed", "false");
+      fitBtn.textContent = "全体を表示";
+      document.documentElement.classList.add("zoom-open");
+      dlg.showModal();
+      body.scrollTop = 0; body.scrollLeft = 0;
+      dlg.querySelector(".zoom-close").focus();
+    }
+    var fitBtn = dlg.querySelector(".zoom-fit");
+    fitBtn.addEventListener("click", function () {
+      var fit = dlg.classList.toggle("fit");
+      fitBtn.setAttribute("aria-pressed", fit ? "true" : "false");
+      fitBtn.textContent = fit ? "大きく表示" : "全体を表示";
+    });
+    btn.addEventListener("click", function () { open(btn); });
+    area.addEventListener("click", function () { open(area); });
+    area.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(area); }
+    });
+    dlg.querySelector(".zoom-close").addEventListener("click", function () { dlg.close(); });
+    dlg.addEventListener("click", function (e) {
+      if (e.target === dlg || e.target === body) dlg.close();
+    });
+    dlg.addEventListener("close", function () {
+      document.documentElement.classList.remove("zoom-open");
+      if (opener) opener.focus({ preventScroll: true });
+    });
+  });
+})();
+</script>
 </body>
 </html>
