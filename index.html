@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>MyTechPulse 本番アーキテクチャ整理ノート（main 5cc75fd 時点）</title>
+<title>MyTechPulse 本番アーキテクチャ整理ノート（2026-10-20 時点）</title>
 <style>
 :root{
   --bg:#f7f7f4; --card:#ffffff; --ink:#1d2330; --sub:#5b6474; --line:#e3e5e8;
@@ -76,6 +76,8 @@ footer{color:var(--sub);font-size:.8rem;text-align:center;margin-top:24px}
 .rationale li{margin:3px 0}
 a.iss{color:var(--accent);text-decoration:none;font-family:var(--mono);font-size:.9em}
 a.iss:hover{text-decoration:underline}
+.srclist{font-size:.9rem;margin:4px 0 10px}
+.srclist li{margin:3px 0}
 
 @media (max-width:900px){
   .wrap{grid-template-columns:1fr;padding:14px 12px 60px}
@@ -101,701 +103,738 @@ a.iss:hover{text-decoration:underline}
 
 <header class="hero">
   <h1>MyTechPulse ― 本番で「今」動いていることだけ</h1>
-  <p>頭の整理・アーキテクチャ整理ノート（K.Haruki / GitHub <code style="background:rgba(255,255,255,.18);color:#fff">@H4aruki</code>）</p>
-  <p>このページは <code style="background:rgba(255,255,255,.18);color:#fff">main 5cc75fd</code> を基準にしています。2026-10-19 09:53 JST のコミット「ログイン後にマイページを追加する (#238)」です。この版の CI では、「Go版の本番への反映」ジョブが 2026-10-19 09:59 JST に成功しました。</p>
+  <p>頭の整理・アーキテクチャ整理ノート（K.Haruki）</p>
+  <p>このページは、2026-10-20 時点の main のコードを基準にしています。本番で動いているのは、2026-10-19 09:59 JST に自動で反映した版です。その後の main の変更は文書と開発用の設定だけなので、コードは同じです。</p>
   <div class="badges">
-    <span class="badge">事実はコード優先</span><span class="badge">未マージ・未実装は §11 に分けて記載</span><span class="badge">時刻はすべて JST</span><span class="badge">判断理由は Issue/PR コメントも参照</span><span class="badge">作成 2026-10-20</span>
+    <span class="badge">事実はコードを優先</span><span class="badge">まだ本番にないものは分けて記載</span><span class="badge">時刻はすべて JST</span><span class="badge">出典は最後にまとめて記載</span><span class="badge">作成 2026-10-20</span>
   </div>
 </header>
 
 <nav class="toc" aria-label="目次">
   <h2>目次</h2>
   <ol>
-    <li><a href="#s1">プロダクト一言</a></li>
-    <li><a href="#s2">システム全体図</a></li>
-    <li><a href="#s3">技術スタックと選択理由</a></li>
-    <li><a href="#s4">ドメインモデル</a></li>
-    <li><a href="#s5">おすすめの流れ</a></li>
-    <li><a href="#s6">興味学習の式</a></li>
-    <li><a href="#s7">認証</a></li>
-    <li><a href="#s8">インフラ・デプロイ・CI</a></li>
-    <li><a href="#s9">制約・トレードオフ</a></li>
-    <li><a href="#s10">文書とコードの食い違い</a></li>
-    <li><a href="#s11">これから（未マージ・未実装）</a></li>
-    <li><a href="#s12">出典まとめ・未確認事項</a></li>
+    <li><a href="#overview">プロダクトの概要</a></li>
+    <li><a href="#system">システム全体図</a></li>
+    <li><a href="#feed">記事一覧ができるまで</a></li>
+    <li><a href="#learning">興味の学習</a></li>
+    <li><a href="#auth">会員登録とログイン</a></li>
+    <li><a href="#data">データの持ち方</a></li>
+    <li><a href="#ops">デプロイと運用</a></li>
+    <li><a href="#tech">技術の選択と理由</a></li>
+    <li><a href="#tradeoffs">制約とトレードオフ</a></li>
+    <li><a href="#future">まだ本番にないもの</a></li>
+    <li><a href="#unknown">未確認のこと</a></li>
+    <li><a href="#sources">出典</a></li>
   </ol>
 </nav>
 
 <main>
 
-<!-- 1 -->
-<section id="s1">
-  <h2><span class="no">01</span>プロダクト一言</h2>
-  <p class="oneliner">Qiita と Zenn から、利用者の興味タグに合う新しい技術記事を集めて並べる、パーソナライズ技術ニュースWebアプリ。</p>
-  <ul>
-    <li>利用者は、登録のときに興味のあるタグを選びます。</li>
-    <li>記事一覧を開くたびに、興味の強い<b>上位5タグ</b>で Qiita と Zenn を<b>その場で</b>検索します。</li>
-    <li>結果は点数の高い順に、<b>提供元ごとに最大10件</b>を表示します。</li>
-    <li>記事をクリックすると、その記事のタグの興味が強まります。ほかのタグは少し弱まります。こうして、直近の関心に寄っていきます。</li>
-    <li>公開URLは、画面が <code>https://mytechpulse.net</code>、API が <code>api.mytechpulse.net</code> です。</li>
-    <li>ログイン後の画面は3つです。記事一覧 <code>/app/articles</code>、マイページ <code>/app/mypage</code>、設定 <code>/app/settings</code> です。</li>
-    <li>マイページ（#238）には、利用者名と、設定へのリンクがあります。設定では、パスキーを管理します。</li>
-    <li>記事を開いた利用者向けのアンケート（利用者フィードバック、<code>/api/v1/user-feedback/*</code>）も動いています。</li>
-  </ul>
+<section id="overview">
+  <h2><span class="no">01</span>プロダクトの概要</h2>
+  <p class="oneliner">Qiita と Zenn から、利用者の興味に合う新しい技術記事を集めて並べる Web アプリです。</p>
+  <p>画面は <code>https://mytechpulse.net</code> で、API は <code>https://api.mytechpulse.net</code> です。</p>
+  <h3>利用者から見た流れ</h3>
+  <ol class="steps">
+    <li><b>会員登録。</b> 1つ目の画面で、利用者名とパスワードを決めます。2つ目の画面で、興味のあるタグを選びます。候補は100個で、「プログラミング言語」や「クラウド / インフラ」など9つの分類に分かれています。分類ごとにまとめて選ぶこともできます。1個以上選べば登録できます。</li>
+    <li><b>記事一覧。</b> 登録やログインが済むと、記事一覧が開きます。Qiita の記事と Zenn の記事を、それぞれ最大10件、点数の高い順に表示します。</li>
+    <li><b>記事を開く。</b> 記事を押すと、元のサイトが新しいタブで開きます。同時に、その記事のタグの興味が強まり、ほかのタグは少し弱まります。次に一覧を開くと、並びが変わります。</li>
+    <li><b>アンケート。</b> 1回のログインの間に、違う記事を3件開くと、アンケートが出ます。最初の質問は「今日のおすすめ記事は役に立ちましたか？」で、1〜5で答えます。2以下を選んだ人には、さらに3つ聞きます。興味に合っていたか、記事が新しかったか、一覧の画面が使いやすかったか、です。</li>
+  </ol>
+  <p>アンケートは、一度出したら60日間は出しません。回答は2年間保存します。回答と一緒に、その時点の興味の上位5タグも記録します。</p>
+  <p>ログイン後の画面は3つです。記事一覧、マイページ、設定です。マイページには、利用者名と設定へのリンクがあります。記事の保存一覧の置き場所もありますが、中身はまだありません。設定では、パスキーを追加、一覧、名前の変更、削除できます。</p>
   <div class="rationale"><b>判断理由（マイページ）</b>
-    <p><b>決めたこと:</b> マイページは、設定ページと分ける（案B）。マイページには概要だけを置き、パスキーは設定ページに残す。</p>
-    <p><b>理由:</b></p>
-    <ul>
-      <li><a href="https://github.com/H4aruki/MyTechPulse/issues/235">#235</a> でオーナーが決め、<a href="https://github.com/H4aruki/MyTechPulse/pull/238">#238</a> で実装しました。</li>
-    </ul>
+    <p><b>決めたこと:</b> マイページは、設定ページと別の画面にする。マイページには概要だけを置き、パスキーの管理は設定ページに残す。</p>
+    <p><b>理由:</b> オーナーが Issue のコメントで、この案を選びました。</p>
     <div class="tbl"><table>
       <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-      <tr><td>設定ページと統合する</td><td>入口は1つになる。ただし、既存の画面と試験の変更が大きいため、初版では採らない。</td></tr>
+      <tr><td>設定ページと1つにまとめる</td><td>入口は1つになる。ただし、今ある画面と試験の書き換えが大きいため、初版では採らない。</td></tr>
     </table></div>
-    <p><b>決めたこと:</b> マイページに表示するのは、利用者名だけにする。</p>
-    <p><b>理由:</b></p>
-    <ul>
-      <li>メール、表示名、登録日は DB にありません。</li>
-      <li>個人情報はできるだけ持たず、出さない方針です。</li>
-    </ul>
-    <ul>
-      <li>API と DB は変えていません（<code>auth/me</code> を使います）。</li>
-      <li>記事の保存一覧は、場所だけを用意しました。中身は <a href="https://github.com/H4aruki/MyTechPulse/issues/236">#236</a> で作ります。</li>
-    </ul>
+    <p><b>決めたこと:</b> マイページに出す個人の情報は、利用者名だけにする。</p>
+    <p><b>理由:</b> メールアドレス、表示名、登録日は、もともと DB に持っていません。個人情報はできるだけ持たず、出さない方針です。そのため、API と DB は変えずに、今ある「自分の情報」を返す API を使いました。</p>
   </div>
-  <div class="src">出典: <code>README.md</code>、<code>AGENTS.md</code>「プロジェクト概要」、<code>frontend/src/App.tsx</code>、<code>docs/BasicDesignSpecifications/FeaturesList.md</code> F-7-2、<code>server/internal/userfeedback/</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/235">#235</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/238">#238</a></div>
 </section>
 
-<!-- 2 -->
-<section id="s2">
+<section id="system">
   <h2><span class="no">02</span>システム全体図</h2>
-  <div class="arch" role="img" aria-label="ブラウザ、Cloudflare、Lightsail、外部API の構成図">
+  <div class="arch" role="img" aria-label="ブラウザ、Cloudflare、Lightsail、外部 API の構成図">
     <div class="zone"><div class="zt">利用者</div>
-      <div class="node"><b>ブラウザ</b><small>LP（静的HTML）＋ React SPA（/app/）</small></div>
+      <div class="node"><b>ブラウザ</b><small>トップページ（静的な HTML）と、ログイン後の画面（React）</small></div>
     </div>
     <div class="zone"><div class="zt">Cloudflare</div>
-      <div class="node edge"><b>Cloudflare Pages</b><small>LP・SPA の静的ファイル配信<br>mytechpulse.net</small></div>
-      <div class="node edge"><b>Cloudflare プロキシ</b><small>api.mytechpulse.net の前段。<br>接続元IPは <code>CF-Connecting-IP</code></small></div>
+      <div class="node edge"><b>Cloudflare Pages</b><small>画面のファイルを配る<br>mytechpulse.net</small></div>
+      <div class="node edge"><b>Cloudflare のプロキシ</b><small>api.mytechpulse.net の手前に立つ。<br>本当の接続元 IP をヘッダーに入れて渡す</small></div>
     </div>
-    <div class="zone"><div class="zt">AWS Lightsail（東京・1GB）の Docker Compose</div>
-      <div class="node"><b>Caddy 2</b><small>HTTPS終端・証明書自動更新・HSTS<br>Cloudflare の IP 範囲以外は 403</small></div>
-      <div class="node"><b>Go API（api-go）</b><small>Huma v2 / モジュラーモノリス<br>GHCR のイメージを digest 固定で pull・FROM scratch・非root</small></div>
-      <div class="node db"><b>PostgreSQL 17（alpine）</b><small>user / tag / recommend / auth_session / パスキー / アンケート<br><b>記事テーブルなし</b>・127.0.0.1 にのみ公開</small></div>
+    <div class="zone"><div class="zt">AWS Lightsail（東京・メモリ 1GB）の1台</div>
+      <div class="node"><b>Caddy 2</b><small>HTTPS の終端と証明書の自動更新<br>Cloudflare 以外からの要求は 403</small></div>
+      <div class="node"><b>Go の API</b><small>Huma v2 で作った1つのプログラム<br>root 以外の利用者で動く</small></div>
+      <div class="node db"><b>PostgreSQL 17</b><small>利用者、タグ、興味度、セッション、パスキー、アンケート<br><b>記事は保存しない</b>。サーバーの外には公開しない</small></div>
     </div>
-    <div class="zone"><div class="zt">外部（毎リクエスト）</div>
-      <div class="node ext"><b>Qiita API v2</b><small><code>/api/v2/tags/{tag}/items</code><br>トークン付き・per_page=20</small></div>
-      <div class="node ext"><b>Zenn API</b><small><code>/api/articles?topicname=…</code><br>トークン不要・count=5・公式仕様なし</small></div>
+    <div class="zone"><div class="zt">外部（一覧を開くたびに呼ぶ）</div>
+      <div class="node ext"><b>Qiita API v2</b><small>タグごとに20件<br>アクセストークンを付けて呼ぶ</small></div>
+      <div class="node ext"><b>Zenn API</b><small>タグごとに5件<br>トークン不要。公式の仕様書はない</small></div>
     </div>
   </div>
-  <ol class="flow">
-    <li>ブラウザは、Cloudflare Pages から画面を取得します。</li>
-    <li>画面（SPA）は、<code>https://api.mytechpulse.net/api/v1/…</code> に要求を送ります。要求は JSON で、Cookie を付けたクロスオリジンの通信です。</li>
-    <li>要求は Cloudflare と Caddy を通って、<code>api-go:8001</code> に届きます。</li>
-    <li>API は、DB から興味度とセッションを読み書きします。Qiita と Zenn からは、記事を並列に取得します。</li>
+  <h3>記事一覧を1回開いたときに通る道</h3>
+  <ol class="steps">
+    <li>ブラウザは、Cloudflare Pages から画面のファイルを受け取ります。</li>
+    <li>画面は <code>api.mytechpulse.net</code> に、記事一覧を JSON で求めます。画面と API はドメインが違うので、Cookie を付けたクロスオリジンの通信になります。</li>
+    <li>要求はまず Cloudflare のプロキシに届きます。Cloudflare は、本当の接続元 IP を <code>CF-Connecting-IP</code> というヘッダーに入れて、サーバーへ送ります。</li>
+    <li>サーバーの入口の Caddy は、送ってきた相手の IP を確かめます。Cloudflare の IP 範囲でなければ、本文なしの 403 を返して終わりです。</li>
+    <li>Caddy は、同じサーバーの中で動く Go の API に要求を渡します。</li>
+    <li>API は、DB からその人の興味度を読みます。そのあと、Qiita と Zenn に最大10回、同時に問い合わせます。</li>
+    <li>集めた記事を採点して並べ、JSON で返します。詳しくは<a href="#feed">記事一覧ができるまで</a>に書きます。</li>
   </ol>
-  <h3>API 内部（<code>server/internal/</code>）</h3>
+  <p>Cloudflare の IP 範囲は変わることがあります。そのため、毎週月曜の 12:17 JST に、最新の範囲と設定を比べる点検が動きます。違いがあれば点検が失敗し、オーナーに GitHub から通知が届きます。設定を自動では書き換えません。</p>
+  <h3>API の中の分け方</h3>
+  <p>API は1つのプログラムですが、中を役割ごとに分けています。</p>
   <div class="tbl"><table>
-    <tr><th>パッケージ</th><th>役割</th></tr>
-    <tr><td><code>app/</code></td><td>全体を組み立てます。ミドルウェアは RequestID、Recover、AccessLog、CORS、CSRF、Huma の順に通ります。</td></tr>
-    <tr><td><code>auth/</code> ・ <code>passkey/</code></td><td><code>auth/</code> は、登録、ログイン、ログアウト、セッションの確認、ログイン試行の制限を受け持ちます。<code>passkey/</code> は、パスキー（WebAuthn）を受け持ちます。</td></tr>
-    <tr><td><code>interest/</code></td><td>興味度を固定小数点で計算します（減衰と加算）。タグ名の正規化もここで行います。</td></tr>
-    <tr><td><code>recommendation/</code></td><td>上位タグの選択、並列の取得、絞り込み、採点、並べ替えを行います（<code>/api/v1/feed</code>）。クリックの記録もここで受けます。</td></tr>
-    <tr><td><code>provider/</code>（<code>qiita/</code>・<code>zenn/</code>）・<code>article/</code></td><td><code>provider/</code> は、外部から記事を取得します。https だけを使い、許可したホストにだけつなぎます。リダイレクトには従わず、サイズに上限を設けます。<code>article/</code> は、共通の記事の型を検証します。</td></tr>
-    <tr><td><code>store/</code></td><td>sqlc で生成したコード（<code>store/dbgen</code>）で、DB を読み書きします。トランザクションもここで扱います。</td></tr>
-    <tr><td><code>platform/</code> ・ <code>health/</code> ・ <code>userfeedback/</code></td><td><code>platform/</code> は、設定、ログ、HTTP の共通処理です。<code>health/</code> は、<code>/health/live</code> と <code>/health/ready</code> です。<code>userfeedback/</code> は、アンケートです。</td></tr>
+    <tr><th>役割</th><th>受け持つこと</th></tr>
+    <tr><td>認証</td><td>会員登録、ログイン、ログアウト、セッションの確認、ログイン試行の制限。</td></tr>
+    <tr><td>パスキー</td><td>パスキーの登録、ログイン、名前の変更、削除。</td></tr>
+    <tr><td>興味度の計算</td><td>クリックでの減衰と加算。タグ名をそろえる処理（前後の空白を除き、小文字にする）。</td></tr>
+    <tr><td>おすすめ</td><td>上位5タグを選び、記事を集め、絞り込み、採点し、並べる。クリックの記録も受ける。</td></tr>
+    <tr><td>外部サービスとの通信</td><td>Qiita と Zenn を呼ぶ。https だけを使い、qiita.com と zenn.dev 以外にはつながない。リダイレクトには従わない。1回の応答は 2MiB までしか読まない。</td></tr>
+    <tr><td>DB の読み書き</td><td>SQL から作った型付きのコードで DB を扱う。トランザクションもここで扱う。</td></tr>
+    <tr><td>アンケート</td><td>出すかどうかの判定、回答の保存、古い記録の削除。</td></tr>
+    <tr><td>共通の処理</td><td>設定の読み込み、ログ、死活確認。要求はすべて、要求 ID の付与、異常終了からの復帰、アクセスログ、CORS の確認、CSRF の確認の順に通ります。</td></tr>
   </table></div>
-  <div class="src">出典: <code>docs/BasicDesignSpecifications/SystemArchitectureDiagram.md</code>、<code>docker-compose.yml</code>、<code>Caddyfile</code>、<code>server/Dockerfile</code>、<code>server/internal/app/app.go</code>、<code>server/internal/provider/{qiita,zenn}/client.go</code>、<code>server/internal/provider/httpclient.go</code>、<code>TASKS.md</code>、#218</div>
 </section>
 
-<!-- 3 -->
-<section id="s3">
-  <h2><span class="no">03</span>技術スタックと「なぜその選択か」</h2>
-  <p>まず、採用している技術を表にまとめます。版は main の実際の版です。それぞれを選んだ理由は、表の下に1つずつ書きます。</p>
-  <p>まず、採用している技術を表にまとめます。版は main の実際の版です。それぞれを選んだ理由は、表の下に1つずつ書きます。</p>
+<section id="feed">
+  <h2><span class="no">03</span>記事一覧ができるまで</h2>
+  <p>記事一覧を開くたびに、サーバーは次の順に動きます。記事を前もって集めておくしくみは、まだありません。</p>
+  <ol class="steps">
+    <li><b>本人確認。</b> Cookie のセッションを確かめます。無効なら 401 を返します。</li>
+    <li><b>興味度を読む。</b> その人が持つすべてのタグの興味度を、DB から読みます。</li>
+    <li><b>上位5タグを選ぶ。</b> 興味度の大きい順に並べ、先頭の5個を使います。同じ値のタグは、そろえた名前のアルファベット順で先に来ます。</li>
+    <li><b>同時に問い合わせる。</b> 5タグを Qiita と Zenn の両方で検索するので、問い合わせは最大10回です。10回を同時に送ります。1回の問い合わせは5秒で打ち切り、全体は8秒で打ち切ります。</li>
+    <li><b>失敗したら1回だけやり直す。</b> 時間切れ、接続の失敗、502・503・504 のときは、0.1秒待ってもう1回だけ送ります。ただし、打ち切りまでの残り時間が足りなければ送りません。429（回数の制限）やそのほかの 4xx では、やり直しません。</li>
+    <li><b>新しい記事だけに絞る。</b> Qiita は、1タグ20件、最大100件を受け取り、直近5日の記事だけを残します。Zenn は、1タグ5件、最大25件を受け取り、直近14日の記事を残します。Zenn で直近14日の記事が1件も無いときだけ、古い記事をそのまま使います。</li>
+    <li><b>重複をまとめる。</b> 同じ URL の記事は1件にまとめ、タグは全部合わせます。</li>
+    <li><b>採点して並べる。</b> 点数の出し方は下の<a href="#score">採点のしかた</a>のとおりです。点数が同じなら、新しい記事を先にします。</li>
+    <li><b>返す。</b> Qiita と Zenn を分けて、それぞれ上位10件を返します。</li>
+  </ol>
+  <h3>例: Go だけを選んで登録した人</h3>
+  <p>この人の興味度は、Go が 10000（1.0）です。タグ表にあるほかのタグは、すべて 8000（0.8）です。タグ表が登録画面の100個だけなら、99個が 8000 になります。上位5タグは、Go と、8000 の中から名前順で先に来る4つです。調査のコメントでは、Android、Angular、Ansible、Astro の4つでした。この5タグで Qiita と Zenn を検索します。つまり、Qiita と Zenn への10回の検索のうち8回が、選んでいないタグに使われます。Go しか選んでいないのに、Android や Angular の記事も並びます。この動きを変える案は、<a href="#future">まだ本番にないもの</a>に書きます。</p>
+  <h3 id="score">採点のしかた</h3>
+  <div class="formula">
+    興味の合計 = 記事に付いたタグのうち、その人が興味度を持つタグの値を足したもの<br>
+    Qiita の点数 = 興味の合計 × （いいね数 ＋ 1）<br>
+    Zenn の点数　= 興味の合計（いいね数は使わない）
+  </div>
+  <p>興味の合計には、上位5タグだけでなく、その人が持つすべてのタグの値を使います。たとえば、Go が 10000、Docker が 8000 の人がいるとします。この人にとっての点数は、次のようになります。</p>
   <div class="tbl"><table>
-    <tr><th>区分</th><th>採用（main の実バージョン）</th><th>理由の出典</th></tr>
-    <tr><td><a href="#s3-ui">画面</a></td><td>React 19.2 / TypeScript 6.0 / Vite 8 / Tailwind CSS 4（<code>@tailwindcss/vite</code>）</td><td><a href="https://github.com/H4aruki/MyTechPulse/issues/48">#48</a>、作業記録</td></tr>
-    <tr><td><a href="#s3-ui-lib">画面のデータ取得・フォーム</a></td><td>TanStack Query 5 / React Router DOM 7 / React Hook Form 7 + zod 4（<code>@hookform/resolvers</code>）</td><td><a href="https://github.com/H4aruki/MyTechPulse/issues/48">#48</a>、作業記録</td></tr>
-    <tr><td><a href="#s3-ui-test">画面の検査</a></td><td>oxlint / Vitest 5 + Testing Library / <code>openapi-typescript</code> でAPI型を生成し差分をCIで検査</td><td><code>AGENTS.md</code>、作業記録</td></tr>
-    <tr><td><a href="#s3-api">API</a></td><td>Go 1.26.4、標準HTTPサーバー + Huma v2（OpenAPI をコードから生成）</td><td>ADR 0001、<a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a></td></tr>
-    <tr><td><a href="#s3-arch">構成</a></td><td>モジュラーモノリス（1配布単位、内部をパッケージで分割）</td><td>ADR 0001</td></tr>
-    <tr><td><a href="#s3-dbaccess">DBアクセス</a></td><td>pgx v5 + sqlc（SQLから型付きコード生成）</td><td><a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/60">#60</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/63">#63</a></td></tr>
-    <tr><td><a href="#s3-migration">マイグレーション</a></td><td>goose v3（<code>server/cmd/migrate</code>）。<b>追加のみ</b>を <code>additive_test.go</code> で強制</td><td>デプロイ文書、<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a></td></tr>
-    <tr><td><a href="#s3-db">DB</a></td><td>PostgreSQL 17（<code>postgres:17-alpine</code>）を API と同じサーバーに同居</td><td>ADR 0003、<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a></td></tr>
-    <tr><td><a href="#s3-auth">認証</a></td><td>サーバー側セッション（HttpOnly Cookie）＋ bcrypt、パスキー（<code>go-webauthn/webauthn</code> v0.18）</td><td>ADR 0002、<a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a></td></tr>
-    <tr><td><a href="#s3-error">エラー形式</a></td><td>Problem Details（RFC 9457）＋HTTPステータス</td><td><a href="https://github.com/H4aruki/MyTechPulse/issues/14">#14</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a>、作業記録</td></tr>
-    <tr><td><a href="#s3-hosting">ホスティング</a></td><td>Cloudflare Pages（画面）＋ AWS Lightsail 東京 1GB 1台（API・DB・Caddy）</td><td>ADR 0003</td></tr>
-    <tr><td><a href="#s3-caddy">HTTPS終端・入口制限</a></td><td>Caddy 2（証明書の自動取得・更新）。Cloudflare IP 以外は 403（<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>）</td><td><a href="https://github.com/H4aruki/MyTechPulse/issues/34">#34</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>、作業記録</td></tr>
-    <tr><td><a href="#s3-ci">CI/CD</a></td><td>GitHub Actions（<code>ci.yml</code>・<code>release.yml</code> ほか）、イメージは GHCR</td><td><a href="https://github.com/H4aruki/MyTechPulse/issues/60">#60</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a>、作業記録</td></tr>
+    <tr><th>記事</th><th>計算</th><th>点数</th></tr>
+    <tr><td>Qiita、タグは Go、いいね 30</td><td>10000 × 31</td><td>310000</td></tr>
+    <tr><td>Qiita、タグは Go と Docker、いいね 9</td><td>（10000 ＋ 8000）× 10</td><td>180000</td></tr>
+    <tr><td>Zenn、Go で検索して見つかった記事</td><td>10000</td><td>10000</td></tr>
   </table></div>
-  <p>以下の「作業記録」は、オーナーが Obsidian に残している作業と会話の記録です。公開はしていません。</p>
-  <h3 id="s3-ui">画面（React・TypeScript・Vite・Tailwind CSS）</h3>
-  <p><b>決めたこと:</b> 画面を React 19.2、TypeScript 6.0、Vite 8、Tailwind CSS 4（<code>@tailwindcss/vite</code>）で作る。</p>
+  <p>Zenn の記事には、検索に使ったタグを記事のタグとして足しています。Qiita と Zenn は別々の列で返すので、点数の桁が違っても混ざりません。</p>
+  <p>Zenn にいいね数を掛けない理由は、移行の設計書に「提供元側の並び順を利用するため」とあります。ただし、Zenn を呼ぶときに並び順は指定していません。Zenn の既定の並び順が何かは、確かめていません。</p>
+  <h3>うまくいかなかったとき</h3>
+  <div class="tbl"><table>
+    <tr><th>起きたこと</th><th>返すもの</th></tr>
+    <tr><td>Qiita か Zenn の片方だけが失敗した</td><td>成功した側の記事を返します。画面には「一部の記事を取得できませんでした。」と出ます。</td></tr>
+    <tr><td>両方とも失敗した</td><td>503 を返します。</td></tr>
+    <tr><td>記事が1件も残らなかった</td><td>空の一覧を返します。画面には「おすすめの記事はまだありません。」と出ます。</td></tr>
+    <tr><td>DB に、そろえると同じ名前になるタグが2つ以上あった</td><td>どちらの値を使うか決められないので、500 を返して止めます。</td></tr>
+  </table></div>
+  <div class="rationale"><b>判断理由（空白を含むタグ）</b>
+    <p><b>決めたこと:</b> 「Spring Boot」のような空白を含むタグは、表示名を空白のまま残す。Qiita と Zenn に問い合わせるときだけ、空白を除く。Qiita には「SpringBoot」、Zenn には小文字の「springboot」で問い合わせる。</p>
+    <p><b>理由:</b> 空白を含むタグでは、Qiita と Zenn の記事が取れていませんでした。表示名、DB、点数の計算は変えずに、問い合わせだけを直す形をオーナーが選びました。</p>
+    <p><b>選ばなかった案:</b> 記録なし。</p>
+  </div>
+  <div class="callout warn"><b>未解決の問題。</b> クリックを記録する API は、画面から送られたタグ名をそのまま受け取ります。タグ表に無い名前なら、その場で新しいタグを作ります。そのため、記事に付いていない好きな名前を送っても、タグとして登録できてしまいます。短期の対策案は3つあります。タグ表にある名前だけを受け付ける、使える文字を検査する、回数を制限する、です。長期の案は、記事を DB に持つようにしたあと、記事の ID を基準にすることです。まだ決まっておらず、直していません。</div>
+</section>
+
+<section id="learning">
+  <h2><span class="no">04</span>興味の学習</h2>
+  <p>興味度は、タグごとに 0〜1 の値です。DB には、10000 倍した整数（0〜10000）で保存し、計算も整数で行います。</p>
+  <h3>決まり</h3>
+  <ul>
+    <li>会員登録のとき、選んだタグは 10000（1.0）になります。タグ表にある、選ばなかったすべてのタグは 8000（0.8）になります。</li>
+    <li>記事を1回押すたびに、まず、その人のすべてのタグの値を 0.8 倍します。端数は切り捨てます。</li>
+    <li>次に、押した記事に付いているタグに 2000（0.2）を足します。上限は 10000 です。</li>
+    <li>押した記事のタグを、その人がまだ持っていなければ、2000 で新しく作ります。</li>
+  </ul>
+  <h3>例1: 同じ種類の記事を続けて押す</h3>
+  <p>Go と React を選んで登録した人がいるとします。Docker は選んでいないので 8000 です。この人が、Go のタグが付いた記事を押していくと、値は次のように変わります。</p>
+  <div class="tbl"><table>
+    <tr><th>タグ</th><th>登録直後</th><th>1回押した後</th><th>2回押した後</th><th>4回押した後</th></tr>
+    <tr><td>Go（選んだ）</td><td>10000</td><td>10000</td><td>10000</td><td>10000</td></tr>
+    <tr><td>React（選んだ）</td><td>10000</td><td>8000</td><td>6400</td><td>4096</td></tr>
+    <tr><td>Docker（選ばなかった）</td><td>8000</td><td>6400</td><td>5120</td><td>3276</td></tr>
+  </table></div>
+  <p>Go は、0.8 倍して 2000 を足すと 10000 に戻るので、上限のまま動きません。React は、選んだタグなのに、4回で半分以下になります。</p>
+  <h3>例2: 選ばなかったタグの記事を1回押す</h3>
+  <p>同じ人が、登録直後に Docker の記事を1回だけ押したとします。Docker は 8000 × 0.8 ＋ 2000 で 8400 になります。Go と React は 0.8 倍されて 8000 です。たった1回で、選んでいない Docker が一番上に来ます。</p>
+  <h3>例3: 押さなくなったタグ</h3>
+  <p>10000 のタグでも、そのタグの付かない記事を押し続けると、値は 8000、6400、5120、4096 と下がります。10回で 1072 になります。</p>
+  <h3>そのほかの決まり</h3>
+  <ul>
+    <li>1回のクリックで送れるタグは1〜50個です。1個のタグ名は1〜50文字です。</li>
+    <li>同じ人のクリックが同時に届いても、DB でその人の行を押さえて、1件ずつ順に計算します。値が食い違うことはありません。</li>
+    <li>クリックの記録が失敗しても、画面にはエラーを出しません。記事を読む邪魔をしないためです。</li>
+  </ul>
+  <div class="callout warn">選んだタグが5個より少ないと、上位5タグの残りは、8000 同士の同点になります。同点のときは名前の順で決まるので、アルファベットで前にあるタグが選ばれます。<a href="#feed">記事一覧ができるまで</a>の例のとおりです。これを変える修正は、まだ本番に入っていません。</div>
+  <div class="rationale"><b>判断理由（興味の初期値）</b>
+    <p><b>決めたこと:</b> 登録のとき、選んだタグは 1.0、選ばなかったタグは 0.8 にする。これが本番の今の値です。</p>
+    <p><b>理由:</b></p>
+    <ul>
+      <li>それまでは、登録のときの値が 1（0.0001）でした。1回押したタグは 2000 になり、選んだだけのタグ（1 が減って 0）を大きく上回りました。これを尺度の誤りとして直しました。</li>
+      <li>1.0 と 0.8 は、オーナーが Issue のコメントで確認して決めました。</li>
+      <li>0.8 という数の根拠は、Issue、PR、コミット、設計資料のどこにもありません。「デフォルト0.8」というメモがあるだけです（理由の記録なし）。</li>
+    </ul>
+    <p><b>選ばなかった案:</b> 記録なし。</p>
+  </div>
+  <div class="rationale"><b>判断理由（クリックごとの 0.8 倍）</b>
+    <p><b>決めたこと:</b> クリックのたびに掛ける 0.8 は変えない。</p>
+    <p><b>理由:</b> 意図して決めた値です。新しい行動ほど重く見る、指数移動平均の考え方です。</p>
+    <div class="tbl"><table>
+      <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
+      <tr><td>0.5 倍</td><td>過去がすぐに消えてしまう。たとえば 10000 のタグは、関係のない記事を3回押すと、0.8 倍なら 5120 残るが、0.5 倍なら 1250 になる。</td></tr>
+    </table></div>
+  </div>
+</section>
+
+<section id="auth">
+  <h2><span class="no">05</span>会員登録とログイン</h2>
+  <h3>会員登録の流れ</h3>
+  <ol class="steps">
+    <li><b>入力を確かめる。</b> 利用者名は、前後の空白を除いて1〜50文字です。タグは1〜128個で、1個は1〜50文字です。大文字と小文字だけが違うタグは、1つにまとめます。</li>
+    <li><b>パスワードを確かめる。</b> 条件は4つです。12文字以上であること。72バイト以下であること。利用者名と同じでないこと（大文字と小文字は区別しません）。よく使われるパスワードの一覧（184語）に無いことです。記号や数字を必ず入れる、といった決まりはありません。</li>
+    <li><b>まとめて保存する。</b> 利用者、タグ表に無いタグ、興味度、最初のセッションを、1つのトランザクションで作ります。途中で1つでも失敗したら、全部を取り消します。利用者名がすでに使われていたら、409 を返します。</li>
+    <li><b>ログイン状態で戻す。</b> セッションの Cookie を付けて返すので、登録した直後から記事一覧を開けます。</li>
+  </ol>
+  <h3>ログインの流れ</h3>
+  <ol class="steps">
+    <li><b>締め出し中か確かめる。</b> その利用者名か接続元 IP が締め出し中なら、照合する前に 429 を返します。</li>
+    <li><b>パスワードを照合する。</b> bcrypt（コスト12）で照合します。利用者名が存在しないときも、用意したダミーのハッシュと照合して、同じくらい時間をかけます。どちらの場合も、同じ 401 を返します。応答の中身や速さから、利用者名があるかどうかは分かりません。</li>
+    <li><b>セッションを作る。</b> 32バイトの乱数をトークンにして、Cookie で渡します。DB には、トークンの SHA-256 だけを保存します。DB の中身が漏れても、そこからトークンは作れません。</li>
+    <li><b>ついでに掃除する。</b> 期限の切れたセッションを、ログインのたびに消します。</li>
+  </ol>
+  <p>パスワードの4つの条件は、新しく登録するときだけに使います。ログインの照合には使いません。条件ができる前に短いパスワードで登録した人も、そのままログインできます。</p>
+  <h3>セッションの決まり</h3>
+  <ul>
+    <li>有効期限は、ログインした時刻からちょうど24時間です。使っている間に延びることはありません。10:00 にログインしたら、翌日の 10:00 にまたログインが必要です。</li>
+    <li>本番の Cookie の名前は <code>__Host-</code> で始まります。この名前の Cookie は、ブラウザがほかのサブドメインから上書きさせません。HttpOnly なので JavaScript からは読めません。Secure なので https でしか送りません。SameSite=Lax です。</li>
+    <li>ログアウトすると、その端末のセッションだけを DB から消します。ほかの端末は、ログインしたままです。</li>
+  </ul>
+  <h3>ログイン試行の制限</h3>
+  <p>同じ利用者名でパスワードを間違え続けると、しばらく受け付けなくなります。失敗の数え方は次のとおりです。</p>
+  <div class="tbl"><table>
+    <tr><th>同じ利用者名での失敗</th><th>その後の扱い</th></tr>
+    <tr><td>1〜4回目</td><td>すぐに次を試せます。</td></tr>
+    <tr><td>5回目</td><td>1分間、締め出します。</td></tr>
+    <tr><td>6回目</td><td>2分間、締め出します。</td></tr>
+    <tr><td>7回目</td><td>4分間、締め出します。</td></tr>
+    <tr><td>8回目</td><td>8分間、締め出します。</td></tr>
+    <tr><td>9回目以降</td><td>毎回15分間、締め出します。</td></tr>
+  </table></div>
+  <ul>
+    <li>失敗は、前の失敗から15分以内に続いたときに数えます。締め出しが明けてから15分間、失敗しなければ、数えはゼロに戻ります。ログインに成功しても、ゼロに戻ります。</li>
+    <li>利用者名とは別に、接続元 IP ごとにも数えます。1つの IP から、最初の失敗から15分の間に20回失敗すると、その15分が終わるまで締め出します。いろいろな利用者名を試す攻撃を止めるためです。</li>
+    <li>パスキーのログインを始める操作は、1つの IP から15分に60回までです。</li>
+    <li>締め出したときは 429 を返し、あと何秒で試せるかを Retry-After ヘッダーで伝えます。画面には「ログインの試行が多すぎます」と出ます。</li>
+    <li>回数は API のメモリの中だけで数えます。API を再起動すると、数え直しになります。</li>
+    <li>接続元 IP は、Cloudflare が付ける <code>CF-Connecting-IP</code> から読みます。本番でこのヘッダーを読む設定が空なら、API は起動しません。</li>
+  </ul>
+  <h3>他のサイトからの悪用を防ぐしくみ（CSRF と CORS）</h3>
+  <p>ログイン状態は Cookie で持つので、別のサイトから勝手に要求を送られると、Cookie が付いてしまうおそれがあります。そこで、データを変える要求には2つの条件を付けています。送り元のページが <code>https://mytechpulse.net</code> であること。<code>X-MTP-CSRF: 1</code> という専用のヘッダーが付いていること。どちらかが欠けると 403 を返します。ほかのサイトのフォームからは、このヘッダーを付けて送れません。CORS でも、許可する送り元を1つずつ完全一致で決めています。「どこからでも可」にはしていません。</p>
+  <h3>パスキー</h3>
+  <ul>
+    <li>設定画面で、1人10個まで登録できます。名前は1〜64文字で、目に見えない文字は使えません。名前を付けなければ「パスキー」になります。</li>
+    <li>ログイン画面では、利用者名を入れずにパスキーを選ぶだけでログインできます。利用者名の入力欄を押すと、ブラウザが候補としてパスキーを出す形にも対応しています。</li>
+    <li>ログインと登録には、本人確認（指紋、顔、PIN など）を必ず求めます。</li>
+    <li>途中で使う使い捨ての番号（チャレンジ）は、5分で失効し、1回使うと消えます。</li>
+    <li>パスキーは <code>mytechpulse.net</code> というドメインに結び付けて作ります。このドメインの設定を変えると、登録済みのパスキーはすべて使えなくなります。</li>
+    <li>本番では、https でない接続先や localhost を設定すると、API が起動しません。</li>
+  </ul>
+  <div class="rationale"><b>判断理由（ログイン試行の制限とパスワードの条件）</b>
+    <p><b>決めたこと:</b> 一般公開の前に、ログイン試行の制限とパスワードの条件を入れる。</p>
+    <p><b>理由:</b> それまでは、ログインを何回失敗しても止まりませんでした。パスワードの条件も「1文字以上、72バイト以内」だけで、総当たりを止められなかったためです。</p>
+    <div class="tbl"><table>
+      <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
+      <tr><td>Cloudflare の WAF のレート制限だけに任せる</td><td>サーバーの外の設定になり、利用者名ごとには数えられない。そのため補助にとどめる。</td></tr>
+    </table></div>
+    <p><b>決めたこと:</b> パスワードは12文字以上にし、よく使われるものを断る。記号や数字の決まりは設けない。</p>
+    <p><b>理由:</b> NIST SP 800-63B の考え方に合わせました。登録の条件はログインに使わないので、今いる利用者がログインできなくなることはありません。</p>
+    <p><b>選ばなかった案:</b> 記録なし。</p>
+  </div>
+  <div class="rationale"><b>判断理由（接続元 IP のヘッダーを必須にする）</b>
+    <p><b>決めたこと:</b> 本番で、接続元 IP を読むヘッダーの設定が空なら、API を起動しない。</p>
+    <p><b>理由:</b> 空のままだと、Cloudflare と Caddy の後ろでは、全員が同じ接続元に見えます。すると IP ごとの制限が全員で1つの枠になり、1人が20回失敗すると全員が締め出されます。</p>
+    <p><b>選ばなかった案:</b> 記録なし。</p>
+  </div>
+  <div class="rationale"><b>判断理由（パスキー）</b>
+    <p><b>決めたこと:</b> パスキーは go-webauthn というライブラリで作る。初版はパスワードと併用にする。</p>
+    <p><b>理由:</b> 署名の検証などを自分で書くと、確認の漏れが起きる危険が大きいためです。パスキーだけで使う利用者への対応は、後に回しました。作業は、土台、登録と設定画面、ログイン、ブラウザの候補表示の4段階に分けて進めました。</p>
+    <div class="tbl"><table>
+      <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
+      <tr><td>自分で実装する</td><td>検証の漏れが起きる危険が大きい。</td></tr>
+    </table></div>
+    <p><b>決めたこと:</b> チャレンジの番号は、Cookie ではなく応答の本文で渡す。完了のときに本文で返してもらう。</p>
+    <p><b>理由:</b> 最初は Cookie で渡していました。すると、ログイン画面を2つのタブで開いたときに、後のタブが Cookie を上書きし、先のタブのログインが失敗しました。番号だけでは何もできず、本人の端末による署名が別に要ります。そのため、本文に載せても危険は増えないと判断しました。</p>
+    <div class="tbl"><table>
+      <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
+      <tr><td>Cookie で渡し続ける</td><td>複数のタブで開くと、先に開いたタブが失敗する。</td></tr>
+      <tr><td>タブどうしで連絡を取り合う（BroadcastChannel）</td><td>複雑さに見合わない。</td></tr>
+    </table></div>
+  </div>
+</section>
+
+<section id="data">
+  <h2><span class="no">06</span>データの持ち方</h2>
+  <p>DB の表は13個です。主なものは次のとおりです。</p>
+  <div class="tbl"><table>
+    <tr><th>表</th><th>持っているもの</th></tr>
+    <tr><td>利用者</td><td>利用者名（50文字まで、重複なし）、bcrypt のハッシュ、役割（一般か管理者）。メールアドレスや表示名は持ちません。管理者向けの機能もまだありません。</td></tr>
+    <tr><td>タグ</td><td>タグの名前。登録画面の100個は、DB を作るときに入れました。クリックで知らないタグが届いたら、その場で足します。</td></tr>
+    <tr><td>興味度</td><td>利用者とタグの組ごとに1行で、値は 0〜10000 です。同じ組の行が2つできることはありません。このサービスの中心の表です。</td></tr>
+    <tr><td>セッション</td><td>端末ごとに1行。トークンの SHA-256 と、有効期限だけを持ちます。</td></tr>
+    <tr><td>パスキー（3表）</td><td>利用者ごとのパスキー用の番号、登録したパスキー、使い捨てのチャレンジ。</td></tr>
+    <tr><td>アンケート（6表）</td><td>質問の定義、表示した記録、回答、回答した時点の上位5タグ。</td></tr>
+  </table></div>
+  <div class="callout ng"><b>記事は DB に保存していません。</b> 一覧を開くたびに Qiita と Zenn から取ってきて、採点して返すだけです。既読の管理や、記事の保存もありません。</div>
+  <h3>タグ名のそろえ方</h3>
+  <p>タグ名は、前後の空白を除き、小文字にしてから比べます。たとえば「Go」と「 go 」は同じタグです。新しいタグを作るときは、そろえた名前で DB に鍵をかけてから、もう一度探します。2人が同時に同じタグを登録しても、タグは1つしかできません。</p>
+  <h3>表の形の変え方</h3>
+  <p>表の形を変える手順（マイグレーション）は、今は7本です。1本目は、Python 版の頃から使ってきた3つの表と同じ形です。今の DB が同じ形なら何もせず、違っていれば止まります。変更は列や表の「追加」だけと決めていて、試験でも確かめています。理由は<a href="#tech-migration">技術の選択と理由</a>に書きます。</p>
+  <h3>値を整数で持つ理由</h3>
+  <p>0.8 倍のような計算を小数のまま繰り返すと、保存のたびに誤差が出ます。整数なら誤差が出ず、同じ操作をすれば毎回同じ結果になります。その代わり、0〜10000 からはみ出さないようにする処理と、割り算の切り捨てに気をつけています。</p>
+</section>
+
+<section id="ops">
+  <h2><span class="no">07</span>デプロイと運用</h2>
+  <h3>本番のサーバー</h3>
+  <ul>
+    <li>AWS Lightsail の東京にある、メモリ 1GB のサーバー1台です。費用は月約 $7 です。</li>
+    <li>メモリが小さいので、2GB のスワップを作っています。スワップはなるべく使わない設定（swappiness=10）です。</li>
+    <li>Docker Compose で3つのコンテナを動かします。DB と API は、サーバーの中からだけつながる場所（127.0.0.1）で待ち受けます。外から届くのは Caddy の 80番と443番だけです。443番は HTTP/3 用に UDP でも開けています。</li>
+    <li>Caddy は、Let's Encrypt の証明書を自動で取り、自動で更新します。80番は、証明書を取るときの確認に使うので開けたままです。</li>
+    <li>Caddy は、ブラウザに1年間 https だけを使うよう伝えるヘッダー（HSTS）を付けます。サブドメインも対象です。</li>
+    <li>API のイメージは、Go のプログラム1つだけを入れた最小の形です。root 以外の利用者で動きます。</li>
+    <li>API の説明画面（Swagger UI）を本番で有効にすると、API は起動しません。</li>
+    <li>セッションの24時間、外部への問い合わせの5秒、全体の8秒、応答の 2MiB は、すべて既定値です。本番の設定ではこれらを変えていないので、既定値のまま動いています。</li>
+  </ul>
+  <h3>自動デプロイの流れ</h3>
+  <p>main に変更が入ると、人の承認なしで本番に反映します。ただし、変わったのが文書と試験だけなら、反映しません。比べる相手は、最後に反映に成功したコミットです。たとえば 2026-10-20 の main の変更は文書と開発用の設定だけだったので、反映は行われていません。</p>
+  <ol class="steps">
+    <li><b>検査。</b> GitHub Actions で、画面と API の検査をすべて通します。1つでも落ちたら止まります。</li>
+    <li><b>配布物を1回だけ作る。</b> API のイメージ、画面のファイル、運用のファイル、それらの一覧表を作ります。イメージは GHCR に置き、中身から決まる番号（ダイジェスト）で固定します。同じ番号なら、何度取っても同じ中身です。</li>
+    <li><b>サーバーへ送る。</b> SSH でサーバーへ送ります。ここから先は、サーバーの上のスクリプトが動きます。</li>
+    <li><b>二重に動かない。</b> 鍵を取ります。ほかの反映が動いていたら、何もせずに止まります。</li>
+    <li><b>中身を確かめる。</b> 一覧表の SHA-256 と照らし合わせて、届いたファイルが正しいか確かめます。</li>
+    <li><b>戻し先を記録する。</b> 今動いている API のイメージを、失敗したときの戻し先として記録します。</li>
+    <li><b>新しいイメージを取る。</b> GHCR から、固定した番号のイメージを取ってきます。</li>
+    <li><b>DB をバックアップする。</b> バックアップを取り、読めるかどうかも確かめます。</li>
+    <li><b>表の形を変える。</b> マイグレーションを流します。失敗したら、API を入れ替えずに止まります。</li>
+    <li><b>API を入れ替える。</b> 新しいイメージで API を起動し直します。死活確認（生きているか、DB につながるか）が通るまで、最大60秒待ちます。</li>
+    <li><b>入口から確かめる。</b> Caddy を通しても応答が返るかを確かめます。</li>
+    <li><b>失敗したら戻す。</b> 入れ替えか入口の確認に失敗したら、確認なしで、記録しておいた前のイメージに自動で戻します。DB は戻しません。</li>
+    <li><b>画面を公開する。</b> API の反映に成功したときだけ、画面を Cloudflare Pages に公開します。画面は新しい API に合わせて作られているので、先に出すと古い API と食い違うためです。</li>
+  </ol>
+  <p>本番は、2026-10-07 に Python 版から Go 版へ切り替えました。自動デプロイは 2026-10-08 から動いています。最後に反映が成功したのは 2026-10-19 09:59 JST です。</p>
+  <h3>CI で確かめていること</h3>
+  <div class="tbl"><table>
+    <tr><th>検査</th><th>中身</th></tr>
+    <tr><td>画面</td><td>API の型の作り直しで差が出ないか。oxlint での書き方の確認。Vitest の試験（カバレッジの計測つき）。TypeScript の型の確認とビルド。</td></tr>
+    <tr><td>API</td><td>gofmt と go vet。データ競合の検出つきの試験。ビルド。</td></tr>
+    <tr><td>自動生成のずれ</td><td>SQL から作るコードと、API の仕様書が、手元で作り直したものと一致するか。</td></tr>
+    <tr><td>API のイメージ</td><td>実際にビルドして起動し、応答が返るか。root 以外で動いているか。</td></tr>
+    <tr><td>設定まわり</td><td>Caddy の設定に書き間違いがないか（本番と同じ 2.10.2 で確かめる）。外部の部品（GitHub Actions の action）を固定しているか。文書どうしが食い違っていないか。</td></tr>
+  </table></div>
+  <h3>バックアップ</h3>
+  <ul>
+    <li>PostgreSQL の標準の道具（pg_dump）で取ります。反映のたびに自動で取ります。毎日の取得は、cron で行う想定です（例として毎日 04:00）。</li>
+    <li>7日より古いものは自動で消す決まりです。残したいものには目印のファイルを置けば、消されません。</li>
+    <li><b>保存先は、同じサーバーの中です。</b> サーバーごと失われると、バックアップも失われます。別の場所へ逃がす作業は、まだできていません。</li>
+  </ul>
+  <div class="callout warn"><b>見つかっている不具合。</b> 古いバックアップを消すスクリプトに、リポジトリの上で実行の許可が付いていません。そのため、自動削除が動かず、警告が出るだけになっているおそれがあります。本番のサーバーで実際にどうなっているかは、確かめていません。Issue は開いたままです。</div>
+  <div class="rationale"><b>判断理由（Cloudflare を通らないアクセスを止める）</b>
+    <p><b>決めたこと:</b> サーバーへの直接のアクセスを止め、Cloudflare を通った要求にだけ答える。</p>
+    <p><b>理由:</b></p>
+    <ul>
+      <li>DNS からサーバーの IP は消していました。それでも、IP を知っている人がホスト名を付けて直接送ると、サーバーは 200 で応答していました。</li>
+      <li>その IP は、証明書を取る作業の間の数時間、公開の DNS に載っていました。過去の DNS の記録を集めるサービスに残っている可能性が高く、「見つけにくいだけ」の状態でした。</li>
+      <li>直接送られると、Cloudflare のレート制限や DDoS の防御を回り込まれます。</li>
+    </ul>
+    <div class="tbl"><table>
+      <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
+      <tr><td>Cloudflare Tunnel</td><td>受け付けるポートを全部閉じられるので一番堅い。ただし、常に動かす中継のプログラムがメモリを使う。当時、メモリは 911MiB のうち 523MiB を使っていた。構成も一段複雑になるため、今の規模では過剰と判断した。</td></tr>
+      <tr><td>何もしない</td><td>実害は出ていなかった。ただし、公開の後に攻撃されてから直すより、公開の前に塞ぐほうが安い。</td></tr>
+    </table></div>
+    <p>実際には、Caddy に Cloudflare の IP 範囲（IPv4 が15件、IPv6 が7件ほど）の許可リストを入れ、それ以外に 403 を返す形にしました。これは本番に入っています。Lightsail のファイアウォールでも送り元を絞る作業が、オーナーの手作業として残っています。サーバーの iptables で絞る案もありましたが、Caddy の許可リストを選んだ理由の記録はありません。</p>
+  </div>
+</section>
+
+<section id="tech">
+  <h2><span class="no">08</span>技術の選択と理由</h2>
+  <p>版の数字は main の実際の版です。それぞれを選んだ理由は、表の下に1つずつ書きます。</p>
+  <div class="tbl"><table>
+    <tr><th>区分</th><th>採用しているもの</th></tr>
+    <tr><td><a href="#tech-ui">画面</a></td><td>React 19.2、TypeScript 6.0、Vite 8、Tailwind CSS 4</td></tr>
+    <tr><td><a href="#tech-ui-lib">画面のデータ取得とフォーム</a></td><td>TanStack Query 5、React Router 7、React Hook Form 7 と zod 4</td></tr>
+    <tr><td><a href="#tech-ui-test">画面の検査</a></td><td>oxlint、Vitest と Testing Library。API の型は仕様書から自動で作る</td></tr>
+    <tr><td><a href="#tech-api">API</a></td><td>Go 1.26.4、標準の HTTP サーバーと Huma v2</td></tr>
+    <tr><td><a href="#tech-arch">API の構成</a></td><td>モジュラーモノリス（1つのプログラムを、中で役割ごとに分ける）</td></tr>
+    <tr><td><a href="#tech-db-kind">DB の種類</a></td><td>PostgreSQL 17</td></tr>
+    <tr><td><a href="#tech-dbaccess">DB の扱い方</a></td><td>pgx v5 と sqlc（SQL から型付きのコードを作る）</td></tr>
+    <tr><td><a href="#tech-migration">表の形の変え方</a></td><td>goose v3。変更は追加だけ</td></tr>
+    <tr><td><a href="#tech-db">DB の置き場所</a></td><td>API と同じサーバー</td></tr>
+    <tr><td><a href="#tech-auth">ログイン状態の持ち方</a></td><td>サーバー側のセッション（HttpOnly の Cookie）と bcrypt。パスキーは go-webauthn</td></tr>
+    <tr><td><a href="#tech-error">エラーの返し方</a></td><td>HTTP ステータスと Problem Details（RFC 9457）</td></tr>
+    <tr><td><a href="#tech-hosting">置き場所</a></td><td>画面は Cloudflare Pages。API と DB と Caddy は Lightsail の1台</td></tr>
+    <tr><td><a href="#tech-caddy">HTTPS の入口</a></td><td>Caddy 2</td></tr>
+    <tr><td><a href="#tech-ci">CI と配布</a></td><td>GitHub Actions。イメージは GHCR</td></tr>
+  </table></div>
+
+  <h3 id="tech-ui">画面（React、TypeScript、Vite、Tailwind CSS）</h3>
+  <p><b>決めたこと:</b> 画面を React、TypeScript、Vite、Tailwind CSS で作り直す。</p>
   <p><b>理由:</b></p>
   <ul>
-    <li>出典は <a href="https://github.com/H4aruki/MyTechPulse/issues/48">#48</a> です。作業記録（2026-07-11）でも確認しました。</li>
-    <li>旧版は素の HTML と JS で作っていました。画面の重複、型が無いこと、手書きの DOM 操作、状態管理が散らばっていることが負債になっていました。</li>
-    <li>React は、機能を足しながら育てていく前提で選びました。エコシステムの厚みを重視しました。</li>
-    <li>TypeScript を入れたのは、旧版の「本文の status 番号」の意味を型で表せなかったためです。そのため、画面と API のずれを見つけられませんでした。</li>
-    <li>Vite を入れたのは、ビルドをしない運用から抜けるためです。接続先 URL の直書きを、環境変数に置き換えます。公開ページと <code>/app/</code> を、1つのビルドで両立させます。</li>
-    <li>Tailwind CSS は、UI の刷新と同時に入れました。#48 の時点では shadcn/ui を使う案もありましたが、実装では見送りました。</li>
+    <li>旧版は、素の HTML と JavaScript で書いていました。同じ画面の部品があちこちに重複していました。型がなく、DOM を手で書き換え、状態を持つ場所も散らばっていました。</li>
+    <li>React は、機能を足しながら育てる前提で選びました。部品やライブラリの多さを重く見ました。</li>
+    <li>TypeScript を入れたのは、旧版で困ったことがあったからです。旧版の API は、本文の中の番号で結果を返していました。その番号の意味を型で表せず、画面と API のずれに気づけませんでした。</li>
+    <li>Vite を入れたのは、ビルドをしない運用から抜けるためです。API の URL を直接書いていたのを、環境ごとの設定に置き換えます。トップページとログイン後の画面を、1回のビルドで作れます。</li>
+    <li>Tailwind CSS は、見た目を作り直すときに一緒に入れました。部品集（shadcn/ui）を使う案もありましたが、実装では使いませんでした。</li>
   </ul>
   <div class="tbl"><table>
     <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-    <tr><td>Next.js / Nuxt</td><td>中核はログイン後の画面なので、SEO が要らない。SSR 用の Node サーバーが増え、運用の負担が上がる。</td></tr>
-    <tr><td>Vue 3</td><td>移植は楽。ただし、エコシステムの厚みで React を優先した。</td></tr>
-    <tr><td>Svelte</td><td>エコシステムと情報量で劣る。</td></tr>
-    <tr><td>素の JS のまま改善する</td><td>型や部品化の恩恵がなく、同じ負債がまた生まれる。</td></tr>
+    <tr><td>Next.js、Nuxt</td><td>中心はログイン後の画面なので、検索エンジン向けの対応が要らない。サーバーで画面を作るための Node のサーバーが増え、運用が重くなる。</td></tr>
+    <tr><td>Vue 3</td><td>今の書き方から移すのは楽。ただし、部品やライブラリの多さで React を選んだ。</td></tr>
+    <tr><td>Svelte</td><td>部品やライブラリ、情報の量で劣る。</td></tr>
+    <tr><td>素の JavaScript のまま直す</td><td>型や部品化の良さがなく、同じ問題がまた起きる。</td></tr>
   </table></div>
-  <h3 id="s3-ui-lib">画面の切り替え・データ取得・入力フォーム</h3>
-  <p><b>決めたこと:</b> TanStack Query 5、React Router DOM 7、React Hook Form 7 と zod 4（<code>@hookform/resolvers</code>）を使う。</p>
-  <p><b>理由:</b></p>
+
+  <h3 id="tech-ui-lib">画面のデータ取得とフォーム</h3>
+  <p><b>決めたこと:</b> TanStack Query、React Router、React Hook Form と zod を使う。</p>
+  <p><b>理由:</b> 旧版の困りごとに1つずつ合わせて選びました。</p>
   <ul>
-    <li>出典は <a href="https://github.com/H4aruki/MyTechPulse/issues/48">#48</a> です。作業記録（2026-07-11）でも確認しました。</li>
-    <li>旧版の困りごとに、1つずつ対応させて選びました。</li>
-    <li>React Router は、ページ単位の遷移を、画面の中での切り替えにするためです。</li>
-    <li>TanStack Query は、各所に散っていた <code>fetch</code> の手書きを1つにまとめるためです。キャッシュ、読み込み中の扱い、401 の扱いも一緒にまとめます。</li>
-    <li>React Hook Form と zod は、登録の2段階の画面と入力の検証を、型付きで行うためです。</li>
+    <li>React Router は、ページごとに読み込み直していた画面の移動を、1つの画面の中の切り替えにするためです。</li>
+    <li>TanStack Query は、あちこちに手で書いていた API の呼び出しを1つにまとめるためです。読み込み中の表示、結果の使い回し、401 のときの扱いも一緒にまとめます。</li>
+    <li>React Hook Form と zod は、2つの画面に分かれた会員登録と、入力の確認を、型付きで書くためです。</li>
   </ul>
   <p><b>選ばなかった案:</b> 記録なし。</p>
-  <h3 id="s3-ui-test">画面の検査</h3>
-  <p><b>決めたこと:</b> oxlint、Vitest 5 と Testing Library を使う。<code>openapi-typescript</code> で API の型を作り、その差分を CI で調べる。</p>
+
+  <h3 id="tech-ui-test">画面の検査</h3>
+  <p><b>決めたこと:</b> oxlint と、Vitest と Testing Library を使う。API の型は、API の仕様書から自動で作り、作り直して差が出たら CI で止める。</p>
   <p><b>理由:</b></p>
   <ul>
-    <li>API の約束と画面の型がずれたら、CI で止めるためです（<code>AGENTS.md</code>）。</li>
-    <li>CI を入れたとき（作業記録 2026-08-27）、oxlint はすでに入っていました。それを CI から呼ぶ形にしました。</li>
-    <li>Vitest は、カバレッジの計測を内蔵しています。外部サービスに登録しなくても、結果を出せます。</li>
+    <li>API と画面の型がずれたまま出さないためです。</li>
+    <li>CI を入れたとき、oxlint はすでに入っていたので、それを CI から呼ぶ形にしました。</li>
+    <li>Vitest はカバレッジの計測を持っているので、外部のサービスに登録しなくても結果を出せます。</li>
   </ul>
   <p><b>選ばなかった案:</b> ほかの候補と比べた記録はありません。</p>
-  <h3 id="s3-api">API（Go と Huma）</h3>
-  <p><b>決めたこと:</b> API を Go 1.26.4 の標準の HTTP サーバーと Huma v2 で作る。OpenAPI はコードから作る。Python から移し、2026-10-07 に本番を切り替えた。</p>
+
+  <h3 id="tech-api">API（Go と Huma）</h3>
+  <p><b>決めたこと:</b> API を Python から Go に書き換える。標準の HTTP サーバーと Huma v2 を使い、API の仕様書（OpenAPI）はコードから作る。</p>
   <p><b>理由:</b></p>
   <ul>
-    <li>出典は ADR 0001 です。堅牢性、保守性、運用の単純さ、将来のチーム開発を両立するためです。</li>
-    <li>Huma v2 は <a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a> で採用を決めました（2026-09-14 にオーナーが承認）。型付きの HTTP ハンドラー、OpenAPI 3.1 の生成、Swagger UI のためです。</li>
-    <li>Huma には、Go 1.22 以降の標準の <code>http.ServeMux</code> 用のアダプター（humago）があります。そのため、ほかの HTTP ルーターに頼らずに済みます（<a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a>）。</li>
+    <li>設計判断の記録には、堅牢さ、保守のしやすさ、運用の単純さ、将来のチームでの開発を両立するため、とあります。</li>
+    <li>Huma は、型付きの処理、OpenAPI 3.1 の仕様書の自動生成、API の説明画面のために選びました。Go の標準の HTTP サーバーにそのまま載せられるので、ほかのルーターに頼らずに済みます。</li>
+    <li>書き換えた後の実測では、API が常に使うメモリは約5〜8MB です。</li>
   </ul>
-  <p><b>選ばなかった案:</b> <a href="https://github.com/H4aruki/MyTechPulse/issues/60">#60</a> では、Web の候補として <code>net/http</code>、Echo、Gin が挙がっています。Echo と Gin を選ばなかった理由の記録はありません。</p>
-  <h3 id="s3-arch">構成（モジュラーモノリス）</h3>
-  <p><b>決めたこと:</b> モジュラーモノリスにする。配布する単位は1つにし、内部はパッケージで分ける。</p>
-  <p><b>理由:</b></p>
-  <ul>
-    <li>出典は ADR 0001 です。理由は、選ばなかった案の表のとおりです。</li>
-    <li>Issue/PR で、同じ話をやり直した記録はありません。</li>
-  </ul>
+  <p><b>選ばなかった案:</b> 検討のときに、Web の部品として Echo と Gin も挙がっています。選ばなかった理由の記録はありません。</p>
+
+  <h3 id="tech-arch">API の構成（モジュラーモノリス）</h3>
+  <p><b>決めたこと:</b> 配るプログラムは1つにし、中を役割ごとに分ける。役割の一覧は<a href="#system">システム全体図</a>のとおりです。</p>
+  <p><b>理由:</b> 理由は、選ばなかった案の表のとおりです。</p>
   <div class="tbl"><table>
     <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-    <tr><td>今の層をそのまま移す</td><td>責務の集中が残る。</td></tr>
-    <tr><td>マイクロサービス</td><td>今の規模に対して、運用の負担が大きい。</td></tr>
+    <tr><td>Python 版の層の分け方をそのまま移す</td><td>1か所に責任が集まる問題が残る。</td></tr>
+    <tr><td>マイクロサービス</td><td>今の規模では、運用の手間が大きすぎる。</td></tr>
   </table></div>
-  <h3 id="s3-dbaccess">DB アクセス（pgx と sqlc）</h3>
-  <p><b>決めたこと:</b> pgx v5 と sqlc を使う。SQL から型付きのコードを作る。</p>
+
+  <h3 id="tech-db-kind">DB の種類（PostgreSQL）</h3>
+  <p><b>決めたこと:</b> DB を MySQL 8.4 から PostgreSQL 17 に移す。</p>
   <p><b>理由:</b></p>
   <ul>
-    <li>文書には「SQLを書き、型付きコードを自動生成」とあります。</li>
-    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a> で、手書きの SQL を正本にし、sqlc で型を付けると決めました（2026-09-14 にオーナーが承認）。</li>
-    <li>sqlc は、PostgreSQL 向けの Go の生成を安定版として扱っています。接続には pgx/v5 を選べます（<a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a>）。</li>
-    <li>sqlc の rename の設定を使うと、既存の列名 <code>user_ID</code> と <code>tag_ID</code> を、Go 側の <code>UserID</code> と <code>TagID</code> に対応させられます（<a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a>）。</li>
-    <li>sqlc は、goose の形式のマイグレーションのフォルダを読めます。そのため、スキーマの定義を二重に管理せずに済みます（<a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a>）。</li>
-    <li>DB は PostgreSQL 17 なので、ドライバは pgx にします。sqlc による型の生成も、PostgreSQL 向けが最も充実しています（<a href="https://github.com/H4aruki/MyTechPulse/issues/60">#60</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/63">#63</a>）。</li>
-    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a> には、引き換えになる点も書かれています。sqlc の生成とマイグレーションの手順を、チームで守る必要があることです。</li>
+    <li>MySQL 8 は、起動しただけで約437MiB のメモリを使います。1GB のサーバーでは、OS、Docker、API、Caddy と合わせて約800MB になり、残りが約200MB しかありません。</li>
+    <li>PostgreSQL は既定の共有メモリが 128MB で、MySQL のような数百MB の固定の負担がありません。全体で 450〜550MB に収まる見込みでした。</li>
+    <li>当時のコードには、MySQL だけの型や書き方が1つもなく、移しやすい状態でした。</li>
+    <li>Go に移した後に使う pgx と sqlc も、PostgreSQL のほうが有利でした。</li>
   </ul>
   <div class="tbl"><table>
     <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-    <tr><td>GORM</td><td><a href="https://github.com/H4aruki/MyTechPulse/issues/60">#60</a> で候補に挙がっている。選ばなかった理由の記録はない。</td></tr>
+    <tr><td>MySQL のまま Lightsail に載せる</td><td>メモリの残りが約200MB になり、厳しい。</td></tr>
+    <tr><td>いったん SQLite にする</td><td>移行が2回になり、捨てるコードを書くことになる。SQLite にしたかったのは MySQL のメモリを避けるためで、その理由がなくなった。</td></tr>
   </table></div>
-  <h3 id="s3-migration">マイグレーション（goose と「追加のみ」）</h3>
-  <p><b>決めたこと:</b> goose v3（<code>server/cmd/migrate</code>）を使う。マイグレーションは追加だけにし、<code>additive_test.go</code> で守らせる。</p>
+
+  <h3 id="tech-dbaccess">DB の扱い方（pgx と sqlc）</h3>
+  <p><b>決めたこと:</b> SQL は手で書き、それを正本にする。sqlc で SQL から型付きの Go のコードを作る。接続には pgx v5 を使う。</p>
   <p><b>理由:</b></p>
   <ul>
-    <li>自動デプロイが失敗したとき、API だけを旧版へ戻せば済むようにするためです。DB は巻き戻さずに済みます（デプロイ文書）。</li>
+    <li>sqlc は、PostgreSQL 向けの Go のコードの生成を、安定版として扱っています。接続には pgx v5 を選べます。</li>
+    <li>名前の対応を変える設定があるので、今の列名（user_ID など）を、Go の書き方の名前（UserID など）に合わせられます。</li>
+    <li>sqlc は goose のマイグレーションのファイルを読めます。表の定義を2か所で管理せずに済みます。</li>
+    <li>引き換えに、コードの作り直しとマイグレーションの手順を、決まりどおりに守る必要があります。</li>
   </ul>
   <div class="tbl"><table>
     <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-    <tr><td><code>DELETE</code> を使うマイグレーション（<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>）</td><td>追加だけという決まりに反し、巻き戻せない。</td></tr>
+    <tr><td>GORM</td><td>検討のときに候補に挙がっている。選ばなかった理由の記録はない。</td></tr>
   </table></div>
-  <h3 id="s3-db">DB（PostgreSQL を API と同じサーバーに置く）</h3>
-  <p><b>決めたこと:</b> PostgreSQL 17（<code>postgres:17-alpine</code>）を、API と同じサーバーに置く。</p>
-  <p><b>理由:</b></p>
-  <ul>
-    <li>出典は ADR 0003 です。</li>
-    <li>テーブルが少なく、書き込みも少ないです。</li>
-    <li>1回の画面表示で、DB に何回も問い合わせます。DB を外に出すと、往復の遅れが積み重なります。</li>
-    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a> にも、一括で取得するようにした後は、DB を同じサーバーに置く利点が強まると書かれています。</li>
-  </ul>
+
+  <h3 id="tech-migration">表の形の変え方（goose と「追加だけ」）</h3>
+  <p><b>決めたこと:</b> マイグレーションは goose で行う。変更は列や表の追加だけにし、試験で守らせる。</p>
+  <p><b>理由:</b> 自動デプロイが失敗したとき、API だけを前の版に戻せば済むようにするためです。追加だけなら、前の版の API も新しい表の形のまま動きます。DB を巻き戻す必要がありません。</p>
   <div class="tbl"><table>
     <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-    <tr><td>マネージド DB</td><td>月 $8〜25 かかり、予算を超える。</td></tr>
+    <tr><td>既存の利用者のデータを、マイグレーションの中で消して直す</td><td>追加だけという決まりに反し、巻き戻せない。そのため、運用の作業として1回だけ行う形にした。</td></tr>
   </table></div>
-  <h3 id="s3-auth">認証（サーバー側のセッションとパスキー）</h3>
-  <p><b>決めたこと:</b> サーバー側のセッション（HttpOnly Cookie）と bcrypt を使う。パスキーには <code>go-webauthn/webauthn</code> v0.18 を使う。</p>
+
+  <h3 id="tech-db">DB の置き場所（API と同じサーバー）</h3>
+  <p><b>決めたこと:</b> PostgreSQL を、API と同じサーバーで動かす。</p>
   <p><b>理由:</b></p>
   <ul>
-    <li>セッションの出典は ADR 0002 です。XSS が起きたときに読まれる範囲を小さくするためです。サーバー側で確実に失効させるためでもあります。</li>
-    <li>パスキーの基盤は <a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a> で決め、<a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a> で入れました。</li>
-    <li>初版では、パスワードと併用します。discoverable なパスキーにします。上限は10件です。</li>
+    <li>当時は表が3つで、書き込みも少なかったためです。</li>
+    <li>1回の画面の表示で、DB に何回も問い合わせます。DB を別の場所に置くと、往復の待ち時間が積み重なります。</li>
+    <li>記事を前もって集めて DB に入れる形にすると、同じサーバーに置く利点はさらに強まる、とも書かれています。</li>
   </ul>
   <div class="tbl"><table>
     <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-    <tr><td>パスキーを自前で作る</td><td>検証の漏れが起きる危険が大きい。</td></tr>
+    <tr><td>クラウドの管理された DB</td><td>月 $8〜25 かかり、予算を超える。要件に対して過剰。</td></tr>
   </table></div>
-  <h3 id="s3-error">エラーの形式（HTTP ステータスと Problem Details）</h3>
-  <p><b>決めたこと:</b> エラーは HTTP ステータスで返す。本文は Problem Details（RFC 9457）の形にする。</p>
+
+  <h3 id="tech-auth">ログイン状態の持ち方（サーバー側のセッション）</h3>
+  <p><b>決めたこと:</b> ログイン状態は、サーバーの DB に持つセッションで管理する。ブラウザには HttpOnly の Cookie でトークンを渡す。Python 版の JWT はやめる。</p>
   <p><b>理由:</b></p>
   <ul>
-    <li>HTTP ステータスで返す方針の出典は <a href="https://github.com/H4aruki/MyTechPulse/issues/14">#14</a> です（作業記録 2026-07-09）。</li>
-    <li>旧 Python 版は、本文の status 番号で結果を返していました。この方式では、登録のときに「名前の重複」と「サーバーの障害」を区別できない不具合が起きました。</li>
-    <li>その修正の途中で、オーナーが全 API を HTTP ステータスで返す形に作り替えると決めました。</li>
-    <li>ただし、その修正（<a href="https://github.com/H4aruki/MyTechPulse/issues/13">#13</a>）自体は、status 番号の方式にそろえて直しました（<a href="https://github.com/H4aruki/MyTechPulse/issues/14">#14</a>）。</li>
-    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/14">#14</a> には、HTTP ステータスの方式を選ぶ理由が2つ書かれています。1つ目は、長い目で見るとこちらのほうが標準的なことです。2つ目は、画面側のエラー処理（<code>res.ok</code> を前提にした書き方）と相性が良いことです。</li>
-    <li>当時も、JWT 認証まわりだけは HTTP ステータス（401）で返していました。移行は、この形を全体に広げる作業だと <a href="https://github.com/H4aruki/MyTechPulse/issues/14">#14</a> に書かれています。</li>
-    <li>本文の形は <a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a> で決めました。Huma が標準で使う RFC 9457 の Problem Details を基にし、安定した業務エラーのコードだけを足します。予期しない内部エラーの詳細は、利用者に返しません。</li>
-    <li>ただし、Problem Details の形を選んだ理由そのものは、文書、Issue/PR、作業記録のどれにもありません（理由の記録なし）。</li>
+    <li>Python 版は、JWT をブラウザの localStorage に入れていました。localStorage は JavaScript から読めるので、画面に悪いスクリプトを入れられると、トークンを盗まれます。HttpOnly の Cookie なら、JavaScript からは読めません。</li>
+    <li>DB にあるセッションは、行を消せばその場で使えなくなります。ログアウトしたときの無効化が、サーバーの側で確実にできます。</li>
+    <li>引き換えに、要求のたびに DB を読みます。画面と API のドメインが違うので、CSRF への対策も要ります。対策の中身は<a href="#auth">会員登録とログイン</a>に書きました。</li>
+    <li>切り替えのときは JWT を引き継がず、全員に一度だけログインし直してもらいました。パスワードのハッシュは同じ bcrypt のコスト12なので、そのまま使えました。</li>
+  </ul>
+  <p><b>選ばなかった案:</b> JWT を使い続ける案です。理由は上のとおりです。</p>
+
+  <h3 id="tech-error">エラーの返し方（HTTP ステータスと Problem Details）</h3>
+  <p><b>決めたこと:</b> 結果は HTTP ステータスで返す。エラーの本文は Problem Details（RFC 9457）の形にする。</p>
+  <p><b>理由:</b></p>
+  <ul>
+    <li>Python 版は、本文の中の番号で結果を伝えていました。この方式で、会員登録のときに「名前の重複」と「サーバーの障害」を見分けられない不具合が起きました。</li>
+    <li>その修正の途中で、オーナーが全部の API を HTTP ステータスで返す形に作り替えると決めました。その不具合の修正だけは、当時の番号の方式に合わせて直しました。</li>
+    <li>HTTP ステータスを選んだ理由は2つ書かれています。長い目で見るとこちらが標準的なこと。画面の側で「応答が成功したか」を見る書き方と相性が良いことです。</li>
+    <li>当時も、ログインの確認（401）だけは HTTP ステータスで返していました。それを全体に広げる、という位置づけです。</li>
+    <li>本文の形は、Huma が標準で使う Problem Details を基にし、変わらない業務用のエラーの名前（たとえば利用者名の重複）だけを足しました。予想していない内部のエラーの中身は、利用者に返しません。</li>
+    <li>Problem Details の形そのものを選んだ理由は、どこにも記録がありません（理由の記録なし）。</li>
   </ul>
   <div class="tbl"><table>
     <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-    <tr><td>本文の status 番号で返す（旧 Python 版）</td><td>「名前の重複」と「サーバーの障害」を区別できない不具合が起きた。</td></tr>
+    <tr><td>本文の中の番号で返す（Python 版）</td><td>「名前の重複」と「サーバーの障害」を見分けられない不具合が起きた。</td></tr>
   </table></div>
-  <h3 id="s3-hosting">ホスティング（Cloudflare Pages と Lightsail）</h3>
-  <p><b>決めたこと:</b> 画面は Cloudflare Pages に置く。API、DB、Caddy は、AWS Lightsail の東京の 1GB のサーバー1台に置く。</p>
-  <p><b>理由:</b></p>
-  <ul>
-    <li>出典は ADR 0003 です。費用は合計で月約 $8 です。</li>
-    <li>次点はさくらの VPS です。</li>
-  </ul>
+
+  <h3 id="tech-hosting">置き場所（Cloudflare Pages と Lightsail）</h3>
+  <p><b>決めたこと:</b> 画面は Cloudflare Pages に置く。API、DB、Caddy は、Lightsail の東京の 1GB のサーバー1台に置く。</p>
+  <p><b>理由:</b> 費用が合計で月約 $8 に収まるためです。次の候補はさくらの VPS でした。</p>
   <div class="tbl"><table>
     <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-    <tr><td>Vercel</td><td>無料プランは非商用に限られる。</td></tr>
-    <tr><td>GitHub Pages</td><td>接続先 URL の書き換えができない。</td></tr>
+    <tr><td>Vercel</td><td>無料のプランは商用に使えない。</td></tr>
+    <tr><td>GitHub Pages</td><td>API の URL の書き換えができない。</td></tr>
     <tr><td>Netlify</td><td>転送量に上限がある。</td></tr>
-    <tr><td>Xserver VPS</td><td>年契約になる。</td></tr>
-    <tr><td>EC2</td><td>通信費が従量課金になる。</td></tr>
-    <tr><td>GCP の無料 VM</td><td>リージョンが米国だけ。</td></tr>
-    <tr><td>Oracle の無料 VM</td><td>アカウントを作れなかった。</td></tr>
+    <tr><td>Xserver VPS</td><td>年単位の契約になる。</td></tr>
+    <tr><td>EC2</td><td>通信量に応じて料金が増える。</td></tr>
+    <tr><td>GCP の無料の VM</td><td>場所が米国だけ。</td></tr>
+    <tr><td>Oracle の無料の VM</td><td>アカウントを作れなかった。</td></tr>
   </table></div>
-  <h3 id="s3-caddy">HTTPS の終端と入口の制限（Caddy）</h3>
-  <p><b>決めたこと:</b> Caddy 2 で HTTPS を終端する。証明書は自動で取得し、更新する。Cloudflare の IP 以外からの要求には 403 を返す（<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>）。</p>
-  <p><b>理由:</b></p>
-  <ul>
-    <li>Caddy の出典は <a href="https://github.com/H4aruki/MyTechPulse/issues/34">#34</a> です。作業記録（2026-07-16 と 08-23）でも確認しました。</li>
-    <li>証明書の取得と更新が、完全に自動です。設定は、ドメイン名を書く数行で済みます。セキュリティ用のヘッダーも、まとめて付けられます。</li>
-    <li>直接のアクセスを止める方法は <a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> で決めました。</li>
-    <li>Caddy の許可リストは <a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a> で main に入りました。</li>
-    <li>Lightsail のファイアウォールを手作業で絞る作業は、まだ残っています（Issue は OPEN）。</li>
-  </ul>
+
+  <h3 id="tech-caddy">HTTPS の入口（Caddy）</h3>
+  <p><b>決めたこと:</b> HTTPS の終端に Caddy 2 を使う。</p>
+  <p><b>理由:</b> 証明書の取得と更新が完全に自動だからです。設定はドメイン名を書く数行で済み、安全のためのヘッダーもまとめて付けられます。Cloudflare 以外を断る許可リストも、Caddy の設定に入れました（<a href="#ops">デプロイと運用</a>を参照）。</p>
   <div class="tbl"><table>
     <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-    <tr><td>Nginx + certbot</td><td>情報量や実績は多い。ただし、証明書の更新を定期実行する管理が要り、設定も長くなる。</td></tr>
-    <tr><td>Cloudflare Tunnel（<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>）</td><td>1GB のメモリと複雑さを考えると、過剰だと判断した。</td></tr>
+    <tr><td>Nginx と certbot</td><td>情報も実績も多い。ただし、証明書の更新を定期的に動かす管理が要り、設定も長くなる。</td></tr>
   </table></div>
-  <h3 id="s3-ci">CI/CD（GitHub Actions と GHCR）</h3>
-  <p><b>決めたこと:</b> GitHub Actions（<code>ci.yml</code>、<code>release.yml</code> など）を使う。イメージは GHCR に置く。</p>
+
+  <h3 id="tech-ci">CI と配布（GitHub Actions と GHCR）</h3>
+  <p><b>決めたこと:</b> 検査と配布物づくりは GitHub Actions で行う。API のイメージは GHCR に置く。</p>
   <p><b>理由:</b></p>
   <ul>
-    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/34">#34</a> では、採用する案として GitHub Actions の名前が挙がっているだけです。</li>
-    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/60">#60</a> では、ビルドをサーバーの上で行わず、GitHub Actions で作って GHCR に置く案が挙がりました。サーバーでの <code>pip install</code> によるメモリの急増を、本番からなくせるためです。#54 の自動デプロイとも相性が良いと書かれています。</li>
-    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a> で、CI で一度だけ作った Go のコンテナを GHCR に保存すると決めました（2026-09-14 にオーナーが承認）。コミットの SHA とダイジェストで固定し、リハーサル、本番、切り戻しに同じものを使うためです。</li>
-    <li>GitHub Actions や GHCR を、ほかの候補と比べた記録は見つかりませんでした。</li>
-    <li>カバレッジは外部サービスに送らず、Actions の実行結果の要約欄に出します。外部サービスへの登録が要らないためです（作業記録 2026-08-27）。今は PR へのコメントにも出しています。</li>
+    <li>Python 版の頃は、サーバーの上でビルドしていました。その途中のパッケージの導入で、1GB のサーバーのメモリが急に増えました。ビルドを GitHub Actions に移せば、これを本番からなくせます。</li>
+    <li>イメージは CI で1回だけ作り、中身の番号で固定します。試しの反映、本番、戻しのすべてで、同じものを使うためです。</li>
+    <li>カバレッジは外部のサービスに送らず、Actions の結果の画面と PR のコメントに出します。外部のサービスに登録しなくて済むためです。</li>
+    <li>GitHub Actions と GHCR を、ほかの候補と比べた記録はありません。</li>
   </ul>
-  <div class="src">出典: <code>frontend/package.json</code>、<code>server/go.mod</code>、<code>docs/adr/0001〜0003</code>、<code>docs/BasicDesignSpecifications/SystemArchitectureDiagram.md</code> §2、<code>server/db/migrations/README.md</code>、<code>AGENTS.md</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/14">#14</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/34">#34</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/48">#48</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/60">#60</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/63">#63</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a>、作業記録（オーナーが Obsidian に残している作業・会話の記録。非公開）2026-07-09・07-11・07-16・08-23・08-27</div>
 </section>
 
-<!-- 4 -->
-<section id="s4">
-  <h2><span class="no">04</span>ドメインモデル</h2>
-  <div class="grid2">
-    <div>
-      <div class="tbl"><table>
-        <tr><th>テーブル</th><th>意味</th></tr>
-        <tr><td><code>user</code></td><td>利用者です。列は <code>user_ID</code>、<code>user_name</code>、<code>password</code>、<code>role</code> です。<code>user_name</code> は一意で、50字までです。<code>password</code> は bcrypt で保存します。<code>role</code> は member か admin です。admin 用の機能はありません。</td></tr>
-        <tr><td><code>tag</code></td><td>技術タグの名前です。会員登録画面の100タグを、移行（00006）で入れました。クリックで未知のタグが来たときは、その場で追加します。</td></tr>
-        <tr><td><code>recommend</code></td><td><b>興味度</b>です。主キーは (user_ID, tag_ID) の複合キーです。<code>match_int</code> には、0〜1 の値を 10000 倍した整数を入れます。user と tag の多対多を、値つきで表す中心のテーブルです。</td></tr>
-        <tr><td><code>auth_session</code></td><td>端末ごとのセッションです。持つのは、乱数トークンの SHA-256（32バイト）と有効期限だけです。</td></tr>
-        <tr><td><code>auth_webauthn_user</code> ・ <code>auth_passkey</code> ・ <code>auth_webauthn_challenge</code></td><td>パスキー用のテーブルです（00007）。</td></tr>
-        <tr><td><code>feedback_*</code>（6表）</td><td>アンケート用です。定義、表示の記録、回答、回答した時点の上位5タグのスナップショットを持ちます。</td></tr>
-      </table></div>
-    </div>
-    <div>
-      <div class="callout ng"><b>記事は DB にありません。</b> 記事のテーブルはありません。記事一覧を開くたびに Qiita と Zenn から取得し、その場で採点して返すだけです。記事のキャッシュ、保存、既読の管理もありません。</div>
-      <div class="callout"><b>タグ名の正規化。</b> タグ名は、前後の空白を除き、小文字にしてから比べます（<code>interest.NormalizeTag</code>）。タグを作るときは、正規化した名前で <code>pg_advisory_xact_lock</code> を取り、もう一度探します。こうして、同時に登録されても重複させません。正規化すると同じ名前になるタグが DB に複数あれば、安全のためにフィードの取得を 500 で止めます。</div>
-      <div class="callout warn">移行は <b>00001〜00007</b> です。出発点の 00001 は、Python 版の時代の3表と同じ形です。形が違えば止まります。</div>
-    </div>
-  </div>
-  <pre>user 1 ──< recommend >── 1 tag        recommend.match_int : 0..10000（= 0.0..1.0）
-user 1 ──< auth_session                 auth_session.token_hash : SHA-256(32B)
-user 1 ──< auth_passkey                 （記事テーブル: なし）</pre>
-  <div class="src">出典: <code>docs/BasicDesignSpecifications/DataBaseArchitecture.md</code>、<code>server/db/migrations/00001〜00007</code>、<code>server/db/queries/{signup,recommendations}.sql</code>、<code>server/internal/interest/normalize.go</code></div>
-</section>
-
-<!-- 5 -->
-<section id="s5">
-  <h2><span class="no">05</span>おすすめの流れ（<code>GET /api/v1/feed</code> 1リクエストごと）</h2>
-  <ol class="steps">
-    <li><b>本人確認。</b> セッションの Cookie を <code>auth.Authenticate</code> で確かめます。失敗したら 401 を返します。</li>
-    <li><b>興味度を読む。</b> その利用者の <code>recommend</code> の行をすべて取得します。正規化すると同じ名前になるタグがあれば、エラー（500）にします。</li>
-    <li><b>上位5タグを選ぶ。</b> 値の大きい順に並べます。同じ値なら、正規化したタグ名の昇順にします。その先頭の5件を使います。</li>
-    <li><b>並列に取得する。</b> 5タグと Qiita・Zenn の組み合わせで、<b>最大10個の goroutine</b> を動かします。結果は、バッファ付きの channel ですべて集めます（<b>errgroup は使っていません</b>）。全体の期限は <code>FEED_TIMEOUT</code> で、既定は 8秒です。外部への1回の問い合わせの期限は <code>PROVIDER_TIMEOUT</code> で、既定は 5秒です。<br><small>Qiita は <code>/api/v2/tags/{tag}/items?page=1&amp;per_page=20</code> を、Bearer トークンを付けて呼びます。Zenn は <code>/api/articles?topicname={tag}&amp;count=5</code> を呼びます。</small></li>
-    <li><b>検証して、期間で絞り込む。</b> 記事を1件ずつ検証します。Qiita は<b>直近5日</b>以内の記事だけを使います。Zenn は<b>直近14日</b>以内の記事を使います。Zenn が<b>0件のときだけ</b>、古い記事で補います。このとき、追加の問い合わせはしません。Zenn の記事には、検索に使ったタグを記事のタグとして足します。</li>
-    <li><b>重複を除く。</b> URL ごとにまとめます。タグは、重なった記事のタグをすべて合わせます。</li>
-    <li><b>採点して並べる。</b> 点数は、下の<a href="#s5-score">採点式</a>で出します。点数の高い順に並べます。同点なら、公開日時が新しい順、提供元、URL の順で決めます。</li>
-    <li><b>まとめて返す。</b> <code>qiita_articles</code>（最大10件）、<code>zenn_articles</code>（最大10件）、<code>warnings</code> を返します。片方の提供元だけが失敗したら、成功した側を返し、<code>warnings</code> に <code>provider_unavailable</code> を入れます。両方が失敗したら、<b>503</b> を返します。</li>
-  </ol>
-  <h3 id="s5-score">採点式</h3>
-  <div class="formula">
-    興味合計 = Σ（記事タグのうち、利用者が recommend に持つタグの match_int）<br>
-    Qiita の点数 = 興味合計 × (likes + 1)<br>
-    Zenn の点数　= 興味合計（いいね数は掛けない）
-  </div>
-  <p>興味合計には、上位5タグだけでなく、<b>利用者が持つすべてのタグの重み</b>を使います。</p>
-  <p><small>Zenn の点数に反響を掛けない理由は、README にあります。「取得時点で提供元のトレンド順に絞り込まれているため重ねて数えない」という説明です。ただし、コードで Zenn を呼ぶときに渡すのは <code>topicname</code> と <code>count</code> だけです。並び順を指定する値は渡していません。Zenn 側の既定の並び順は<b>未確認</b>です。</small></p>
-  <div class="rationale"><b>判断理由（取得まわり）</b>
-    <p><b>決めたこと:</b> 空白を含むタグ（例: Spring Boot）は、表示名を空白のまま残す。Qiita と Zenn に問い合わせるときだけ、空白を除く。表示名、DB、順位付けは変えない。</p>
-    <p><b>理由:</b></p>
-    <ul>
-      <li>きっかけは、空白を含む興味タグで、Qiita と Zenn の記事を取得できなかったことです（<a href="https://github.com/H4aruki/MyTechPulse/issues/206">#206</a> の題名）。</li>
-      <li><a href="https://github.com/H4aruki/MyTechPulse/issues/206">#206</a> でオーナーが決め、<a href="https://github.com/H4aruki/MyTechPulse/pull/208">#208</a> で実装しました。</li>
-    </ul>
-    <p><b>未解決の問題（決定前）:</b></p>
-    <ul>
-      <li>クリックの API で、任意のタグを新しく作れてしまう問題があります（<a href="https://github.com/H4aruki/MyTechPulse/issues/239">#239</a>、OPEN）。</li>
-      <li>短期の案は3つです。既存のタグだけを受け付けること、文字の種類を検査すること、回数を制限することです。</li>
-      <li>長期の案は、<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a> の後に article_id を基準にすることです。</li>
-    </ul>
-  </div>
-  <div class="src">出典: <code>server/internal/recommendation/{service,score,handler}.go</code>、<code>server/internal/provider/{qiita,zenn}/client.go</code>、<code>server/internal/platform/config/config.go</code>、<code>README.md</code>「仕組み」、<code>AGENTS.md</code>「パーソナライズの重要仕様」、<a href="https://github.com/H4aruki/MyTechPulse/issues/206">#206</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/208">#208</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/239">#239</a></div>
-</section>
-
-<!-- 6 -->
-<section id="s6">
-  <h2><span class="no">06</span>興味学習の式（固定小数点）</h2>
-  <div class="formula">
-    Scale = 10000（1.0）　　DecayNumerator/DecayDenominator = 8/10　　ClickBoost = 2000（0.2）<br><br>
-    【会員登録のとき（#203、main）】<br>
-    　選んだタグ = 10000（1.0）<br>
-    　tag 表にある、選ばなかったすべてのタグ = 8000（0.8）<br><br>
-    【記事をクリックしたとき（POST /api/v1/feedback/article-clicks）】<br>
-    　① すべてのタグ: 新しい v = clamp(v) × 8 / 10（整数で計算）<br>
-    　② クリックした記事のタグ（正規化し、重複を除く）: 新しい v = min(v + 2000, 10000)<br>
-    　③ まだ持っていないタグ: 2000 で新しく作る（tag 表に無ければ tag も作る）
-  </div>
-  <p>会員登録のときは、利用者、興味度、セッションを、<b>1つのトランザクション</b>で作ります。</p>
-  <h3>計算例</h3>
+<section id="tradeoffs">
+  <h2><span class="no">09</span>制約とトレードオフ</h2>
   <div class="tbl"><table>
-    <tr><th>タグ</th><th>登録直後</th><th>[Go, Docker] の記事をクリック後</th></tr>
-    <tr><td>Go（選択）</td><td>10000</td><td>10000×0.8＋2000 = <b>10000</b></td></tr>
-    <tr><td>React（選択）</td><td>10000</td><td>8000</td></tr>
-    <tr><td>Docker（未選択）</td><td>8000</td><td>8000×0.8＋2000 = <b>8400</b></td></tr>
-    <tr><td>その他の未選択</td><td>8000</td><td>6400</td></tr>
+    <tr><th>決めたこと</th><th>得たもの</th><th>払っているコスト</th></tr>
+    <tr><td>記事を DB に持たず、一覧を開くたびに外部の API を呼ぶ。</td><td>作りが単純です。記事はいつも最新です。記事のデータを手入れする必要がありません。</td><td>1回の表示で、外部を最大10回呼びます。Qiita や Zenn が遅いと、最長8秒待たせます。外部の障害や回数の制限の影響も、そのまま受けます。</td></tr>
+    <tr><td>1GB のサーバー1台に、API、DB、Caddy をまとめる。</td><td>費用は月約 $8 です。DB との往復が速いです。構成が単純です。</td><td>サーバーが止まると、全部が止まります。要件の上では許しています。メモリが小さいので、スワップに頼っています。</td></tr>
+    <tr><td>表の形の変更は追加だけにする。</td><td>API だけを前の版に自動で戻しても、DB と食い違いません。</td><td>列を消す、名前を変える、型を変える、ができません。使わない列が残ります。</td></tr>
+    <tr><td>ログインの失敗の回数を、API のメモリで数える。</td><td>追加のインフラが要りません。</td><td>API を再起動すると、数え直しになります。API が1台だけであることが前提です。</td></tr>
+    <tr><td>サーバー側のセッションを使う。</td><td>その場で無効にできます。スクリプトにトークンを読まれません。</td><td>要求のたびに DB を読みます。CSRF の対策が要ります。</td></tr>
+    <tr><td>興味度を整数（10000 倍）で持つ。</td><td>誤差が出ません。試験の結果が毎回同じです。</td><td>範囲からはみ出さない処理と、割り算の切り捨てに気をつける必要があります。</td></tr>
+    <tr><td>選ばなかったタグにも、8000 の行を作る。</td><td>選んだタグが少なくても、上位5タグが埋まります。</td><td>埋まるのは名前順で前のタグなので、興味と関係のない記事が出ます。行の数は、利用者の数とタグの数を掛けた分になります（100タグなら1人100行）。</td></tr>
+    <tr><td>人の承認なしで、自動で反映する。</td><td>すぐに反映できます。手作業の間違いがありません。</td><td>CI の検査、自動の戻し、イメージの固定に頼っています。</td></tr>
   </table></div>
-  <ul>
-    <li>同じ利用者のクリックによる更新は、トランザクションで1つずつ順に処理します。<code>SELECT … FOR UPDATE</code> で、利用者の行をロックします。</li>
-    <li>送れるタグは1〜50件で、1件あたり1〜50文字です。</li>
-    <li>学習の送信が失敗しても、画面にはエラーを出しません。閲覧の邪魔をしないためです。</li>
-    <li>浮動小数点を使わないのは、小数のまま保存すると誤差が出るためです（DB 文書の説明）。</li>
-  </ul>
-  <div class="callout warn">事実として言える副作用があります。選んだタグが5個より少ないと、上位5タグの残りは 8000 同士の同点になります。その場合は、<b>正規化したタグ名の昇順</b>で埋まります。これを変える提案は、まだマージされていない PR <a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a> です（<a href="#s11">§11</a>）。本番（main）では、選ばなかったタグはまだ 0.8 です。</div>
-  <div class="rationale"><b>判断理由（興味の初期値・減衰）</b>
-    <p><b>決めたこと:</b> 選んだタグは 1.0、選ばなかったタグは 0.8 にする。これが本番の今の値です。</p>
+</section>
+
+<section id="future">
+  <h2><span class="no">10</span>まだ本番にないもの</h2>
+  <p>ここに書くものは、どれも本番では動いていません。方針が決まっているものと、案の段階のものがあります。</p>
+
+  <h3>選ばなかったタグを 0 から始める <span class="pill warn">修正の PR が未マージ</span></h3>
+  <p>修正は PR として出ていますが、まだ main に入っていません。本番では、選ばなかったタグは今も 8000（0.8）です。</p>
+  <div class="rationale"><b>判断理由（方針は決定済み）</b>
+    <p><b>決めたこと:</b> 会員登録のとき、選ばなかったタグには行を作らない。値は 0 として扱う。選んだタグは 1.0 のまま。</p>
     <p><b>理由:</b></p>
     <ul>
-      <li><a href="https://github.com/H4aruki/MyTechPulse/issues/201">#201</a> のオーナーの確認コメントで決まり、<a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a> で実装しました。</li>
-      <li>それまでの <code>match_int=1</code>（0.0001 にあたる）は、尺度の誤りとして直しました。</li>
-      <li>0.8 という数値の根拠は見つかっていません。<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> の調査コメントによると、Issue/PR、コミット、設計資料のどこにも根拠はありません。「デフォルト0.8」というメモがあるだけです。</li>
-      <li>コードの上では、減衰率と同じ <code>Scale×8/10</code> です。</li>
-    </ul>
-    <p><b>決めたこと:</b> クリックのときの減衰率は 0.8 にする。この値は変えない方針です。</p>
-    <p><b>理由:</b></p>
-    <ul>
-      <li>意図して決めた値です。指数移動平均の考え方です（<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> の補足コメント）。</li>
+      <li>興味が変わったら、何回かのクリックで、最初に選んだタグを追い越せるようにしたい、というのが前提です。</li>
+      <li>今の 0.8 だと、選ばなかったタグの記事を1回押すだけで、選んだタグを追い越します。登録で選んだことが、ほとんど意味を持ちません。</li>
+      <li>0 から始めると、そのタグの記事を4回押せば、選んだタグを追い越します。初期値ごとの回数は、0 なら4回、0.1〜0.3 なら3回、0.5 なら2回、0.8 なら1回です（選んだタグの記事を押さない場合）。</li>
+      <li>今は、タグ表にある全タグの行を作るので、同点のタグが名前順で上位5タグを埋めます。Go だけを選んだ人では、10回の検索のうち8回が、選んでいないタグに使われます。</li>
+      <li>記事の点数は、付いているタグの値の合計です。0.8 のタグが約100個あるので、選んだタグかどうかより、知っているタグがいくつ付いているかで順位が決まりやすくなっています。</li>
     </ul>
     <div class="tbl"><table>
       <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-      <tr><td>0.5</td><td>過去がすぐに消えてしまう。</td></tr>
+      <tr><td>0.8 のまま</td><td>1回のクリックで選んだタグを追い越し、登録のときの選択がほとんど意味を持たない。同点のタグが、名前順で上位5タグを埋める。</td></tr>
+      <tr><td>0.1〜0.3 などの小さい値</td><td>0 と比べて、追い越しが早くなるのはクリック1回分だけ。その一方で全タグの行が必要になり、名前順で上位5タグが埋まる問題がまた起きる。</td></tr>
     </table></div>
-    <p><b>決めたこと:</b> <a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> で、次の3つを決めた。まだマージされていません。</p>
-    <ul>
-      <li>選ばなかったタグには行を作らず、0 として扱います。</li>
-      <li>空いた枠は、人気の記事で埋めます。</li>
-      <li>既存の利用者のデータは、運用の作業（ops）で1回だけそろえます。</li>
-      <li>実装の PR は <a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a> です。OPEN のため、本番にはまだ入っていません。</li>
-    </ul>
+    <p><b>決めたこと:</b> 興味度が 0 より大きいタグが5つに満たないときは、空いた枠を人気の記事（Qiita のいいね数が多い順）で埋める。</p>
+    <p><b>理由:</b> 選ばなかったタグを 0 にすると、登録の直後は、選んだタグの数しか枠が埋まらないためです。人気の記事は、新着の記事より質が安定しています。知らなかったタグの記事に出会うきっかけにもなります。新しい計算や外部のサービスも要らず、すぐに作れます。たとえば Go だけを選んだ人は、「Go と人気の記事4枠」になります。</p>
+    <p><b>決めたこと:</b> 今いる利用者のデータも、新しい決まりにそろえる。一度も押していない、選ばなかったタグの行を消す。作業はマイグレーションではなく、運用の作業として1回だけ行う。</p>
+    <p><b>理由:</b> 消す行はすべて同じ値なので、並び順の情報は失われません。2万人分の試算で、誤って消した行も、消し漏れも0件でした。手順は、読み取りだけの確認、専用のバックアップ、オーナーの承認、1回だけのスクリプト、結果の確認の順です。</p>
+    <p><b>決めたこと:</b> 値の尺度を直す前に登録した人のうち、一度もクリックしていない人だけ、選んだタグを 1.0 に直す。</p>
+    <p><b>理由:</b> その人たちは、選んだタグが 1（0.0001）のまま保存されています。一度も押していない人は、値がすべて 1 のままなので、確実に見分けられます。</p>
     <div class="tbl"><table>
       <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-      <tr><td>goose の <code>DELETE</code> でそろえる</td><td>追加だけという決まりに反し、巻き戻せない（<a href="#s3-migration">§03</a>）。</td></tr>
+      <tr><td>クリックしたことのある人も含めて、選んだタグを 1.0 に上げる</td><td>クリックで学んだ興味より、登録のときの選択が上に来てしまう。学習の結果を壊す。</td></tr>
+      <tr><td>全員そのままにする</td><td>一度も押していない人は、選んだタグが効かないままになる。</td></tr>
     </table></div>
   </div>
-  <div class="src">出典: <code>server/internal/interest/{model,click}.go</code>、<code>server/internal/store/{auth,interest}.go</code>、<code>server/db/queries/signup.sql</code>、<code>server/internal/recommendation/handler.go</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/201">#201</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a>、<code>FeaturesList.md</code> F-5-4</div>
-</section>
 
-<!-- 7 -->
-<section id="s7">
-  <h2><span class="no">07</span>認証</h2>
-  <h3>セッション（ADR 0002）</h3>
+  <h3>クリックで好きなタグを登録できてしまう問題を直す <span class="pill warn">未実装</span></h3>
+  <p>問題の中身は<a href="#feed">記事一覧ができるまで</a>の最後に書きました。直す順番は、上の「0 から始める」の次です。どちらも興味度の表とタグの表を直す作業で、同じ所を触るので、先に初期値の方針を固めたほうが手戻りが少ないためです。この順番は、オーナーが進め方を任せた上で決まりました。</p>
+
+  <h3>記事を前もって集めておく <span class="pill warn">方針だけ決定</span></h3>
+  <p>今は一覧を開くたびに外部を呼んでいます。これを、決まった時刻にまとめて集め、DB に入れておく形に変えます。決まっている方針は次のとおりです。</p>
   <ul>
-    <li>ログインか登録に成功すると、32バイトの乱数トークンを発行します。トークンは Cookie で渡し、DB には <b>SHA-256 だけ</b>を保存します。</li>
-    <li>有効期限の既定は24時間です（<code>SESSION_TTL</code>）。</li>
-    <li>Cookie の名前は、本番では <code>__Host-mtp_session</code>、開発では <code>mtp_session</code> です。本番の Cookie は HttpOnly、Secure、SameSite=Lax、Path=/ です。</li>
-    <li>ログアウトすると、その端末のセッションの行だけを消します。ほかの端末のセッションは残ります。</li>
-    <li>期限切れのセッションは、ログインのたびに掃除します。</li>
-    <li>CSRF 対策として、<code>/api/v1/</code> の更新系の要求には2つの条件があります。許可した Origin からの要求であることと、<code>X-MTP-CSRF: 1</code> ヘッダーがあることです。</li>
-    <li>CORS も、許可したサイトだけに限っています。</li>
-    <li>旧 Python 版の JWT（localStorage）は引き継ぎません。切り替えのときに、一度だけログインし直してもらいます。</li>
+    <li>一覧は DB から読みます。一覧を開いたときには、外部の API を呼びません。</li>
+    <li>集めるタグは、タグ表のすべてのタグです。</li>
+    <li>集める時刻は、1日3回（6:00、11:30、16:30 JST）にする案です。</li>
+    <li>同時に送る数は、Qiita が4、Zenn が2です。</li>
+    <li>古い記事は、Qiita は5日、Zenn は14日で消します。利用者が保存した記事は消しません。</li>
   </ul>
-  <h3>パスワード</h3>
-  <ul>
-    <li>bcrypt のコストは12です。旧 Python 版（Passlib）と同じなので、既存の <code>$2b$</code> のハッシュをそのまま検証できます。上限は72バイトです。</li>
-    <li>存在しない利用者でも、ダミーのハッシュと照合します。応答は区別しません。どちらも <code>invalid_credentials</code> の 401 です。</li>
-    <li>新しいパスワードには3つの条件があります。12文字以上であること、利用者名と同じでないこと、よく使われるパスワードの一覧に含まれないことです。</li>
-    <li>文字の種類の決まりはありません（NIST SP 800-63B）。この条件は、ログインの照合には使いません（#217）。</li>
-    <li>ログイン試行の制限は、プロセス内のメモリで持ちます（#217）。</li>
-    <li>利用者名ごとに、15分に5回失敗すると締め出します。締め出す時間は1分、2分、4分と倍になり、最大15分です。</li>
-    <li>IP ごとに、15分に20回失敗すると締め出します。</li>
-    <li>パスキーのログインの開始は、IP ごとに15分に60回までです。</li>
-    <li>IP は <code>CF-Connecting-IP</code> から読みます。本番で <code>CLIENT_IP_HEADER</code> が空なら、起動しません（#231）。</li>
-  </ul>
-  <h3>パスキー（WebAuthn）</h3>
-  <ul>
-    <li>設定画面で、登録、一覧、名前の変更、削除ができます（#221）。</li>
-    <li>パスキーでのログイン（#228）と、自動入力の conditional UI（#229）もあります。</li>
-    <li>ログインでは、利用者名を入れずにパスキーを選んでもらいます（<code>allowCredentials</code> は空）。</li>
-    <li>チャレンジには、使い捨てのトークンを使います。トークンは<b>応答の本文の <code>challengeToken</code></b> で渡し、完了のときに本文で返してもらいます。</li>
-    <li>DB には、トークンの SHA-256 だけを保存します。トークンは5分で失効し、1回使うと消えます。</li>
-    <li>Cookie での受け渡しを本文に変えた理由は、下の判断理由に書きます（#230、#232）。</li>
-    <li>RP ID の既定は、本番では <code>mytechpulse.net</code> です（<code>WEBAUTHN_RP_ID</code>）。本番の origin が https であり、localhost でないことを、起動時に検査します。</li>
-  </ul>
-  <div class="rationale"><b>判断理由（認証まわり）</b>
-    <p><b>決めたこと:</b> ログイン試行の制限と、パスワードの強度チェックを必須にする（<a href="https://github.com/H4aruki/MyTechPulse/issues/186">#186</a>）。</p>
-    <p><b>理由:</b></p>
-    <ul>
-      <li><a href="https://github.com/H4aruki/MyTechPulse/pull/217">#217</a> で実装しました。12文字以上にし、よくあるパスワードを拒否します。文字の種類の決まりは設けません。制限はメモリの中で数えます。</li>
-    </ul>
+  <p>この作業は、上の2つが終わってからにします。めったに使われないタグを別の枠で集める基準は、初期値が直り、意味のないタグが増えなくなってからでないと決められないためです。</p>
+
+  <h3>記事の保存（お気に入り） <span class="pill warn">方針だけ決定</span></h3>
+  <div class="rationale"><b>判断理由（方針は決定済み）</b>
+    <p><b>決めたこと:</b> 保存はログインした人だけが使えるようにし、サーバーに持つ。</p>
+    <p><b>理由:</b> 別の端末からも見られるようにするためです。保存したことを、興味の学習にも使うためです。</p>
     <div class="tbl"><table>
       <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-      <tr><td>Cloudflare WAF のレート制限だけに任せる</td><td>利用者名ごとの制限ができない。そのため補助にとどめると、<a href="https://github.com/H4aruki/MyTechPulse/issues/186">#186</a> に書かれている。</td></tr>
+      <tr><td>端末の中に保存する</td><td>別の端末から見られず、学習にも使えない。</td></tr>
     </table></div>
-    <p><b>決めたこと:</b> パスキーには <code>go-webauthn</code> を使う。</p>
-    <p><b>理由:</b></p>
-    <ul>
-      <li><a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a> で設計しました。</li>
-      <li>初版は、パスワードと併用します。パスキーだけの利用者は、後で対応します。</li>
-      <li>discoverable と userVerification=required にします。上限は10件です。</li>
-      <li>実装は4段階で進めました。基盤が <a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a>、登録と設定が <a href="https://github.com/H4aruki/MyTechPulse/pull/221">#221</a>、ログインが <a href="https://github.com/H4aruki/MyTechPulse/pull/228">#228</a>、conditional UI が <a href="https://github.com/H4aruki/MyTechPulse/pull/229">#229</a> です。</li>
-    </ul>
+    <p>保存は、前もって集めた記事の行を指す形で作ります。そのため、記事を前もって集める作業の後に作ります。</p>
+    <p><b>決めたこと:</b> 保存したら、その記事のタグの興味度に 3000（0.3）を足す。クリックの約1.5回分です。</p>
     <div class="tbl"><table>
       <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-      <tr><td>自前で実装する</td><td>検証の漏れが起きる危険が大きい。</td></tr>
+      <tr><td>2000 を足す</td><td>クリックと差がつかない。</td></tr>
+      <tr><td>4000 を足す</td><td>学びすぎる。</td></tr>
+      <tr><td>学習に使わない</td><td>理由の記録なし。</td></tr>
     </table></div>
-    <p><b>決めたこと:</b> チャレンジのトークンは、本文の <code>challengeToken</code> で受け渡す（<a href="https://github.com/H4aruki/MyTechPulse/pull/232">#232</a>）。登録も同じ形にする。</p>
-    <p><b>理由:</b></p>
-    <ul>
-      <li>最初は Cookie で渡していました。複数のタブで開くと Cookie が上書きされ、先に開いたタブのログインが失敗しました（<a href="https://github.com/H4aruki/MyTechPulse/issues/230">#230</a>）。</li>
-      <li>トークンだけでは何もできず、本人確認つきの署名が必要です。そのため、本文に載せてもできることは増えないと、PR に書かれています。</li>
-    </ul>
+    <p>保存をやめたときは、基本的に学習に使いません。読み終えて整理しただけのこともあるためです。</p>
+    <p><b>決めたこと:</b> 押し間違いに備えて、保存した後5秒間は取り消しの表示を出す。学習に使うのは、保存から10秒後にする。</p>
     <div class="tbl"><table>
       <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-      <tr><td>Cookie で渡し続ける</td><td>複数のタブで、先に開いたタブが失敗する（<a href="https://github.com/H4aruki/MyTechPulse/issues/230">#230</a>）。</td></tr>
-      <tr><td>BroadcastChannel（<a href="https://github.com/H4aruki/MyTechPulse/pull/229">#229</a> で検討）</td><td>複雑さに見合わない。</td></tr>
+      <tr><td>毎回、確認の画面を出す</td><td>理由の記録なし。</td></tr>
     </table></div>
-    <p><b>決めたこと:</b> 本番で <code>CLIENT_IP_HEADER</code> が空なら、起動を止める（<a href="https://github.com/H4aruki/MyTechPulse/pull/231">#231</a>）。</p>
-    <p><b>理由:</b></p>
-    <ul>
-      <li>空のままだと、Cloudflare と Caddy の裏では、全員が同じ接続元に見えます。すると、ログイン試行の制限が、全員で1つの枠になってしまいます（<a href="https://github.com/H4aruki/MyTechPulse/pull/231">#231</a>）。</li>
-      <li>また、直接のアクセスでヘッダーを偽装できる間は、IP による制限が弱まるおそれがあります（<a href="https://github.com/H4aruki/MyTechPulse/pull/217">#217</a> の注意書き。<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> に関連）。</li>
-    </ul>
+    <p>退会したときは、保存も一緒に消します。</p>
   </div>
-  <div class="src">出典: <code>docs/adr/0002-use-server-side-sessions.md</code>、<code>server/internal/auth/{password,policy,limiter,handler,session}.go</code>、<code>server/internal/passkey/{handler,model,service}.go</code>、<code>server/internal/platform/config/config.go</code>、<code>server/db/migrations/00007_auth_passkey.sql</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/186">#186</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/217">#217</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/221">#221</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/228">#228</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/229">#229</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/230">#230</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/231">#231</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/232">#232</a></div>
-</section>
 
-<!-- 8 -->
-<section id="s8">
-  <h2><span class="no">08</span>インフラ・デプロイ・CI</h2>
-  <h3>本番の置き方</h3>
+  <h3>そのほか</h3>
   <ul>
-    <li>サーバーは Lightsail の東京、1GB です（文書では約 $7/月）。</li>
-    <li>メモリ対策として、スワップを 2GB 作り、<code>vm.swappiness=10</code> にしています。</li>
-    <li>Docker Compose で3つを動かします。<code>db</code>（postgres:17-alpine）は 127.0.0.1:5432 だけで待ち受けます。<code>api-go</code> は 127.0.0.1:8001 だけで待ち受けます。<code>caddy</code> は 80/443 と 443/udp で待ち受けます。</li>
-    <li>外部に開いているのは Caddy だけです。</li>
-    <li>Caddy は、Cloudflare の IP 範囲以外からの要求に 403 を返します（<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>、Refs <a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>）。HSTS も付けます。証明書は Let's Encrypt から自動で更新します。</li>
-    <li>Lightsail のファイアウォールで送信元を絞る作業は、オーナーが手で行う残作業です。そのため、<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> は OPEN のままです。</li>
-    <li>API のイメージはマルチステージで作り、最後は <code>FROM scratch</code> です。<code>USER 65532</code>（root 以外）で動きます。</li>
-    <li>本番で Swagger UI（<code>/docs</code>）を有効にすると、起動しません。</li>
-    <li>バックアップは <code>pg_dump -Fc</code> で取ります。デプロイの前に自動で取ります。日次の取得は cron で行う想定です。</li>
-    <li>7日より古いバックアップは自動で消します（<code>.keep</code> は残します）。<b>保存先は同じサーバーの中</b>です。</li>
+    <li><b>似たタグの記事で空き枠を埋める案</b> <span class="pill warn">後回し</span>。興味のあるタグに似たタグの記事を、空いた枠に出す案です。先に「人気の記事で埋める」案を採り、こちらは後に回しました。</li>
+    <li><b>Lightsail のファイアウォールで送り元を絞る</b> <span class="pill warn">オーナーの手作業</span>。Caddy での制限は本番に入っています。サーバーの手前のファイアウォールでも Cloudflare の範囲だけを通す作業が残っています。</li>
+    <li><b>利用規約とプライバシーポリシー</b> <span class="pill warn">未実装</span>。規約のページと、会員登録のときの同意を足します。</li>
+    <li><b>ログの整備と本番の監視</b> <span class="pill warn">未実装</span>。障害、ディスクの残り、外部 API の失敗に気づけるようにします。</li>
+    <li><b>バックアップを別の場所へ逃がす</b> <span class="pill warn">未実装</span>。今は同じサーバーの中にしかありません。</li>
+    <li><b>別のサーバーへ移す手順と、2GB のプランに上げる基準</b> <span class="pill warn">未実装</span>。文書にまとめる予定です。</li>
+    <li><b>登録した後に興味のタグを選び直す画面</b> <span class="pill warn">未実装</span>。今は、登録のときにしか選べません。</li>
   </ul>
-  <h3>CI（<code>.github/workflows/ci.yml</code>、PR と main の push）</h3>
-  <div class="tbl"><table>
-    <tr><th>ジョブ</th><th>内容</th></tr>
-    <tr><td>フロントエンドの書き方チェック</td><td>API の型の生成差分、oxlint、Vitest（カバレッジ付き）、<code>tsc -b</code> とビルドを行います。</td></tr>
-    <tr><td>Goバックエンドの検査</td><td>gofmt、go vet、<code>go test -race -cover</code>、ビルドを行います。</td></tr>
-    <tr><td>sqlc と OpenAPI の生成差分</td><td>生成物がコードと一致するかを確かめます。</td></tr>
-    <tr><td>Go API の image 検査</td><td>ビルドし、起動、疎通、root 以外で動くことを確かめます。</td></tr>
-    <tr><td>設定まわりの仕掛けの確認</td><td>フック類の試験、Caddyfile の検証、外部 action の固定（pin）、文書の整合を確かめます。</td></tr>
-    <tr><td>本番への反映が要るか</td><td>変更されたファイルで判断します。文書と試験だけの変更なら、反映しません。比べる起点は「最後に反映に成功した main のコミット」です（#213）。</td></tr>
-    <tr><td>配布物の作成、Go版の本番への反映</td><td>下の流れのとおりです。</td></tr>
-  </table></div>
-  <h3>自動デプロイ</h3>
-  <p>人の承認なしで動きます。動くのは、<code>GO_DEPLOY_ENABLED=true</code> のときだけです。</p>
-  <ol class="steps">
-    <li>配布物を一度だけ作り、<b>digest で固定</b>します。配布物は、API のイメージ、画面、運用ファイル、manifest です。</li>
-    <li>SHA-256 で照合してから、サーバーへ送ります。サーバーでは <code>ops/deploy_go.sh</code> が、次の順に動きます。
-      <ol>
-        <li>ロックを取る。</li>
-        <li>入力を確かめる。</li>
-        <li>今の版を、戻し先として記録する。</li>
-        <li>新しいイメージを取得する。</li>
-        <li><b>DB をバックアップする。</b></li>
-        <li><b>移行を行う。</b>移行は追加だけで、入れ替えより先に行います。</li>
-        <li>入れ替える。</li>
-        <li>疎通を確かめる。</li>
-      </ol>
-    </li>
-    <li>疎通の確認に失敗したら、確認なしで<b>直前のイメージへ自動で戻します</b>。DB は戻しません。</li>
-    <li>API が成功したときだけ、Cloudflare Pages へ画面を公開します。画面は新しい API を前提にしているためです。サーバーの上で、ソースからビルドすることはしません。</li>
-  </ol>
-  <p>直近の状況です。main <code>5cc75fd</code> の CI では、すべてのジョブが成功しました。「Go版の本番への反映」は、2026-10-19 09:59 JST に成功しています。本番は Go 版で、2026-10-07 に切り替えました（#127）。自動デプロイは 2026-10-08 から有効です。</p>
-  <div class="rationale"><b>判断理由（入口制限）</b>
-    <p><b>決めたこと:</b> Cloudflare を通らない、オリジンへの直接のアクセスを止める（<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>）。</p>
-    <p><b>理由:</b></p>
-    <ul>
-      <li>オリジンを直接たたかれると、Cloudflare のレート制限や WAF を回り込まれるおそれがあるためです。</li>
-    </ul>
-    <div class="tbl"><table>
-      <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-      <tr><td>Cloudflare Tunnel</td><td>メモリと複雑さを考えると、過剰。</td></tr>
-    </table></div>
-    <ul>
-      <li>Caddy の許可リストは、<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a> で実装しました。</li>
-      <li>ファイアウォールの手作業が残っているため、<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> は閉じていません。</li>
-    </ul>
-  </div>
-  <div class="src">出典: <code>docs/deploy/go-auto-deploy.md</code>、<code>docs/deploy/lightsail-provisioning.md</code>、<code>docs/adr/0003</code>、<code>.github/workflows/ci.yml</code>、<code>docker-compose.yml</code>、<code>Caddyfile</code>、<code>server/Dockerfile</code>、<code>ops/backup_db.sh</code>・<code>ops/prune_backups.sh</code>、<code>TASKS.md</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>、GitHub Actions run 39182816694</div>
 </section>
 
-<!-- 9 -->
-<section id="s9">
-  <h2><span class="no">09</span>設計上の制約・トレードオフ</h2>
-  <div class="tbl"><table>
-    <tr><th>決めたこと</th><th>得たもの</th><th>払っているコスト（事実）</th></tr>
-    <tr><td>記事を DB に持たず、要求のたびに外部の API を呼ぶ。</td><td>実装が単純です。記事が常に新しいです。記事データの保守が要りません。</td><td>1回の表示で、外部を最大10回呼びます。外部の遅れ、障害、回数の制限の影響を直接受けます。8秒で打ち切り、片方の失敗は warnings で知らせます。日次の一括取得は、まだ実装していません（<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a>。方針はコメントで決まっています。<a href="#s11">§11</a>）。</td></tr>
-    <tr><td>Lightsail 1GB に、API、DB、Caddy を同居させる。</td><td>費用は月約 $8 です。DB との往復が速いです。構成が単純です。</td><td>サーバーが1台なので、止まると全部が止まります。要件の上では許容しています。メモリが小さく、スワップが前提です。</td></tr>
-    <tr><td>移行は追加だけにする。</td><td>API だけを旧版へ自動で戻しても、DB との互換が保たれます。</td><td>列の削除、改名、型の変更ができません。古い列が残ります。</td></tr>
-    <tr><td>ログイン試行の制限を、プロセス内のメモリで持つ。</td><td>追加のインフラが要りません。</td><td>再起動すると、数え直しになります。API が1台であることが前提です。</td></tr>
-    <tr><td>サーバー側のセッションを使う。</td><td>すぐに失効できます。XSS で盗まれる範囲が小さくなります。</td><td>要求のたびに DB を読みます。クロスオリジンなので、CSRF 対策（Origin と専用ヘッダー）が要ります。</td></tr>
-    <tr><td>興味度を整数（10000 倍）で保存し、計算する。</td><td>誤差がありません。テストの結果が毎回同じになります。</td><td>0〜10000 への切り詰め（クリップ）や、整数の割り算の切り捨てに気をつける必要があります。</td></tr>
-    <tr><td>選ばなかったタグにも、0.8 で行を作る（#203）。</td><td>選んだタグが少なくても、上位5タグが埋まります。</td><td>同点の選ばなかったタグは、名前の順で選ばれます。見直しは <a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> で決まりましたが、<a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a> はまだマージされていません。行の数は、利用者の数とタグの数を掛けた分になります。</td></tr>
-    <tr><td>人の承認なしで、自動でデプロイする。</td><td>速く反映できます。手作業のミスがありません。</td><td>検査、自動の戻し、digest での固定に頼っています。</td></tr>
-  </table></div>
-  <div class="src">出典: <code>docs/adr/0003</code>、<code>DataBaseArchitecture.md</code> §4、<code>SystemArchitectureDiagram.md</code> §4、<code>server/internal/auth/limiter.go</code>、<code>server/internal/recommendation/service.go</code>、<code>docs/deploy/go-auto-deploy.md</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a></div>
-</section>
-
-<!-- 10 -->
-<section id="s10">
-  <h2><span class="no">10</span>文書とコードの食い違い（実装を正とする）</h2>
-  <div class="tbl"><table>
-    <tr><th>文書</th><th>文書の記述</th><th>main のコードと事実</th></tr>
-    <tr><td><code>DataBaseArchitecture.md</code> §3-3</td><td>会員登録のときの初期値は「仮の初期値 1」とある。</td><td>選んだタグは 10000、選ばなかったタグは 8000 です（<a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/201">#201</a>）。</td></tr>
-    <tr><td><code>AGENTS.md</code> パーソナライズ仕様 3</td><td>順位は <code>タグ重みの合計 × (likes + 1)</code> とある。提供元を区別していない。</td><td>(likes+1) を掛けるのは Qiita だけです。Zenn は合計だけです（<code>score.go</code>）。</td></tr>
-    <tr><td><code>FeaturesList.md</code> §3、README Roadmap</td><td>ログイン試行の制限と、パスワードの強度チェックが「未実装」とある。</td><td>実装済みです（<a href="https://github.com/H4aruki/MyTechPulse/pull/217">#217</a>。<a href="https://github.com/H4aruki/MyTechPulse/issues/186">#186</a> は CLOSED）。</td></tr>
-    <tr><td><code>DataBaseArchitecture.md</code> §1</td><td>テーブルは10個とある。</td><td>パスキーの3表（00007）を加えると、13個です。</td></tr>
-  </table></div>
-  <p><small>#203 より前に登録した利用者の <code>recommend</code> の実データがどうなっているかは、<b>未確認</b>です。本番の DB は見ていません。</small></p>
-  <div class="src">出典: 各文書と <code>server/internal/interest/model.go</code>、<code>server/internal/recommendation/score.go</code>、<code>server/internal/auth/{policy,limiter}.go</code>、<code>server/db/migrations/00007_auth_passkey.sql</code></div>
-</section>
-
-<!-- 11 -->
-<section id="s11">
-  <h2><span class="no">11</span>これから（未マージ・未実装。本番では動いていない）</h2>
+<section id="unknown">
+  <h2><span class="no">11</span>未確認のこと</h2>
+  <p>次のことは、このページを書く時点で確かめられていません。</p>
   <ul>
-    <li><span class="pill warn">PR OPEN</span> <a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a> 選ばなかったタグの初期値を 0 にし、空いたフィードの枠を人気の記事で埋めます。決定の正本は、<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> のコメントです。本番にはまだ入っていないので、今は選ばなかったタグが 0.8 です。</li>
-    <li><span class="pill warn">Issue OPEN</span> <a href="https://github.com/H4aruki/MyTechPulse/issues/239">#239</a> クリックの API で、任意のタグを登録できてしまう問題です。<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> で、進める順を #240、#239、#66 の順と決めました。</li>
-    <li><span class="pill warn">Issue OPEN</span> <a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a> 記事の取得を、要求のたびに行うのではなく、定期的にまとめて行う形に変えます。
-      <div class="rationale" style="margin-top:6px"><b>判断理由（コメントで決定・未実装）</b>
-        <p><b>決めたこと:</b> <a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a> を先に進め、一括で取得するときに記事のテーブルを作る。</p>
-        <ul>
-          <li>フィードは DB から読みます。画面を開いたときには、外部の API を呼びません。</li>
-          <li>取得するタグは、<code>tag</code> 表のすべてのタグです。</li>
-          <li>実行は1日3回（6:00、11:30、16:30 JST）にする案です。</li>
-          <li>並列の数は、Qiita が4、Zenn が2です。</li>
-          <li>古い記事は、Qiita は5日、Zenn は14日で消します。保存された記事は消しません。</li>
-          <li><a href="https://github.com/H4aruki/MyTechPulse/issues/236">#236</a> の保存は、この記事の ID を参照する形で作ります。</li>
-        </ul>
-      </div>
-    </li>
-    <li><span class="pill warn">Issue OPEN</span> <a href="https://github.com/H4aruki/MyTechPulse/issues/236">#236</a> 記事の保存（お気に入り）です。
-      <div class="rationale" style="margin-top:6px"><b>判断理由（コメントで決定・未実装）</b>
-        <p><b>決めたこと:</b> 保存するには、ログインを必須にする。</p>
-        <p><b>理由:</b></p>
-        <ul>
-          <li>端末をまたいで使えるようにするためです。学習にも使うためです。</li>
-        </ul>
-        <div class="tbl"><table>
-          <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-          <tr><td>端末の中（ローカル）に保存する</td><td>端末をまたいで使えず、学習にも使えない。</td></tr>
-        </table></div>
-        <ul>
-          <li>記事の行は <a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a> で作ります。保存は、その行を参照するだけです。</li>
-        </ul>
-        <p><b>決めたこと:</b> 保存したら、興味度を +3000 にする。クリックの約1.5回分です。</p>
-        <div class="tbl"><table>
-          <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-          <tr><td>+2000</td><td>差がつかない。</td></tr>
-          <tr><td>+4000</td><td>学びすぎる（過学習）。</td></tr>
-          <tr><td>学習しない</td><td>理由の記録なし。</td></tr>
-        </table></div>
-        <ul>
-          <li>保存の解除は、基本的に学習に使いません。読み終えて整理しただけのこともあるためです。</li>
-        </ul>
-        <p><b>決めたこと:</b> 誤タップの対策として、5秒間、取り消しの表示を出す。学習への反映は、保存から10秒後にする。</p>
-        <div class="tbl"><table>
-          <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
-          <tr><td>毎回、確認のダイアログを出す</td><td>理由の記録なし。</td></tr>
-        </table></div>
-        <ul>
-          <li>退会したときは、CASCADE で保存も消します。</li>
-        </ul>
-      </div>
-    </li>
-    <li><span class="pill warn">Issue OPEN</span> <a href="https://github.com/H4aruki/MyTechPulse/issues/241">#241</a> 興味タグに似たタグの記事で、空いた枠を埋める案です。<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> で人気の記事で埋める案を先に採り、似たタグの案は後回しにしました。</li>
-    <li><span class="pill warn">Issue OPEN</span> ほかに、次の Issue が OPEN です。#185（規約とプライバシーポリシー）、#187（ログの整備と監視）、#188（バックアップの外部への退避）、#55（移行の手順と、2GB プランにするかの判断基準）です。</li>
-    <li><span class="pill warn">Issue OPEN</span> <a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> オリジンへの直接のアクセスを止めます。Caddy の許可リストは、<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a> で main に入りました。残っているのは、Lightsail のファイアウォールを手で絞る作業です。Tunnel を使う案は、採らないと決まっています。</li>
+    <li>本番のサイトに直接アクセスして、動きを確かめてはいません。反映が成功したことは、GitHub Actions の結果で確かめました。</li>
+    <li>Zenn の API の既定の並び順。呼ぶときに並び順を指定していないので、Zenn 側で何順になっているかは分かりません。</li>
+    <li>値の尺度を直す前に登録した利用者が、本番の DB に何人いて、値がどうなっているか。本番の DB は見ていません。</li>
+    <li>Lightsail のファイアウォールの手作業が、本番で終わっているかどうか。文書の上では残っている作業です。</li>
+    <li>古いバックアップの自動削除が、本番で動いているかどうか。実行の許可が無いため、動いていないおそれがあります。</li>
+    <li>毎日のバックアップの cron が、本番のサーバーに設定されているかどうか。</li>
+    <li>Go 版にしてからの、サーバー全体のメモリの最新の使用量。設計判断の記録には「起動直後で約半分」とあるだけです。</li>
   </ul>
-  <div class="src">出典: <code>gh issue/pr view</code>（2026-10-20 確認）、<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/236">#236</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/239">#239</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a>、<code>TASKS.md</code></div>
 </section>
 
-<!-- 12 -->
-<section id="s12">
-  <h2><span class="no">12</span>出典まとめ・未確認事項</h2>
-  <h3>基準</h3>
-  <ul>
-    <li>基準の <code>main</code> は <code>5cc75fda985e053472a5034012b985c275d407c4</code>（2026-10-19 09:53:40 JST）です。<code>git fetch</code> の後、origin/main と一致することを確かめました。</li>
-    <li>同じコミットの CI で、「Go版の本番への反映」が成功しています（2026-10-19 09:59 JST）。<b>本番のサイトに直接アクセスして確かめてはいません。</b></li>
+<section id="sources">
+  <h2><span class="no">12</span>出典</h2>
+  <p>このページは、2026-10-20 10:39 JST の main（コミット 779eeb2）を基準にしています。本番で動いているのは、2026-10-19 09:59 JST に反映したコミット 5cc75fd です。2つの間の変更は文書と開発用の設定だけで、コードは同じです。Issue と PR の状態は、2026-10-20 に確かめました。</p>
+  <h3>プロダクトの概要とマイページ</h3>
+  <ul class="srclist">
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/235">#235</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/238">#238</a>: マイページを設定ページと分けた判断と、その実装</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/blob/main/README.md">README</a>、<a href="https://github.com/H4aruki/MyTechPulse/blob/main/docs/BasicDesignSpecifications/FeaturesList.md">機能一覧</a>: 機能の全体と、実装済みかどうか</li>
   </ul>
-  <h3>未確認（書かなかったことと、保留したこと）</h3>
-  <ul>
-    <li>Zenn API の既定の並び順。README では「トレンド順」と説明しています。</li>
-    <li><a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a> より前に登録した利用者の、興味度データの実態。本番の DB は確かめていません。<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> で「クリックが0回の人だけ、1 を 10000 に直す」方針は決まっていますが、まだ実行していません。</li>
-    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> の Lightsail のファイアウォールの手作業が、本番で終わったかどうか。文書の上では残作業です。Caddy 側は <a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a> で済んでいます。</li>
-    <li>Lightsail の実際のメモリ使用量の最新の値。ADR には「起動直後で約半分」とあるだけです。</li>
-    <li>エラーの本文を Problem Details の形にした理由。<a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a> には、Huma が標準で使う形を基にするとだけ書かれています。</li>
-    <li>Echo、Gin、GORM を選ばなかった理由。<a href="https://github.com/H4aruki/MyTechPulse/issues/60">#60</a> では候補に挙がっているだけです。GitHub Actions と GHCR を、ほかの候補と比べた記録も見つかっていません。</li>
-    <li>選ばなかったタグの初期値 0.8 の、数値の根拠。<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> に「記録なし」と書かれています。本番はまだ 0.8 です。</li>
+  <h3>記事一覧と採点</h3>
+  <ul class="srclist">
+    <li><a href="https://github.com/H4aruki/MyTechPulse/blob/main/docs/BasicDesignSpecifications/API/Details/News.md">おすすめ記事の API の詳細</a>: 取得の手順、期限、失敗したときの応答</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/pull/145">#145</a>: Go 版の記事一覧の実装（Zenn にいいね数を掛けない形）</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/206">#206</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/208">#208</a>: 空白を含むタグで記事が取れなかった問題と、その修正</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/239">#239</a>: クリックで好きなタグを登録できてしまう問題（未解決）</li>
   </ul>
-  <h3>判断理由の主な Issue と PR</h3>
-  <ul>
-    <li><small>認証: <a href="https://github.com/H4aruki/MyTechPulse/issues/186">#186</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/217">#217</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/221">#221</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/228">#228</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/229">#229</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/230">#230</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/232">#232</a></small></li>
-    <li><small>興味と推薦: <a href="https://github.com/H4aruki/MyTechPulse/issues/201">#201</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/206">#206</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/208">#208</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/239">#239</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a></small></li>
-    <li><small>マイページ: <a href="https://github.com/H4aruki/MyTechPulse/issues/235">#235</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/238">#238</a></small></li>
-    <li><small>これから: <a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/236">#236</a></small></li>
-    <li><small>入口: <a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a></small></li>
-    <li><small>技術の選択: <a href="https://github.com/H4aruki/MyTechPulse/issues/14">#14</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/34">#34</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/48">#48</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/60">#60</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/63">#63</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a></small></li>
-    <li><small>構成: ADR 0001〜0003</small></li>
+  <h3>興味の学習</h3>
+  <ul class="srclist">
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/201">#201</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a>: 登録のときの値を 1.0 と 0.8 にした判断と、その実装</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>: 0.8 の根拠の調査、0 にする決定、人気の記事で埋める決定、進める順番</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/pull/242">#242</a>: 選ばなかったタグを 0 にする修正（未マージ）</li>
   </ul>
-  <h3>主な出典ファイル</h3>
-  <p><small><code>README.md</code>、<code>AGENTS.md</code>、<code>TASKS.md</code>、<code>docs/adr/0001〜0003</code>、<code>docs/BasicDesignSpecifications/{SystemArchitectureDiagram,DataBaseArchitecture,FeaturesList}.md</code>、<code>docs/deploy/go-auto-deploy.md</code>、<code>frontend/package.json</code>、<code>frontend/src/App.tsx</code>、<code>server/go.mod</code>、<code>docker-compose.yml</code>、<code>Caddyfile</code>、<code>server/Dockerfile</code>、<code>.github/workflows/ci.yml</code>、<code>server/internal/{interest,recommendation,auth,passkey,provider,store,platform/config,app}</code>、<code>server/db/{migrations,queries}</code></small></p>
+  <h3>会員登録とログイン</h3>
+  <ul class="srclist">
+    <li><a href="https://github.com/H4aruki/MyTechPulse/blob/main/docs/adr/0002-use-server-side-sessions.md">設計判断の記録（サーバー側のセッション）</a>: JWT をやめてセッションにした理由</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/186">#186</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/217">#217</a>: ログイン試行の制限とパスワードの条件を必須にした判断と、その実装</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/pull/231">#231</a>: 接続元 IP のヘッダーの設定を本番で必須にした修正</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/221">#221</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/228">#228</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/229">#229</a>: パスキーの設計と、4段階の実装（土台、登録と設定、ログイン、ブラウザの候補表示）</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/230">#230</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/232">#232</a>: 複数のタブでパスキーのログインが失敗した問題と、チャレンジを本文で渡す修正</li>
+  </ul>
+  <h3>データ</h3>
+  <ul class="srclist">
+    <li><a href="https://github.com/H4aruki/MyTechPulse/blob/main/docs/BasicDesignSpecifications/DataBaseArchitecture.md">DB の設計書</a>: 13個の表、タグ名のそろえ方、整数で持つ理由</li>
+  </ul>
+  <h3>デプロイと運用</h3>
+  <ul class="srclist">
+    <li><a href="https://github.com/H4aruki/MyTechPulse/blob/main/docs/deploy/go-auto-deploy.md">自動デプロイの手順書</a>: 反映の流れ、自動の戻し、追加だけのマイグレーション</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/blob/main/docs/adr/0003-host-on-cloudflare-pages-and-lightsail.md">設計判断の記録（Lightsail に同居させる）</a>: 置き場所の比較、DB を同じサーバーに置く理由、費用</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>、<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>: サーバーへの直接のアクセスを止める判断と、Caddy の許可リストの実装</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/blob/main/docs/deploy/database-backup-and-restore.md">バックアップと復元の手順書</a>: バックアップの取り方、保存期間、目印のファイル</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/243">#243</a>: 古いバックアップを消すスクリプトに実行の許可が無い問題（未解決）</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/127">#127</a>: 2026-10-07 の本番の切り替え</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/pull/213">#213</a>: 反映が要るかを、最後に成功した反映と比べて決める修正</li>
+  </ul>
+  <h3>技術の選択</h3>
+  <ul class="srclist">
+    <li><a href="https://github.com/H4aruki/MyTechPulse/blob/main/docs/adr/0001-use-go-modular-monolith.md">設計判断の記録（Go のモジュラーモノリス）</a>: Go に移した理由と、構成の比較</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/48">#48</a>: 画面を React、TypeScript、Vite、Tailwind CSS で作り直した判断</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/60">#60</a>: ビルドを GitHub Actions に移す案と、書き換え後のメモリの実測</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/63">#63</a>: MySQL から PostgreSQL へ移した判断</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/117">#117</a>: Go 版の設計（Huma、sqlc、Problem Details、GHCR のイメージの固定）</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/13">#13</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/14">#14</a>: 名前の重複と障害を見分けられなかった不具合と、HTTP ステータスで返すと決めた経緯</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/34">#34</a>: Caddy と GitHub Actions を採った判断</li>
+    <li>作業記録（オーナーが Obsidian に残している記録。非公開）: 2026-07-09、07-11、07-16、08-23、08-27 の分。エラーの返し方、画面の技術、Caddy、CI を入れたときの記録</li>
+  </ul>
+  <h3>これから</h3>
+  <ul class="srclist">
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a>: 記事を前もって集めておく方針</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/236">#236</a>: 記事の保存の方針</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/241">#241</a>: 似たタグの記事で空き枠を埋める案</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/issues/185">#185</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/187">#187</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/188">#188</a>、<a href="https://github.com/H4aruki/MyTechPulse/issues/55">#55</a>: 規約、監視、バックアップの退避、サーバーの移行の手順</li>
+  </ul>
 </section>
 
-<footer>MyTechPulse 整理ノート ・ main 5cc75fd 基準 ・ 2026-10-20 作成（JST） ・ 秘密情報は含めていません ・ 判断理由は ADR と Issue/PR コメントを併記（§03 の一部は作業記録で補足、2026-10-20 追記。同日、読みやすく書き直し）</footer>
+<footer>MyTechPulse 整理ノート ・ 2026-10-20 時点の main が基準 ・ 秘密の情報は含めていません ・ 時刻はすべて JST</footer>
 </main>
 </div>
 </body>
