@@ -47,7 +47,7 @@ erDiagram
     feedback_forms ||--o{ feedback_submissions : "回答に使う"
     feedback_questions o|--o{ feedback_questions : "表示条件に使う"
     feedback_prompts ||--o| feedback_submissions : "回答を持つ"
-    feedback_submissions ||--|{ feedback_answers : "質問への回答を持つ"
+    feedback_submissions ||--o{ feedback_answers : "質問への回答を持つ"
     feedback_submissions ||--o{ feedback_interest_snapshots : "回答時点の興味を記録する"
     feedback_questions ||--o{ feedback_answers : "回答される"
 
@@ -104,6 +104,7 @@ erDiagram
 - この「多対多」の関係を、間に挟んだ興味の強さテーブル（recommend）が表現している。単なる橋渡しではなく、組み合わせごとに「興味の強さ」という値を持つのが特徴
 - 1人の利用者は、複数の端末で同時にログインできる。端末ごとに1行ずつセッションを持つ
 - パスキーを登録した利用者は、利用者ハンドルを1つと、パスキーを複数持てる。ログインの途中経過は利用者に結び付かない
+- 図の多重度は、データベースの制約で守られている範囲を描いている。回答状況（feedback_submissions）に回答（feedback_answers）が1件以上あることは制約では守っておらず、図では「0件以上」としている。実際には、アプリが最初の質問への回答を受け取ったときに、回答状況と最初の回答を同じトランザクションで書き込むため、途中（partial）の回答状況にも回答は少なくとも1件ある
 
 ## 3. 主要テーブル定義
 
