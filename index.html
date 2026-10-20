@@ -129,15 +129,13 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
 .pseq{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px 22px}
 .pseq>.pn{flex:1 1 140px;position:relative}
 .pseq>.pn:not(:last-child)::after{content:"→";position:absolute;right:-18px;top:50%;transform:translateY(-50%);color:var(--accent);font-weight:700}
-.pn{background:#fff;border:1.5px solid #9fb6e6;border-radius:9px;padding:6px 9px;font-size:.84rem;line-height:1.45;animation:pn-lit 14s linear infinite both;animation-delay:calc(var(--i) * .7s)}
+.pn{background:#fff;border:1.5px solid #9fb6e6;border-radius:9px;padding:6px 9px;font-size:.84rem;line-height:1.45}
 .pn b{display:block;font-size:.86rem}
 .pn small{color:var(--sub)}
 .pn.trig{border-color:#e0b46a;background:#fffaf0}
 .pn.gate{border-color:#f39c4a;background:#fff6ee}
 .pn.pub{border-color:#f39c4a;background:#fff6ee}
 .pn.srvn{border-color:#7fb89a;background:#f3fbf6}
-.pn.static{animation:none}
-@keyframes pn-lit{0%,100%{box-shadow:none}1.5%,6%{box-shadow:0 0 0 3px #ff7a1a,0 0 12px rgba(255,122,26,.45)}9%{box-shadow:none}}
 .pdown{text-align:center;color:var(--accent);font-weight:700;font-size:.82rem;padding:4px 0;line-height:1.4}
 .pdown span{display:block;font-weight:600;color:var(--sub)}
 .pfail{margin-top:8px;border-left:4px solid var(--ng);background:var(--ng-soft);border-radius:0 8px 8px 0;padding:6px 10px;font-size:.84rem}
@@ -158,7 +156,6 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
 }
 @media (prefers-reduced-motion: reduce){
   svg .comet{display:none;animation:none}
-  .pn{animation:none}
 }
 @media print{
   body{background:#fff;font-size:11pt}
@@ -170,7 +167,6 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
   pre{background:#f4f4f4;color:#000;border:1px solid #ccc;white-space:pre-wrap}
   a{color:#000}
   svg .comet{display:none}
-  .pn{animation:none}
   .figscroll{overflow:visible}
 }
 </style>
@@ -865,59 +861,59 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
       <div class="pstage">
         <div class="ph">きっかけ</div>
         <div class="pjobs">
-          <div class="pn trig" style="--i:0"><b>PR を作る・開き直す・更新する</b><small>検査だけ動く</small></div>
-          <div class="pn trig" style="--i:0"><b>どの枝への push でも</b><small>検査だけ動く</small></div>
-          <div class="pn trig" style="--i:0"><b>main への push</b><small>PR を取り込んだとき。検査のあと、反映へ進む</small></div>
+          <div class="pn trig"><b>PR を作る・開き直す・更新する</b><small>検査だけ動く</small></div>
+          <div class="pn trig"><b>どの枝への push でも</b><small>検査だけ動く</small></div>
+          <div class="pn trig"><b>main への push</b><small>PR を取り込んだとき。検査のあと、反映へ進む</small></div>
         </div>
       </div>
       <div class="pdown">▼</div>
       <div class="pstage">
         <div class="ph">検査（GitHub Actions。同時に動く）</div>
         <div class="pjobs">
-          <div class="pn" style="--i:1"><b>画面の検査</b><small>API の型の作り直しで差が出ないか、oxlint、Vitest（カバレッジつき）、型の確認とビルド</small></div>
-          <div class="pn" style="--i:1"><b>API の検査</b><small>gofmt、go vet、データ競合の検出つきの試験（使い捨ての PostgreSQL を使う）、ビルド</small></div>
-          <div class="pn" style="--i:1"><b>自動生成のずれ</b><small>SQL から作るコードと API の仕様書が、作り直したものと同じか</small></div>
-          <div class="pn" style="--i:1"><b>API のイメージの検査</b><small>公開せずにビルドし、起動、応答、root 以外で動くかを確かめる</small></div>
-          <div class="pn" style="--i:1"><b>設定まわりの検査</b><small>Caddy の設定の書き間違い、外部の部品の固定、文書のリンクなど</small></div>
-          <div class="pn gate" style="--i:1"><b>本番への反映が要るか</b><small>main への push のときだけ。前に反映できたコミットと比べ、文書と試験だけの変更なら反映しない</small></div>
+          <div class="pn"><b>画面の検査</b><small>API の型の作り直しで差が出ないか、oxlint、Vitest（カバレッジつき）、型の確認とビルド</small></div>
+          <div class="pn"><b>API の検査</b><small>gofmt、go vet、データ競合の検出つきの試験（使い捨ての PostgreSQL を使う）、ビルド</small></div>
+          <div class="pn"><b>自動生成のずれ</b><small>SQL から作るコードと API の仕様書が、作り直したものと同じか</small></div>
+          <div class="pn"><b>API のイメージの検査</b><small>公開せずにビルドし、起動、応答、root 以外で動くかを確かめる</small></div>
+          <div class="pn"><b>設定まわりの検査</b><small>Caddy の設定の書き間違い、外部の部品の固定、文書のリンクなど</small></div>
+          <div class="pn gate"><b>本番への反映が要るか</b><small>main への push のときだけ。前に反映できたコミットと比べ、文書と試験だけの変更なら反映しない</small></div>
         </div>
       </div>
       <div class="pdown">▼<span>PR とほかの枝はここで終わり。main は、全部が通り、反映が要るときだけ進む</span></div>
       <div class="pstage main">
         <div class="ph">配布物を1回だけ作る<span class="when">main のときだけ</span></div>
         <div class="pseq">
-          <div class="pn" style="--i:2"><b>API のイメージを作る</b><small>GHCR に置く</small></div>
-          <div class="pn" style="--i:3"><b>番号で取り直して検査</b><small>中身から決まる番号（ダイジェスト）で固定</small></div>
-          <div class="pn" style="--i:4"><b>画面を検査してビルド</b><small>本番の API の URL を入れて1回だけ</small></div>
-          <div class="pn" style="--i:5"><b>一覧表を作って保存</b><small>画面、運用のファイル、イメージの番号と SHA-256（90日保存）</small></div>
+          <div class="pn"><b>API のイメージを作る</b><small>GHCR に置く</small></div>
+          <div class="pn"><b>番号で取り直して検査</b><small>中身から決まる番号（ダイジェスト）で固定</small></div>
+          <div class="pn"><b>画面を検査してビルド</b><small>本番の API の URL を入れて1回だけ</small></div>
+          <div class="pn"><b>一覧表を作って保存</b><small>画面、運用のファイル、イメージの番号と SHA-256（90日保存）</small></div>
         </div>
       </div>
       <div class="pdown">▼</div>
       <div class="pstage main">
         <div class="ph">本番への反映<span class="when">同時に2つは動かさない</span></div>
         <div class="pseq">
-          <div class="pn" style="--i:6"><b>配布物を照合</b><small>一覧表の SHA-256 と比べる</small></div>
-          <div class="pn" style="--i:7"><b>サーバーへ送る</b><small>SSH。つなぐ相手の身元も確かめる</small></div>
+          <div class="pn"><b>配布物を照合</b><small>一覧表の SHA-256 と比べる</small></div>
+          <div class="pn"><b>サーバーへ送る</b><small>SSH。つなぐ相手の身元も確かめる</small></div>
         </div>
         <div class="pstage srv">
           <div class="ph">Lightsail のサーバーの上で動くスクリプト</div>
           <div class="pseq">
-            <div class="pn srvn" style="--i:8"><b>鍵を取る</b><small>ほかの反映が動いていたら止まる</small></div>
-            <div class="pn srvn" style="--i:9"><b>中身を確かめる</b><small>届いたファイルを照合</small></div>
-            <div class="pn srvn" style="--i:10"><b>戻し先を記録</b><small>今動いているイメージ</small></div>
-            <div class="pn srvn" style="--i:11"><b>新しいイメージを取る</b><small>GHCR から、固定した番号で</small></div>
-            <div class="pn srvn" style="--i:12"><b>DB のバックアップ</b><small>取ったあと、読めるかも確かめる</small></div>
-            <div class="pn srvn" style="--i:13"><b>表の形を変える</b><small>マイグレーション。失敗したら入れ替えない</small></div>
-            <div class="pn srvn" style="--i:14"><b>API を入れ替える</b><small>準備ができるまで最大60秒待つ</small></div>
-            <div class="pn srvn" style="--i:15"><b>入口から確かめる</b><small>Caddy を通して応答が返るか</small></div>
+            <div class="pn srvn"><b>鍵を取る</b><small>ほかの反映が動いていたら止まる</small></div>
+            <div class="pn srvn"><b>中身を確かめる</b><small>届いたファイルを照合</small></div>
+            <div class="pn srvn"><b>戻し先を記録</b><small>今動いているイメージ</small></div>
+            <div class="pn srvn"><b>新しいイメージを取る</b><small>GHCR から、固定した番号で</small></div>
+            <div class="pn srvn"><b>DB のバックアップ</b><small>取ったあと、読めるかも確かめる</small></div>
+            <div class="pn srvn"><b>表の形を変える</b><small>マイグレーション。失敗したら入れ替えない</small></div>
+            <div class="pn srvn"><b>API を入れ替える</b><small>準備ができるまで最大60秒待つ</small></div>
+            <div class="pn srvn"><b>入口から確かめる</b><small>Caddy を通して応答が返るか</small></div>
           </div>
           <div class="pfail"><b>入れ替えか、入口の確認に失敗したとき:</b> 確認なしで、記録しておいた前のイメージに戻します。DB は戻しません。この回の反映は失敗になり、画面は公開しません。それより前の手順で失敗したときは、API を入れ替えずにそこで止まります。</div>
         </div>
         <div class="pdown">▼<span>API の反映に成功したときだけ</span></div>
         <div class="pseq">
-          <div class="pn pub" style="--i:16"><b>画面の今の公開を記録</b><small>画面だけを戻すときの戻し先</small></div>
-          <div class="pn pub" style="--i:17"><b>Cloudflare Pages へ公開</b><small>作り直さず、照合した画面をそのまま出す</small></div>
-          <div class="pn pub" style="--i:18"><b>公開後の確認</b><small>トップページ、ログイン後の画面、API の準備の確認に届くか</small></div>
+          <div class="pn pub"><b>画面の今の公開を記録</b><small>画面だけを戻すときの戻し先</small></div>
+          <div class="pn pub"><b>Cloudflare Pages へ公開</b><small>作り直さず、照合した画面をそのまま出す</small></div>
+          <div class="pn pub"><b>公開後の確認</b><small>トップページ、ログイン後の画面、API の準備の確認に届くか</small></div>
         </div>
       </div>
       <div class="pside">
@@ -926,7 +922,7 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
         <div class="pn static"><b>毎日のバックアップ</b><small>GitHub Actions ではなく、サーバーの cron で行う想定。そのため図の流れには入れていない</small></div>
       </div>
     </div>
-    <figcaption>橙の枠が光る順に、main への push から本番の反映まで進みます（動きを減らす設定にしている端末では光りません）。同じ段の箱が同時に光るのは、同時に動くことを表しています。</figcaption>
+    <figcaption>上から下へ、main への push から本番の反映まで進みます。同じ段に並んだ箱は、同時に動きます。</figcaption>
   </figure>
   <ol class="steps">
     <li><b>検査。</b> GitHub Actions で、画面と API の検査をすべて通します。1つでも落ちたら止まります。</li>
