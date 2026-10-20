@@ -165,6 +165,9 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
 .pn.gate{border-color:#f39c4a;background:#fff6ee}
 .pn.pub{border-color:#f39c4a;background:#fff6ee}
 .pn.srvn{border-color:#7fb89a;background:#f3fbf6}
+.pn.nogate{border-style:dashed;border-color:#a7b0c0;background:#f6f7f9}
+.pn .req{display:table;margin-top:4px;font-size:.72rem;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:0 7px}
+.pn.nogate .req{color:var(--sub);background:#e9ecf1}
 .pdown{text-align:center;color:var(--accent);font-weight:700;font-size:.82rem;padding:4px 0;line-height:1.4}
 .pdown span{display:block;font-weight:600;color:var(--sub)}
 .pfail{margin-top:8px;border-left:4px solid var(--ng);background:var(--ng-soft);border-radius:0 8px 8px 0;padding:6px 10px;font-size:.84rem}
@@ -976,15 +979,16 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
       <div class="pstage">
         <div class="ph">検査（GitHub Actions。同時に動く）</div>
         <div class="pjobs">
-          <div class="pn"><b>画面の検査</b><small>API の型の作り直しで差が出ないか、oxlint、Vitest（カバレッジつき）、型の確認とビルド</small></div>
-          <div class="pn"><b>API の検査</b><small>gofmt、go vet、データ競合の検出つきの試験（使い捨ての PostgreSQL を使う）、ビルド</small></div>
-          <div class="pn"><b>自動生成のずれ</b><small>SQL から作るコードと API の仕様書が、作り直したものと同じか</small></div>
-          <div class="pn"><b>API のイメージの検査</b><small>公開せずにビルドし、起動、応答、root 以外で動くかを確かめる</small></div>
-          <div class="pn"><b>設定まわりの検査</b><small>Caddy の設定の書き間違い、外部の部品の固定、文書のリンクなど</small></div>
+          <div class="pn"><b>画面の検査</b><small>API の型の作り直しで差が出ないか、oxlint、Vitest（カバレッジつき）、型の確認とビルド</small><span class="req">マージに必須・反映の前提</span></div>
+          <div class="pn"><b>API の検査</b><small>gofmt、go vet、データ競合の検出つきの試験（使い捨ての PostgreSQL を使う）、ビルド</small><span class="req">マージに必須・反映の前提</span></div>
+          <div class="pn"><b>自動生成のずれ</b><small>SQL から作るコードと API の仕様書が、作り直したものと同じか</small><span class="req">マージに必須・反映の前提</span></div>
+          <div class="pn"><b>API のイメージの検査</b><small>公開せずにビルドし、起動、応答、root 以外で動くかを確かめる</small><span class="req">マージに必須・反映の前提</span></div>
+          <div class="pn"><b>設定まわりの仕掛けの確認</b><small>Caddy の設定の書き間違い、外部の部品の固定、自動デプロイの条件、文書のリンクなど</small><span class="req">マージに必須・反映の前提</span></div>
+          <div class="pn nogate"><b>エージェント設定の仕掛けの確認</b><small>Claude Code と Codex の設定に入れた仕掛け（フック）などの試験。同時に動くが、反映はこの結果を待たない</small><span class="req">マージに必須ではない・反映を止めない</span></div>
           <div class="pn gate"><b>本番への反映が要るか</b><small>main への push のときだけ。前に反映できたコミットと比べ、文書と試験だけの変更なら反映しない</small></div>
         </div>
       </div>
-      <div class="pdown">▼<span>PR とほかの枝はここで終わり。main は、全部が通り、反映が要るときだけ進む</span></div>
+      <div class="pdown">▼<span>PR とほかの枝はここで終わり。main は、点線の箱を除く検査が全部通り、反映が要るときだけ進む</span></div>
       <div class="pstage main">
         <div class="ph">配布物を1回だけ作る<span class="when">main のときだけ</span></div>
         <div class="pseq">
@@ -1028,10 +1032,10 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
         <div class="pn static"><b>毎日のバックアップ</b><small>GitHub Actions ではなく、サーバーの cron で行う想定。そのため図の流れには入れていない</small></div>
       </div>
     </div>
-    <figcaption>上から下へ、main への push から本番の反映まで進みます。同じ段に並んだ箱は、同時に動きます。</figcaption>
+    <figcaption>上から下へ、main への push から本番の反映まで進みます。同じ段に並んだ箱は、同時に動きます。点線の箱（エージェント設定の仕掛けの確認）は、落ちても反映を止めません。</figcaption>
   </figure>
   <ol class="steps">
-    <li><b>検査。</b> GitHub Actions で、画面と API の検査をすべて通します。1つでも落ちたら止まります。</li>
+    <li><b>検査。</b> GitHub Actions で、画面、API、設定まわりの検査をすべて通します。1つでも落ちたら止まります。エージェント設定の仕掛けの確認だけは例外で、落ちても止まりません。</li>
     <li><b>配布物を1回だけ作る。</b> API のイメージ、画面のファイル、運用のファイル、それらの一覧表を作ります。イメージは GHCR に置き、中身から決まる番号（ダイジェスト）で固定します。同じ番号なら、何度取っても同じ中身です。</li>
     <li><b>サーバーへ送る。</b> SSH でサーバーへ送ります。ここから先は、サーバーの上のスクリプトが動きます。</li>
     <li><b>二重に動かない。</b> 鍵を取ります。ほかの反映が動いていたら、何もせずに止まります。</li>
@@ -1047,14 +1051,43 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
   </ol>
   <p>本番は、2026-10-07 に Python 版から Go 版へ切り替えました。自動デプロイは 2026-10-08 から動いています。最後に反映が成功したのは 2026-10-19 09:59 JST です。</p>
   <h3 id="ops-ci">CI で確かめていること</h3>
+  <p>PR を作ったときと、どの枝への push でも、次の6つの検査が同時に動きます。表の「GitHub での名前」は、PR の画面に出る名前です。</p>
   <div class="tbl"><table>
-    <tr><th>検査</th><th>中身</th></tr>
-    <tr><td>画面</td><td>API の型の作り直しで差が出ないか。oxlint での書き方の確認。Vitest の試験（カバレッジの計測つき）。TypeScript の型の確認とビルド。</td></tr>
-    <tr><td>API</td><td>gofmt と go vet。データ競合の検出つきの試験。ビルド。</td></tr>
-    <tr><td>自動生成のずれ</td><td>SQL から作るコードと、API の仕様書が、手元で作り直したものと一致するか。</td></tr>
-    <tr><td>API のイメージ</td><td>実際にビルドして起動し、応答が返るか。root 以外で動いているか。</td></tr>
-    <tr><td>設定まわり</td><td>Caddy の設定に書き間違いがないか（本番と同じ 2.10.2 で確かめる）。外部の部品（GitHub Actions の action）を固定しているか。文書どうしが食い違っていないか。</td></tr>
+    <tr><th>検査</th><th>GitHub での名前</th><th>中身</th><th>マージに必須か</th><th>本番への反映の前提か</th></tr>
+    <tr><td>画面</td><td>フロントエンドの書き方チェック</td><td>API の型の作り直しで差が出ないか。oxlint での書き方の確認。Vitest の試験（カバレッジの計測つき）。TypeScript の型の確認とビルド。</td><td>必須</td><td>前提</td></tr>
+    <tr><td>API</td><td>Goバックエンドの検査</td><td>gofmt と go vet。データ競合の検出つきの試験。ビルド。</td><td>必須</td><td>前提</td></tr>
+    <tr><td>自動生成のずれ</td><td>sqlcとOpenAPIの生成差分</td><td>SQL から作るコードと、API の仕様書が、手元で作り直したものと一致するか。</td><td>必須</td><td>前提</td></tr>
+    <tr><td>API のイメージ</td><td>Go APIのimage検査</td><td>実際にビルドして起動し、応答が返るか。root 以外で動いているか。</td><td>必須</td><td>前提</td></tr>
+    <tr><td>設定まわり</td><td>設定まわりの仕掛けの確認</td><td>Caddy の設定に書き間違いがないか（本番と同じ 2.10.2 で確かめる）。外部の部品（GitHub Actions の action）を固定しているか。自動デプロイが決めた条件でだけ動くか。文書のリンクが切れていないか、文書に古い構成の言葉が残っていないか。</td><td>必須</td><td>前提</td></tr>
+    <tr><td>エージェント設定</td><td>エージェント設定の仕掛けの確認</td><td>Claude Code と Codex の設定に入れた仕掛け（フック）と、エージェント用の道具の試験。</td><td>必須ではない</td><td>前提ではない（落ちても反映は止まらない）</td></tr>
   </table></div>
+  <ul>
+    <li><b>マージに必須の検査は5つです。</b> フロントエンドの書き方チェック、Goバックエンドの検査、sqlcとOpenAPIの生成差分、Go APIのimage検査、設定まわりの仕掛けの確認です。1つでも通らないと、PR を main に取り込めません。GitHub の main を守る設定（Ruleset）で指定しています。</li>
+    <li><b>本番への反映の前提も、同じ5つです。</b> main に入ったあと、この5つが全部通り、反映が要るときだけ、配布物を作って反映します。</li>
+    <li><b>エージェント設定の仕掛けの確認は、どちらにも入れていません。</b> 落ちたときは、ほかの検査と同じように PR と main の結果に赤く出ます。</li>
+  </ul>
+  <div class="rationale"><b>判断理由（エージェント設定の試験を、反映の前提から外す）</b>
+    <p><b>決めたこと:</b> もとは「設定まわりの仕掛けの確認」の1つにまとまっていた検査を2つに分けた。エージェント設定の試験は別の検査にして、本番への反映を止めないようにした。Caddy の設定の検証と、外部の部品の固定・自動デプロイの条件・文書の検査は、反映の前提に残した。</p>
+    <p><b>理由:</b></p>
+    <ul>
+      <li>この検査の説明には「公開の工程には入れていない」と書いてありましたが、実際には反映の前提に入っていて、落ちると反映が止まる作りでした。</li>
+      <li>エージェント設定の試験は、AI のエージェント（Claude Code と Codex）の設定を確かめるもので、本番の動きには関わりません。ここが落ちても、本番への反映は止めなくてよい、とオーナーが判断しました。</li>
+      <li>Caddy の設定の書き間違いは、反映したあと入口が落ちて初めて分かります。そのため、Caddy の検証は反映の前提に残しました。</li>
+    </ul>
+    <div class="tbl"><table>
+      <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
+      <tr><td>1つのまま反映の前提に残し、説明だけを直す</td><td>Caddy の検証が反映を止めることは守れる。ただし、本番に関わらないエージェント設定の試験が落ちただけで、反映まで止まってしまう。</td></tr>
+      <tr><td>検査全体を反映の前提から外す</td><td>Caddy の設定の書き間違いが、本番まで届いてしまう。</td></tr>
+    </table></div>
+  </div>
+  <div class="rationale"><b>判断理由（設定まわりの仕掛けの確認を、マージに必須にする）</b>
+    <p><b>決めたこと:</b> 2026-10-20 に、設定まわりの仕掛けの確認を、マージに必須の検査に加えた（それまでの必須は4つ）。</p>
+    <p><b>理由:</b> この検査は本番への反映の前提です。必須にしないと、この検査が落ちた PR でも取り込めてしまい、取り込んだあとの main で反映が止まります。</p>
+    <div class="tbl"><table>
+      <tr><th>選ばなかった案</th><th>選ばなかった理由</th></tr>
+      <tr><td>必須にしないまま置く</td><td>上のとおり、取り込めたあとに反映が止まる PR が出てしまう。</td></tr>
+    </table></div>
+  </div>
   <h3 id="ops-backup">バックアップ</h3>
   <ul>
     <li>PostgreSQL の標準の道具（pg_dump）で取ります。反映のたびに自動で取ります。毎日の取得は、cron で行う想定です（例として毎日 04:00）。</li>
@@ -1422,6 +1455,8 @@ svg .comet.back{stroke:#1f8a4c;stroke-dashoffset:-100;animation-name:comet-back}
     <li><a href="https://github.com/H4aruki/MyTechPulse/issues/243">#243</a>: 古いバックアップを消すスクリプトに実行の許可が無い問題（未解決）</li>
     <li><a href="https://github.com/H4aruki/MyTechPulse/issues/127">#127</a>: 2026-10-07 の本番の切り替え</li>
     <li><a href="https://github.com/H4aruki/MyTechPulse/pull/213">#213</a>: 反映が要るかを、最後に成功した反映と比べて決める修正</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/pull/253">#253</a>: エージェント設定の試験を別の検査に分け、反映の前提から外した変更。設定まわりの仕掛けの確認をマージに必須にした判断の記録</li>
+    <li><a href="https://github.com/H4aruki/MyTechPulse/blob/main/.github/workflows/ci.yml">ci.yml</a>: 6つの検査と、反映の前提（2026-10-20 時点の main）</li>
   </ul>
   <h3>技術の選択</h3>
   <ul class="srclist">
