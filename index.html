@@ -192,22 +192,22 @@ a.iss:hover{text-decoration:underline}
 <section id="s3">
   <h2><span class="no">03</span>技術スタックと「なぜその選択か」</h2>
   <div class="tbl"><table>
-    <tr><th>区分</th><th>採用（main の実バージョン）</th><th>理由（ADR・文書・Issue/PR）</th></tr>
-    <tr><td>画面</td><td>React 19.2 / TypeScript 6.0 / Vite 8 / Tailwind CSS 4（<code>@tailwindcss/vite</code>）</td><td>文書・Issue/PRに理由の記録なし・事実のみ</td></tr>
-    <tr><td>画面のデータ取得・フォーム</td><td>TanStack Query 5 / React Router DOM 7 / React Hook Form 7 + zod 4（<code>@hookform/resolvers</code>）</td><td>文書・Issue/PRに理由の記録なし・事実のみ</td></tr>
-    <tr><td>画面の検査</td><td>oxlint / Vitest 5 + Testing Library / <code>openapi-typescript</code> でAPI型を生成し差分をCIで検査</td><td>API契約と画面の型ずれをCIで止める（<code>AGENTS.md</code>）。Issue/PRに追加の選択議論の記録なし</td></tr>
+    <tr><th>区分</th><th>採用（main の実バージョン）</th><th>理由（ADR・文書・Issue/PR・作業記録）</th></tr>
+    <tr><td>画面</td><td>React 19.2 / TypeScript 6.0 / Vite 8 / Tailwind CSS 4（<code>@tailwindcss/vite</code>）</td><td><a href="https://github.com/H4aruki/MyTechPulse/issues/48">#48</a>（作業記録 2026-07-11 で確認）: 旧版は素の HTML/JS で、画面の重複・型の無さ・手書きの DOM 操作・状態管理の散在が負債になっていた。React: 機能を足しながら育てる前提で、エコシステムの厚みを重視。却下: Next.js / Nuxt（中核はログイン後の画面で SEO 不要、SSR 用の Node サーバーが増えて運用負担が上がる）、Vue 3（移植は楽だがエコシステムの厚みで React を優先）、Svelte（エコシステム・情報量で劣る）、素の JS の改善（型・部品化の恩恵がなく負債が再生産される）。TypeScript: 旧版の「本文の status 番号」の意味が型で表せず、画面と API のずれを検出できなかったため。Vite: ビルド無し運用から抜けて接続先 URL の直書きを環境変数にし、公開ページと <code>/app/</code> を1つのビルドで両立するため。Tailwind: UI 刷新と同時に導入（#48 時点の shadcn/ui 案は実装で見送り）</td></tr>
+    <tr><td>画面のデータ取得・フォーム</td><td>TanStack Query 5 / React Router DOM 7 / React Hook Form 7 + zod 4（<code>@hookform/resolvers</code>）</td><td><a href="https://github.com/H4aruki/MyTechPulse/issues/48">#48</a>（作業記録 2026-07-11 で確認）: 旧版の困りごとに1対1で対応。React Router: ページ単位の遷移を画面内の切り替えに。TanStack Query: 各所に散っていた <code>fetch</code> の手書きを、キャッシュ・読み込み中・401 の扱いごと一本化。React Hook Form + zod: 登録の2段階画面と入力検証を型付きで行う</td></tr>
+    <tr><td>画面の検査</td><td>oxlint / Vitest 5 + Testing Library / <code>openapi-typescript</code> でAPI型を生成し差分をCIで検査</td><td>API契約と画面の型ずれをCIで止める（<code>AGENTS.md</code>）。CI 導入時（作業記録 2026-08-27）: oxlint は導入済みだったものを CI から呼ぶ形にした。Vitest はカバレッジ計測を内蔵しており、外部サービスの登録なしで結果を出せる。他候補との比較の記録はなし</td></tr>
     <tr><td>API</td><td>Go 1.26.4、標準HTTPサーバー + Huma v2（OpenAPI をコードから生成）</td><td>ADR 0001: 堅牢性・保守性・運用の単純さ・将来のチーム開発。Python からの移行（2026-10-07 本番切替）。Issue/PRコメントでの追加比較の記録なし</td></tr>
     <tr><td>構成</td><td>モジュラーモノリス（1配布単位、内部をパッケージで分割）</td><td>ADR 0001: 層の直訳は責務集中を残す／マイクロサービスは規模に対し運用負担が大きい。Issue/PRに同趣旨の再議論の記録なし</td></tr>
-    <tr><td>DBアクセス</td><td>pgx v5 + sqlc（SQLから型付きコード生成）</td><td>文書に「SQLを書き、型付きコードを自動生成」と記載。選択理由そのものは文書・Issue/PRに記録なし</td></tr>
+    <tr><td>DBアクセス</td><td>pgx v5 + sqlc（SQLから型付きコード生成）</td><td>文書に「SQLを書き、型付きコードを自動生成」と記載。選択理由そのものは文書・Issue/PR・作業記録に記録なし</td></tr>
     <tr><td>マイグレーション</td><td>goose v3（<code>server/cmd/migrate</code>）。<b>追加のみ</b>を <code>additive_test.go</code> で強制</td><td>自動デプロイ失敗時に API だけ旧版へ戻しても DB を巻き戻さずに済ませるため（デプロイ文書）。<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> でも <code>DELETE</code> 移行は追加のみ規約に反し巻き戻せないため却下</td></tr>
     <tr><td>DB</td><td>PostgreSQL 17（<code>postgres:17-alpine</code>）を API と同じサーバーに同居</td><td>ADR 0003: テーブルが少なく書き込みも少ない、マネージドDBは月$8〜25で予算超過、1画面で複数回問い合わせるので外に出すと遅延が積み上がる。<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a> でもバッチ化後は DB 同居のメリットが強まると記載</td></tr>
     <tr><td>認証</td><td>サーバー側セッション（HttpOnly Cookie）＋ bcrypt、パスキー（<code>go-webauthn/webauthn</code> v0.18）</td><td>セッション: ADR 0002（XSS範囲の縮小・サーバー側失効）。パスキー基盤: <a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a> で自前実装は検証漏れ危険が大きいため <code>go-webauthn</code> を採用（<a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a>）。初版はパスワード併用・discoverable・上限10件</td></tr>
-    <tr><td>エラー形式</td><td>Problem Details（RFC 9457）＋HTTPステータス</td><td>文書に理由なし・事実のみ（旧Python版の「本文の status」規約は廃止）。Issue/PRに理由の記録なし</td></tr>
+    <tr><td>エラー形式</td><td>Problem Details（RFC 9457）＋HTTPステータス</td><td>HTTP ステータスで返す方針: <a href="https://github.com/H4aruki/MyTechPulse/issues/14">#14</a>（作業記録 2026-07-09）。旧Python版の「本文の status 番号」方式では、登録時に「名前の重複」と「サーバーの障害」を区別できない不具合が起きた。その修正中にオーナーが、全 API を HTTP ステータス方式へ作り替える方針を決めた。本文を Problem Details 形式にした理由そのものは、文書・Issue/PR・作業記録に記録なし</td></tr>
     <tr><td>ホスティング</td><td>Cloudflare Pages（画面）＋ AWS Lightsail 東京 1GB 1台（API・DB・Caddy）</td><td>ADR 0003: 合計 月約$8。却下: Vercel（無料は非商用）、GitHub Pages（接続先URLの書き換え不可）、Netlify（転送量上限）、Xserver VPS（年契約）、EC2（通信従量）、GCP無料VM（米国のみ）、Oracle無料VM（アカウント作成不可）。次点: さくらVPS</td></tr>
-    <tr><td>HTTPS終端・入口制限</td><td>Caddy 2（証明書の自動取得・更新）。Cloudflare IP 以外は 403（<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>）</td><td>Caddy 自体の他候補比較は文書・Issue/PRに記録なし。直アクセス遮断: <a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> で Cloudflare Tunnel は 1GB メモリと複雑さから過剰と判断。Caddy 許可リストは <a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a> で main へ。Lightsail FW の手動絞り込みは残作業（Issue は OPEN）</td></tr>
-    <tr><td>CI/CD</td><td>GitHub Actions（<code>ci.yml</code>・<code>release.yml</code> ほか）、イメージは GHCR</td><td>文書・Issue/PRに選択理由の記録なし・事実のみ</td></tr>
+    <tr><td>HTTPS終端・入口制限</td><td>Caddy 2（証明書の自動取得・更新）。Cloudflare IP 以外は 403（<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>）</td><td>Caddy: <a href="https://github.com/H4aruki/MyTechPulse/issues/34">#34</a>（作業記録 2026-07-16・08-23 で確認）。証明書の取得・更新が完全に自動で、設定はドメイン名を書く数行で済み、セキュリティ用のヘッダーもまとめて付けられる。却下: Nginx + certbot（情報量・実績は多いが、証明書更新の定期実行の管理が要り、設定も長くなる）。直アクセス遮断: <a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> で Cloudflare Tunnel は 1GB メモリと複雑さから過剰と判断。Caddy 許可リストは <a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a> で main へ。Lightsail FW の手動絞り込みは残作業（Issue は OPEN）</td></tr>
+    <tr><td>CI/CD</td><td>GitHub Actions（<code>ci.yml</code>・<code>release.yml</code> ほか）、イメージは GHCR</td><td>GitHub Actions・GHCR を選んだ理由は、文書・Issue/PR・作業記録に記録なし（<a href="https://github.com/H4aruki/MyTechPulse/issues/34">#34</a> では採用案として挙がるのみ）。カバレッジを外部サービスに送らず Actions の実行結果の要約欄に出すのは、外部サービスの登録が要らないため（作業記録 2026-08-27。現在は PR へのコメントにも出す）</td></tr>
   </table></div>
-  <div class="src">出典: <code>frontend/package.json</code>、<code>server/go.mod</code>、<code>docs/adr/0001〜0003</code>、<code>docs/BasicDesignSpecifications/SystemArchitectureDiagram.md</code> §2、<code>server/db/migrations/README.md</code>、<code>AGENTS.md</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a></div>
+  <div class="src">出典: <code>frontend/package.json</code>、<code>server/go.mod</code>、<code>docs/adr/0001〜0003</code>、<code>docs/BasicDesignSpecifications/SystemArchitectureDiagram.md</code> §2、<code>server/db/migrations/README.md</code>、<code>AGENTS.md</code>、<a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/216">#216</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a>・<a href="https://github.com/H4aruki/MyTechPulse/pull/219">#219</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/66">#66</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/14">#14</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/34">#34</a>・<a href="https://github.com/H4aruki/MyTechPulse/issues/48">#48</a>、作業記録（オーナーが Obsidian に残している作業・会話の記録。非公開）2026-07-09・07-11・07-16・08-23・08-27</div>
 </section>
 
 <!-- 4 -->
@@ -454,7 +454,7 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
     <li><a href="https://github.com/H4aruki/MyTechPulse/pull/203">#203</a> 以前の登録者の興味度データの実態（本番DB未確認。<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a> で「クリック0回の人だけ 1→10000」方針は決定済み・未実行）</li>
     <li><a href="https://github.com/H4aruki/MyTechPulse/issues/74">#74</a> の Lightsail FW 手動作業が本番で完了したか（文書上の残作業。Caddy 側は <a href="https://github.com/H4aruki/MyTechPulse/pull/218">#218</a> 済み）</li>
     <li>Lightsail の実メモリ使用量の最新値（ADR に「起動直後で約半分」とあるのみ）</li>
-    <li>フロントエンド各ライブラリ・Caddy・GitHub Actions を選んだ理由（文書・Issue/PRに理由の記録なし）</li>
+    <li>GitHub Actions・GHCR・sqlc・Huma を選んだ理由、エラー本文を Problem Details 形式にした理由（文書・Issue/PR・作業記録に理由の記録なし）</li>
     <li>未選択初期値 0.8 の数値根拠（<a href="https://github.com/H4aruki/MyTechPulse/issues/240">#240</a>: 記録なしと明記。本番はまだ 0.8）</li>
   </ul>
   <h3>判断理由の主な Issue / PR</h3>
@@ -463,7 +463,7 @@ user 1 ──< auth_passkey                 （記事テーブル: なし）</pr
   <p><small><code>README.md</code> / <code>AGENTS.md</code> / <code>TASKS.md</code> / <code>docs/adr/0001〜0003</code> / <code>docs/BasicDesignSpecifications/{SystemArchitectureDiagram,DataBaseArchitecture,FeaturesList}.md</code> / <code>docs/deploy/go-auto-deploy.md</code> / <code>frontend/package.json</code> / <code>frontend/src/App.tsx</code> / <code>server/go.mod</code> / <code>docker-compose.yml</code> / <code>Caddyfile</code> / <code>server/Dockerfile</code> / <code>.github/workflows/ci.yml</code> / <code>server/internal/{interest,recommendation,auth,passkey,provider,store,platform/config,app}</code> / <code>server/db/{migrations,queries}</code></small></p>
 </section>
 
-<footer>MyTechPulse 整理ノート ・ main 5cc75fd 基準 ・ 2026-10-20 作成（JST） ・ 秘密情報は含めていません ・ 判断理由は ADR と Issue/PR コメントを併記</footer>
+<footer>MyTechPulse 整理ノート ・ main 5cc75fd 基準 ・ 2026-10-20 作成（JST） ・ 秘密情報は含めていません ・ 判断理由は ADR と Issue/PR コメントを併記（§03 の一部は作業記録で補足、2026-10-20 追記）</footer>
 </main>
 </div>
 </body>
