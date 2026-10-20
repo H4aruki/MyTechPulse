@@ -27,8 +27,8 @@ APIの資料は役割ごとに次のように分けている。このファイ�
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | A-0-1 | 生存確認 | GET | `/health/live` | 不要 | F-6-5 | 実装済み | [共通の決まりごと](ApiCommonRules.md#6-動作確認a-0-1a-0-2) |
 | A-0-2 | データベース接続の確認 | GET | `/health/ready` | 不要 | F-6-5 | 実装済み | [共通の決まりごと](ApiCommonRules.md#6-動作確認a-0-1a-0-2) |
-| A-2-1 | 会員登録 | POST | `/api/v1/auth/signup` | 不要 | F-2-1, F-2-2, F-3-4 | 実装済み | [Auth.md](Details/Auth.md#1-a-2-1-会員登録) |
-| A-2-2 | ログイン | POST | `/api/v1/auth/login` | 不要 | F-2-4, F-2-5, F-2-6 | 実装済み | [Auth.md](Details/Auth.md#2-a-2-2-ログイン) |
+| A-2-1 | 会員登録 | POST | `/api/v1/auth/signup` | 不要 | F-2-1, F-2-2, F-2-11, F-3-4 | 実装済み | [Auth.md](Details/Auth.md#1-a-2-1-会員登録) |
+| A-2-2 | ログイン | POST | `/api/v1/auth/login` | 不要 | F-2-4, F-2-5, F-2-6, F-2-10 | 実装済み | [Auth.md](Details/Auth.md#2-a-2-2-ログイン) |
 | A-2-3 | ログイン中の利用者の確認 | GET | `/api/v1/auth/me` | 必要 | F-2-6, F-2-7 | 実装済み | [Auth.md](Details/Auth.md#3-a-2-3-ログイン中の利用者の確認) |
 | A-2-4 | ログアウト | POST | `/api/v1/auth/logout` | 不要（あれば失効する） | F-2-8 | 実装済み | [Auth.md](Details/Auth.md#4-a-2-4-ログアウト) |
 | A-2-5 | パスキー登録の開始 | POST | `/api/v1/auth/passkeys/register/begin` | 必要 | ― | 実装済み | [Auth.md](Details/Auth.md#5-a-2-5-パスキー登録の開始) |
