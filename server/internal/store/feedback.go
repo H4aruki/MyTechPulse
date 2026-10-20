@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/H4aruki/MyTechPulse/server/internal/interest"
 	"github.com/H4aruki/MyTechPulse/server/internal/store/dbgen"
 	"github.com/H4aruki/MyTechPulse/server/internal/userfeedback"
 )
@@ -264,12 +265,17 @@ func (r *Feedback) SubmitOverall(ctx context.Context, userID int64, promptID str
 	if err := q.InsertFeedbackAnswer(ctx, dbgen.InsertFeedbackAnswerParams{SubmissionID: sid, FormID: p.FormID, QuestionID: questionID, Score: score}); err != nil {
 		return userfeedback.SubmitResult{}, errFeedback
 	}
-	weights, err := q.ListFeedbackSnapshotSource(ctx, uid)
+	rows, err := q.ListRecommendations(ctx, uid)
 	if err != nil {
 		return userfeedback.SubmitResult{}, errFeedback
 	}
-	for i, w := range weights {
-		if err := q.InsertFeedbackSnapshot(ctx, dbgen.InsertFeedbackSnapshotParams{SubmissionID: sid, Rank: int32(i + 1), TagID: pgtype.Int4{Int32: w.TagID, Valid: true}, TagName: w.TagName, MatchInt: w.MatchInt}); err != nil {
+	// フィードが記事の検索に使う上位5タグと同じ選び方・同じ並び順で記録する(興味度0は除く。#240)
+	all := make([]interest.Weight, 0, len(rows))
+	for _, row := range rows {
+		all = append(all, interest.Weight{TagID: int64(row.TagID), Tag: row.TagName, Value: int64(row.MatchInt)})
+	}
+	for i, w := range interest.Top(all, interest.TopTagLimit) {
+		if err := q.InsertFeedbackSnapshot(ctx, dbgen.InsertFeedbackSnapshotParams{SubmissionID: sid, Rank: int32(i + 1), TagID: pgtype.Int4{Int32: int32(w.TagID), Valid: true}, TagName: w.Tag, MatchInt: int32(w.Value)}); err != nil {
 			return userfeedback.SubmitResult{}, errFeedback
 		}
 	}

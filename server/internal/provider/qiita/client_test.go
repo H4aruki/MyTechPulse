@@ -352,9 +352,79 @@ func TestSearchProductionURLWithoutNetwork(t *testing.T) {
 	}
 }
 
+func TestPopularProductionURLWithoutNetwork(t *testing.T) {
+	var gotURL, gotAuth string
+	f := provider.NewJSONFetcher(time.Second, 1<<20)
+	f.Client.(*http.Client).Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		gotURL, gotAuth = r.URL.String(), r.Header.Get("Authorization")
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("[]")), ContentLength: 2, Request: r}, nil
+	})
+	// BaseURL が空なら本番の接続先を使う
+	c := Client{Fetcher: f, Token: testToken}
+	if _, err := c.Popular(context.Background(), time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	if want := "https://qiita.com/api/v2/items?page=1&per_page=10&query=created%3A%3E%3D2026-10-14+stocks%3A%3E%3D10"; gotURL != want {
+		t.Fatalf("url = %q, want %q", gotURL, want)
+	}
+	if gotAuth != "Bearer "+testToken {
+		t.Fatalf("Authorization = %q", gotAuth)
+	}
+}
+
 func TestNewDefaults(t *testing.T) {
 	c := New(provider.JSONFetcher{}, "t")
 	if c.BaseURL != "https://qiita.com" || c.PerPage != 20 || c.Token != "t" {
 		t.Fatalf("%+v", c)
+	}
+}
+
+func TestPopularRequestContractAndConversion(t *testing.T) {
+	body := fixture(t)
+	srv, calls := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.EscapedPath(); got != "/api/v2/items" {
+			t.Errorf("path = %q", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer "+testToken {
+			t.Errorf("Authorization = %q", got)
+		}
+		q := r.URL.Query()
+		// 日本時間 10/14 08:00 は UTC 10/13 23:00。UTCの日付で、期間の始まりより前から含める
+		if q.Get("page") != "1" || q.Get("per_page") != "10" || q.Get("query") != "created:>=2026-10-13 stocks:>=10" || len(q) != 3 {
+			t.Errorf("query = %v", q)
+		}
+		_, _ = io.WriteString(w, body)
+	})
+	since := time.Date(2026, 10, 14, 8, 0, 0, 0, time.FixedZone("JST", 9*60*60))
+	got, err := newClient(srv).Popular(context.Background(), since)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 1 || len(got) == 0 {
+		t.Fatalf("calls=%d articles=%d", calls.Load(), len(got))
+	}
+	for _, a := range got {
+		if a.Source != article.SourceQiita || len(a.Tags) == 0 {
+			t.Fatalf("article = %#v", a)
+		}
+	}
+}
+
+func TestPopularRejectsZeroSinceWithoutCalling(t *testing.T) {
+	srv, calls := serve(t, func(w http.ResponseWriter, r *http.Request) { t.Error("呼んではいけない") })
+	if _, err := newClient(srv).Popular(context.Background(), time.Time{}); !errors.Is(err, provider.ErrInvalidRequest) {
+		t.Fatalf("err = %v", err)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("calls = %d", calls.Load())
+	}
+}
+
+func TestPopularInvalidItemIsInvalidResponse(t *testing.T) {
+	srv, _ := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `[{"title":"t","url":"https://evil.example/x","likes_count":1,"created_at":"2026-10-14T00:00:00+09:00","tags":[{"name":"Go"}]}]`)
+	})
+	if _, err := newClient(srv).Popular(context.Background(), time.Now()); !errors.Is(err, provider.ErrInvalidResponse) {
+		t.Fatalf("err = %v", err)
 	}
 }

@@ -45,7 +45,7 @@
 
 - 利用者・タグ・興味の強さ・最初のセッションという4か所へ**1回のまとまりで**書き込む。どこかで失敗した場合はすべて元に戻る
 - 選ばれたタグがまだ登録されていなければ、その場で追加する。表記だけが違うタグ（大文字・小文字、前後の空白）は、同じタグとして扱い、重複して作らない
-- 興味の強さの初期値は、選んだタグが 10000（1.0）、選ばなかったタグが 8000（0.8）。範囲と、既存利用者を書き換えていないことは[データベース構成](../../DataBaseArchitecture.md)を参照（[Issue #201](https://github.com/H4aruki/MyTechPulse/issues/201)、[PR #203](https://github.com/H4aruki/MyTechPulse/pull/203)）
+- 興味の強さの初期値は、選んだタグが 10000（1.0）。選ばなかったタグには行を作らず、0と同じ扱いにする。既存利用者の扱いは[データベース構成](../../DataBaseArchitecture.md)を参照（[Issue #201](https://github.com/H4aruki/MyTechPulse/issues/201)、[PR #203](https://github.com/H4aruki/MyTechPulse/pull/203)、[Issue #240](https://github.com/H4aruki/MyTechPulse/issues/240)）
 - 利用者名の重複は、データベース側の制約でも重ねて防いでいる（[データベース構成](../../DataBaseArchitecture.md)を参照）
 - パスワードの変換は、元に戻せない方式（bcrypt）で行い、強さの設定は旧版と同じにそろえてある。そのため、Python版の時代に登録した利用者もそのままログインできる
 - 新しいパスワードを12文字以上にし、よく使われるものと利用者名と同じ文字列を拒むのは、短い・単純なパスワードでの登録を止めるため。ログインの照合にはこの条件を掛けないので、以前の短いパスワードでも入れる。文字種の組み合わせを求めないこと、よく使われるパスワードの一覧は、12文字以上のものを手作業でまとめたもので、外部の一覧は取り込んでいない（[PR #217](https://github.com/H4aruki/MyTechPulse/pull/217)。いまの一覧は184語）。理由の出発点は [Issue #186](https://github.com/H4aruki/MyTechPulse/issues/186)

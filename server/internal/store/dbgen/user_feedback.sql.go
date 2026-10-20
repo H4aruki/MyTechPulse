@@ -327,40 +327,6 @@ func (q *Queries) ListFeedbackQuestions(ctx context.Context, formID int64) ([]Li
 	return items, nil
 }
 
-const listFeedbackSnapshotSource = `-- name: ListFeedbackSnapshotSource :many
-SELECT r."tag_ID", t.tag_name, r.match_int
-FROM recommend r JOIN tag t ON t."tag_ID" = r."tag_ID"
-WHERE r."user_ID" = $1
-ORDER BY r.match_int DESC, r."tag_ID" ASC
-LIMIT 5
-`
-
-type ListFeedbackSnapshotSourceRow struct {
-	TagID    int32
-	TagName  string
-	MatchInt int32
-}
-
-func (q *Queries) ListFeedbackSnapshotSource(ctx context.Context, userID int32) ([]ListFeedbackSnapshotSourceRow, error) {
-	rows, err := q.db.Query(ctx, listFeedbackSnapshotSource, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListFeedbackSnapshotSourceRow{}
-	for rows.Next() {
-		var i ListFeedbackSnapshotSourceRow
-		if err := rows.Scan(&i.TagID, &i.TagName, &i.MatchInt); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const lockFeedbackPrompt = `-- name: LockFeedbackPrompt :one
 SELECT id, form_id, "user_ID", status, stage, shown_at FROM feedback_prompts WHERE id = $1 FOR UPDATE
 `

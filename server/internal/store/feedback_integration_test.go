@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/H4aruki/MyTechPulse/server/internal/auth"
+	"github.com/H4aruki/MyTechPulse/server/internal/interest"
 	"github.com/H4aruki/MyTechPulse/server/internal/store"
 	"github.com/H4aruki/MyTechPulse/server/internal/userfeedback"
 )
@@ -253,6 +255,49 @@ func TestFeedbackLowScoreFollowupAndSnapshot(t *testing.T) {
 	}
 	if n := queryInt(t, pool, `SELECT count(*) FROM feedback_interest_snapshots`); n != 5 {
 		t.Fatalf("追加回答ではスナップショットを作り直さない: %d", n)
+	}
+}
+
+// スナップショットは、フィードと同じ選び方(興味度0を除く、同じ強さは名前の順)で上位5タグを記録する(#240)
+func TestFeedbackSnapshotMatchesFeedTopTags(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewFeedback(pool)
+	uid := feedbackUser(t, pool, "fb-top", 63)
+	// tag_ID の順(Zeta, Beta, Alpha, ...)と名前の順が違うタグ。Zero は0なので入らない
+	if _, err := pool.Exec(ctx, `INSERT INTO tag(tag_name) VALUES ('Zeta'),('Beta'),('Alpha'),('Zero'),('Delta')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO recommend("user_ID","tag_ID",match_int) SELECT $1, "tag_ID", CASE tag_name WHEN 'Zero' THEN 0 WHEN 'Delta' THEN 100 ELSE 8000 END FROM tag WHERE tag_name IN ('Zeta','Beta','Alpha','Zero','Delta')`, uid); err != nil {
+		t.Fatal(err)
+	}
+	weights, err := store.NewInterest(pool).List(ctx, uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var feedTop []string
+	for _, w := range interest.Top(weights, interest.TopTagLimit) {
+		feedTop = append(feedTop, w.Tag)
+	}
+	form := presentForTest(t, repo, uid, promptA)
+	if _, err := repo.SubmitOverall(ctx, uid, promptA, form.Root().ID, 5, fixedNow.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := pool.Query(ctx, `SELECT tag_name FROM feedback_interest_snapshots ORDER BY rank`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, name)
+	}
+	rows.Close()
+	if strings.Join(names, ",") != "Go,Alpha,Beta,Zeta,Delta" || strings.Join(names, ",") != strings.Join(feedTop, ",") {
+		t.Fatalf("snapshot = %v, feed = %v", names, feedTop)
 	}
 }
 

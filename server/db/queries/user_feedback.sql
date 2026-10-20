@@ -32,13 +32,6 @@ ON CONFLICT (id) DO NOTHING;
 -- name: GetFeedbackSubmissionByPrompt :one
 SELECT id, status FROM feedback_submissions WHERE prompt_id = $1;
 
--- name: ListFeedbackSnapshotSource :many
-SELECT r."tag_ID", t.tag_name, r.match_int
-FROM recommend r JOIN tag t ON t."tag_ID" = r."tag_ID"
-WHERE r."user_ID" = $1
-ORDER BY r.match_int DESC, r."tag_ID" ASC
-LIMIT 5;
-
 -- name: InsertFeedbackSubmission :one
 INSERT INTO feedback_submissions (form_id, "user_ID", prompt_id, status, started_at, completed_at)
 VALUES ($1, $2, $3, $4, $5, sqlc.narg(completed_at))

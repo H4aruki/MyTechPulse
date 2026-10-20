@@ -9,6 +9,7 @@ import (
 )
 
 // ScoreArticles computes the provider-specific score and applies deterministic tie-breaks.
+// 同点のときは新しい記事、提供元名、アドレスの順。ただし点数0の記事どうしは、まずいいね数の多い順にする。
 func ScoreArticles(weights []interest.Weight, articles []article.Article) []ScoredArticle {
 	byTag := make(map[string]int64, len(weights))
 	for _, weight := range weights {
@@ -49,6 +50,10 @@ func ScoreArticles(weights []interest.Weight, articles []article.Article) []Scor
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Score != out[j].Score {
 			return out[i].Score > out[j].Score
+		}
+		// 点数0の記事(興味のあるタグが1つも付いていない、空き枠を埋める人気の記事など)は、いいね数の多い順(#240)
+		if out[i].Score == 0 && out[i].Article.Likes != out[j].Article.Likes {
+			return out[i].Article.Likes > out[j].Article.Likes
 		}
 		if !out[i].Article.PublishedAt.Equal(out[j].Article.PublishedAt) {
 			return out[i].Article.PublishedAt.After(out[j].Article.PublishedAt)

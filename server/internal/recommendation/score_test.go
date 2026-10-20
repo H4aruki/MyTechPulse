@@ -33,3 +33,26 @@ func TestScoreArticlesSortsDeterministically(t *testing.T) {
 		}
 	}
 }
+
+func TestScoreArticlesOrdersZeroScoreByLikes(t *testing.T) {
+	now := time.Now()
+	weights := []interest.Weight{{Tag: "go", Value: 10}}
+	input := []article.Article{
+		testArticle(article.SourceZenn, "https://zenn.dev/new-few", nil, 1, now),
+		testArticle(article.SourceZenn, "https://zenn.dev/old-many", nil, 90, now.Add(-time.Hour)),
+		// 点数が付く記事どうしは、これまでどおり新しい順(Zennはいいね数を点数に使わない)
+		testArticle(article.SourceZenn, "https://zenn.dev/go-old-many", []string{"go"}, 90, now.Add(-time.Hour)),
+		testArticle(article.SourceZenn, "https://zenn.dev/go-new-few", []string{"go"}, 1, now),
+	}
+	got := ScoreArticles(weights, input)
+	var order []string
+	for _, item := range got {
+		order = append(order, item.Article.URL)
+	}
+	want := []string{"https://zenn.dev/go-new-few", "https://zenn.dev/go-old-many", "https://zenn.dev/old-many", "https://zenn.dev/new-few"}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Fatalf("order = %v, want %v", order, want)
+		}
+	}
+}

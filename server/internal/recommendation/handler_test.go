@@ -49,7 +49,8 @@ func (r *repo) UpdateForClick(_ context.Context, _ int64, tags []string) ([]inte
 
 type emptyProvider struct{}
 
-func (emptyProvider) Search(context.Context, string) ([]article.Article, error) { return nil, nil }
+func (emptyProvider) Search(context.Context, string) ([]article.Article, error)     { return nil, nil }
+func (emptyProvider) Popular(context.Context, time.Time) ([]article.Article, error) { return nil, nil }
 
 func handler() (http.Handler, *repo) {
 	store := &repo{}

@@ -75,12 +75,20 @@ type Observed struct {
 var _ Client = Observed{}
 
 func (o Observed) Search(ctx context.Context, tag string) ([]article.Article, error) {
+	return o.observe(ctx, func() ([]article.Article, error) { return o.Client.Search(ctx, tag) })
+}
+
+func (o Observed) Popular(ctx context.Context, since time.Time) ([]article.Article, error) {
+	return o.observe(ctx, func() ([]article.Article, error) { return o.Client.Popular(ctx, since) })
+}
+
+func (o Observed) observe(ctx context.Context, call func() ([]article.Article, error)) ([]article.Article, error) {
 	now := o.Now
 	if now == nil {
 		now = time.Now
 	}
 	start := now()
-	articles, err := o.Client.Search(ctx, tag)
+	articles, err := call()
 	if o.Logger != nil {
 		level := slog.LevelInfo
 		if err != nil {

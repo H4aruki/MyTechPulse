@@ -3,7 +3,6 @@ package recommendation
 import (
 	"context"
 	"errors"
-	"sort"
 	"strings"
 	"time"
 
@@ -36,11 +35,20 @@ func (systemClock) Now() time.Time { return time.Now() }
 type searchResult struct {
 	provider     string
 	requestedTag string
+	popular      bool
 	items        []article.Article
 	err          error
 }
 
+// 記事を絞る期間。Qiitaは直近5日、Zennは直近14日(新しい記事が無ければ、タグで見つけた古い記事を使う)。
+const (
+	qiitaWindow = 5 * 24 * time.Hour
+	zennWindow  = 14 * 24 * time.Hour
+)
+
 // Get retrieves the top five interest tags concurrently, then filters, merges, scores, and limits each feed.
+// 興味度が0より大きいタグが5つに満たないときは、提供元ごとに1回だけ、タグを問わない人気の記事も取り、
+// 空いた枠の候補にする(#240)。5つあるときは人気の記事を取らない。
 func (s Service) Get(ctx context.Context, userID int64) (Result, error) {
 	weights, err := s.Interests.List(ctx, userID)
 	if err != nil {
@@ -49,16 +57,8 @@ func (s Service) Get(ctx context.Context, userID int64) (Result, error) {
 	if err := interest.ValidateCurrent(weights); err != nil {
 		return Result{}, err
 	}
-	ordered := append([]interest.Weight(nil), weights...)
-	sort.SliceStable(ordered, func(i, j int) bool {
-		if ordered[i].Value != ordered[j].Value {
-			return ordered[i].Value > ordered[j].Value
-		}
-		return interest.NormalizeTag(ordered[i].Tag) < interest.NormalizeTag(ordered[j].Tag)
-	})
-	if len(ordered) > 5 {
-		ordered = ordered[:5]
-	}
+	ordered := interest.Top(weights, interest.TopTagLimit)
+	fill := len(ordered) < interest.TopTagLimit
 	if s.Clock == nil {
 		s.Clock = systemClock{}
 	}
@@ -66,14 +66,21 @@ func (s Service) Get(ctx context.Context, userID int64) (Result, error) {
 	if limit <= 0 {
 		limit = 8 * time.Second
 	}
+	now := s.Clock.Now()
 	requestCtx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
-	results := make(chan searchResult, len(ordered)*2)
-	for _, weight := range ordered {
-		for _, target := range []struct {
-			name   string
-			client provider.Client
-		}{{"qiita", s.Providers.Qiita}, {"zenn", s.Providers.Zenn}} {
+	targets := []struct {
+		name   string
+		client provider.Client
+		since  time.Time
+	}{{"qiita", s.Providers.Qiita, now.Add(-qiitaWindow)}, {"zenn", s.Providers.Zenn, now.Add(-zennWindow)}}
+	expected := len(ordered) * len(targets)
+	if fill {
+		expected += len(targets)
+	}
+	results := make(chan searchResult, expected)
+	for _, target := range targets {
+		for _, weight := range ordered {
 			if target.client == nil {
 				results <- searchResult{provider: target.name, requestedTag: weight.Tag, err: errors.New("provider unavailable")}
 				continue
@@ -83,16 +90,26 @@ func (s Service) Get(ctx context.Context, userID int64) (Result, error) {
 				results <- searchResult{provider: name, requestedTag: tag, items: items, err: err}
 			}(target.name, weight.Tag, target.client)
 		}
+		if !fill {
+			continue
+		}
+		if target.client == nil {
+			results <- searchResult{provider: target.name, popular: true, err: errors.New("provider unavailable")}
+			continue
+		}
+		go func(name string, client provider.Client, since time.Time) {
+			items, err := client.Popular(requestCtx, since)
+			results <- searchResult{provider: name, popular: true, items: items, err: err}
+		}(target.name, target.client, target.since)
 	}
-	collected := make([]searchResult, 0, len(ordered)*2)
-	for range len(ordered) * 2 {
+	collected := make([]searchResult, 0, expected)
+	for range expected {
 		collected = append(collected, <-results)
 	}
 	result := Result{QiitaArticles: []article.Article{}, ZennArticles: []article.Article{}, Warnings: []Warning{}}
 	failed := map[string]bool{}
 	succeeded := map[string]bool{}
-	qiitaRaw, zennFresh, zennOld := []article.Article{}, []article.Article{}, []article.Article{}
-	now := s.Clock.Now()
+	qiitaRaw, zennFresh, zennOld, zennPopular := []article.Article{}, []article.Article{}, []article.Article{}, []article.Article{}
 	for _, batch := range collected {
 		if batch.err != nil {
 			failed[batch.provider] = true
@@ -108,15 +125,23 @@ func (s Service) Get(ctx context.Context, userID int64) (Result, error) {
 			}
 			item = validated
 			if batch.provider == "qiita" {
-				if !item.PublishedAt.Before(now.Add(-5 * 24 * time.Hour)) {
+				if !item.PublishedAt.Before(now.Add(-qiitaWindow)) {
 					qiitaRaw = append(qiitaRaw, item)
 				}
 				continue
 			}
-			item.Tags = mergeTags(item.Tags, []string{batch.requestedTag})
-			if !item.PublishedAt.Before(now.Add(-14 * 24 * time.Hour)) {
+			fresh := !item.PublishedAt.Before(now.Add(-zennWindow))
+			switch {
+			case batch.popular:
+				// 人気の記事は、古い記事での埋め合わせに使わない
+				if fresh {
+					zennPopular = append(zennPopular, item)
+				}
+			case fresh:
+				item.Tags = mergeTags(item.Tags, []string{batch.requestedTag})
 				zennFresh = append(zennFresh, item)
-			} else {
+			default:
+				item.Tags = mergeTags(item.Tags, []string{batch.requestedTag})
 				zennOld = append(zennOld, item)
 			}
 		}
@@ -130,10 +155,11 @@ func (s Service) Get(ctx context.Context, userID int64) (Result, error) {
 		return Result{}, ErrAllProvidersFailed
 	}
 	result.QiitaArticles = rankLimit(weights, dedupe(qiitaRaw), 10)
+	// 古い記事での埋め合わせは、タグで見つけた記事が14日以内に1件も無いときだけ(人気の記事の有無は問わない)
 	if len(zennFresh) == 0 {
 		zennFresh = zennOld
 	}
-	result.ZennArticles = rankLimit(weights, dedupe(zennFresh), 10)
+	result.ZennArticles = rankLimit(weights, dedupe(append(zennFresh, zennPopular...)), 10)
 	return result, nil
 }
 
