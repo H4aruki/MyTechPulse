@@ -10,6 +10,7 @@ Claude Codeでは、上の `AGENTS.md` をこのプロジェクトの共通ル�
 - 自動フックの動作と限界は `.claude/README.md` にあります。
 - Skillsは `.claude/skills/` から読み込みます。内容は `.agents/skills/` と同一に保ちます。
 - 共通ルールと機械的な防御を変更するときは、Claude Code側だけを変更せず、`AGENTS.md` と `.codex/` も確認します。
+- GitHub の Issue と PR の本文（説明文とコメント）を日本語で書いたり直したりするときは、常に yomiyasu スキルで推敲してください。コミットメッセージ、コード、ドキュメントのファイル、作業の報告には使いません。yomiyasu は各自の `~/.claude/skills/` に入れるスキルで、このリポジトリには含めていません。入っていない環境では、この指示は無視してかまいません。
 
 ## 双方向worker
 
