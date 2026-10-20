@@ -11,11 +11,7 @@
       "Edit(./.env)",
       "Edit(./backend/.env)",
       "Edit(./server/.env)",
-      "Edit(./frontend/.env)",
-      "Write(./.env)",
-      "Write(./backend/.env)",
-      "Write(./server/.env)",
-      "Write(./frontend/.env)"
+      "Edit(./frontend/.env)"
     ],
     "ask": [
       "Bash(rm *)",
