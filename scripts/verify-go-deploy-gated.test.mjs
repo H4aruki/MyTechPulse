@@ -83,6 +83,21 @@ test("配布物の作成は、検査が全部成功し、反映が要ると判�
   assert.equal(evaluate(release.condition, {}), false);
 });
 
+test("エージェント設定の確認（agent-harness-test）は、失敗しても公開を止めない", () => {
+  // フックの不具合で本番公開まで止めないため、go-release・go-deploy の前提に入れない（独立したjobで動かす）
+  const harness = jobs["agent-harness-test"];
+  assert.ok(harness, "agent-harness-test がありません");
+  assert.match(harness.body, /\.claude\/hooks/);
+  assert.ok(!jobs["go-release"].needs.includes("agent-harness-test"), "go-release の前提に agent-harness-test があります");
+  assert.ok(!jobs["go-deploy"].needs.includes("agent-harness-test"), "go-deploy の前提に agent-harness-test があります");
+  // 公開の前提に入るjobには、エージェント設定の確認を混ぜない
+  for (const id of checks) {
+    // 次のjobの前に置いた説明（# の行）は、前のjobの本文に入ってしまうので除いて見る
+    const code = jobs[id].lines.filter((line) => !/^\s*#/.test(line)).join("\n");
+    assert.ok(!/\.claude\/hooks|\.codex\/hooks|scripts\/agent-harness/.test(code), `${id} がエージェント設定の確認を含んでいます`);
+  }
+});
+
 test("本番への反映は、配布物の作成が成功したときだけ動き、同時に2つは動かない", () => {
   const deploy = jobs["go-deploy"];
   assert.deepEqual(deploy.needs, ["go-release"]);

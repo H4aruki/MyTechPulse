@@ -130,7 +130,8 @@ git config commit.template .gitmessage.txt
 | Goバックエンドの検査 | gofmt、go vet、競合検出付きの試験とカバレッジ、ビルド（DB変更が追加だけであることの試験を含む） | **取り込めない**（直す必要がある） |
 | sqlcとOpenAPIの生成差分 | 生成物（DB問い合わせ・API契約）が、コミット済みの内容と一致するか | **取り込めない**（再生成してコミットする） |
 | Go APIのimage検査 | 最終的なDockerイメージの起動・疎通・非root実行 | **取り込めない**（直す必要がある） |
-| 設定まわりの仕掛けの確認 | Claude CodeとCodexのフック・Skillsの内容一致、外部Actionの固定、自動デプロイの条件の試験、文書のリンク切れと旧構成の言葉の混ざり | 公開は止めないが、設定修正が必要 |
+| 設定まわりの仕掛けの確認 | 本番の入口（Caddyfile）の検証、外部Actionの固定、自動デプロイの条件の試験、文書のリンク切れと旧構成の言葉の混ざり | 取り込みは止めないが、`main` での自動デプロイは止まる（直す必要がある） |
+| エージェント設定の仕掛けの確認 | Claude CodeとCodexのフック・Skillsの内容一致など、エージェント設定の試験 | 取り込みも自動デプロイも止めないが、設定修正が必要 |
 
 PRには、Goとフロントエンドのカバレッジがコメントで付きます。
 
@@ -173,7 +174,7 @@ bash ops/deploy_go_test.sh
 | Restrict deletions | `main` を消せない |
 | Block force pushes | 履歴を書き換える強制 push を禁止 |
 | Require a pull request before merging | 直接 push できない。承認の必須人数は 0（1人開発のため） |
-| Require status checks to pass | **必須チェック4つ（フロントエンドの書き方チェック、Goバックエンドの検査、sqlcとOpenAPIの生成差分、Go APIのimage検査）が緑でないと取り込めない** |
+| Require status checks to pass | **必須チェック5つ（フロントエンドの書き方チェック、Goバックエンドの検査、sqlcとOpenAPIの生成差分、Go APIのimage検査、設定まわりの仕掛けの確認）が緑でないと取り込めない** |
 | Allowed merge methods | **Squash のみ**。1機能=1コミットを守るため、他の取り込み方は選べない |
 
 例外（bypass）は誰にも許可していないため、オーナー自身もこのルールに従います。
