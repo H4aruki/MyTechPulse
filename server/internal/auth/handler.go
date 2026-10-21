@@ -89,7 +89,7 @@ func (h Handler) Register(api huma.API) {
 		Method:        http.MethodPost,
 		Path:          "/api/v1/auth/signup",
 		Summary:       "会員登録",
-		Description:   "利用者を member として登録し、選んだタグを初期の興味として保存して、そのままログイン状態にする。接続元IPごとに1時間に5回まで(成功・失敗とも数える)で、超えると429と `Retry-After`(秒)を返す。" + csrfNote,
+		Description:   "利用者を member として登録し、選んだタグを初期の興味として保存して、そのままログイン状態にする。接続元IPごとに、試行は1時間に60回(まとめては20回まで)、失敗(409・422)は15分に10回までで、超えると429と `Retry-After`(秒)を返す。失敗の枠を使い切ると、正しい入力でも枠が戻るまで429になる。" + csrfNote,
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusCreated,
 		Errors:        []int{http.StatusConflict, http.StatusUnprocessableEntity, http.StatusTooManyRequests},

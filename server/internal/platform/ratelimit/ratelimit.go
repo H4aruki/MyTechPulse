@@ -72,9 +72,43 @@ func PerWindow(n int, window time.Duration, clock Clock) *Limiter {
 func (l *Limiter) Allow(key string) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	b := l.touch(key, l.clock.Now())
+	if b.tokens >= 1-epsilon { // 浮動小数点の誤差で、待ち時間ちょうどの呼び出しがはじかれないようにする
+		b.tokens = math.Max(0, b.tokens-1)
+		return true, 0
+	}
+	return false, l.untilOne(b)
+}
+
+// Wait は key の1回分を使えるまでの待ち時間を返す(使えるなら0)。回数は使わず、記録も作らない。
+func (l *Limiter) Wait(key string) time.Duration {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	now := l.clock.Now()
 	l.sweep(now)
+	b := l.buckets[key] // 無ければ(掃除で捨てられた＝満タンに戻った場合も)使える
+	if b == nil {
+		return 0
+	}
+	l.refill(b, now)
+	if b.tokens >= 1-epsilon {
+		return 0
+	}
+	return l.untilOne(b)
+}
 
+// Take は key の1回分を、残りがあるかどうかにかかわらず使う(0より下には減らさない)。
+// 処理の結果が分かってから数えるときに使う。記録が無ければ満タンで作ってから使う。
+func (l *Limiter) Take(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	b := l.touch(key, l.clock.Now())
+	b.tokens = math.Max(0, b.tokens-1)
+}
+
+// touch は key の記録を(無ければ作って)返し、回復を反映する。呼び出し側が l.mu を持つこと。
+func (l *Limiter) touch(key string, now time.Time) *bucket {
+	l.sweep(now)
 	b := l.buckets[key]
 	if b == nil {
 		if len(l.buckets) >= maxKeys {
@@ -94,15 +128,22 @@ func (l *Limiter) Allow(key string) (bool, time.Duration) {
 		b = &bucket{tokens: l.burst, last: now}
 		l.buckets[key] = b
 	}
+	l.refill(b, now)
+	return b
+}
+
+// refill は経過した時間の分だけ b を回復させる。呼び出し側が l.mu を持つこと。
+func (l *Limiter) refill(b *bucket, now time.Time) {
 	if elapsed := now.Sub(b.last); elapsed > 0 {
 		b.tokens = math.Min(l.burst, b.tokens+float64(elapsed)/float64(l.every))
 	}
 	b.last = now
-	if b.tokens >= 1-epsilon { // 浮動小数点の誤差で、待ち時間ちょうどの呼び出しがはじかれないようにする
-		b.tokens = math.Max(0, b.tokens-1)
-		return true, 0
-	}
-	return false, time.Duration(math.Ceil((1 - b.tokens) * float64(l.every)))
+}
+
+// untilOne は b が1回分に戻るまでの待ち時間。
+func (l *Limiter) untilOne(b *bucket) time.Duration {
+	// マイクロ秒に丸めるのは、浮動小数点の誤差で1ナノ秒余計に待たせて、Retry-After が1秒ずれるのを防ぐため
+	return time.Duration(math.Ceil((1 - b.tokens) * float64(l.every))).Round(time.Microsecond)
 }
 
 // sweep は満タンに戻った(＝使われていない)記録を捨てる。呼び出し側が l.mu を持つこと。

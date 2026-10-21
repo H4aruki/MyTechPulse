@@ -122,6 +122,72 @@ func TestPerWindow(t *testing.T) {
 	}
 }
 
+func TestWaitDoesNotConsumeNorCreateEntries(t *testing.T) {
+	clock := newClock()
+	l := ratelimit.New(1, time.Minute, clock)
+	if w := l.Wait("a"); w != 0 || l.Len() != 0 {
+		t.Fatalf("absent key: wait=%v Len=%d", w, l.Len())
+	}
+	l.Allow("a")
+	for i := 0; i < 5; i++ {
+		if w := l.Wait("a"); w != time.Minute {
+			t.Fatalf("Wait = %v, want 1m", w)
+		}
+	}
+	clock.Advance(20 * time.Second)
+	if w := l.Wait("a"); w != 40*time.Second {
+		t.Fatalf("Wait after 20s = %v, want 40s", w)
+	}
+	clock.Advance(40 * time.Second)
+	if w := l.Wait("a"); w != 0 {
+		t.Fatalf("Wait after full = %v, want 0", w)
+	}
+	// Wait は使わないので、そのあとの Allow は通る
+	if ok, _ := l.Allow("a"); !ok {
+		t.Fatal("Wait must not consume")
+	}
+}
+
+func TestTakeFloorsAtZeroAndRefills(t *testing.T) {
+	clock := newClock()
+	l := ratelimit.New(2, time.Minute, clock)
+	l.Take("a") // 記録が無くても作って1回分使う
+	if l.Len() != 1 {
+		t.Fatalf("Len = %d", l.Len())
+	}
+	if w := l.Wait("a"); w != 0 {
+		t.Fatalf("1 token left, Wait = %v", w)
+	}
+	for i := 0; i < 5; i++ {
+		l.Take("a")
+	}
+	// 0より下には減らないので、1回分戻るのは1分後
+	if w := l.Wait("a"); w != time.Minute {
+		t.Fatalf("Wait = %v, want 1m", w)
+	}
+	clock.Advance(time.Minute)
+	if ok, _ := l.Allow("a"); !ok {
+		t.Fatal("one token should have refilled")
+	}
+	if ok, _ := l.Allow("a"); ok {
+		t.Fatal("only one token should have refilled")
+	}
+	if w := l.Wait("b"); w != 0 {
+		t.Fatalf("other key Wait = %v", w)
+	}
+}
+
+func TestTakeRespectsKeyCap(t *testing.T) {
+	const maxKeys = 100000
+	l := ratelimit.New(2, time.Hour, newClock())
+	for i := 0; i < maxKeys+10; i++ {
+		l.Take("k" + strconv.Itoa(i))
+	}
+	if l.Len() > maxKeys {
+		t.Fatalf("Len = %d, want <= %d", l.Len(), maxKeys)
+	}
+}
+
 func TestRetryAfterSecondsRoundsUpAndIsAtLeastOne(t *testing.T) {
 	for in, want := range map[time.Duration]int{
 		0: 1, time.Nanosecond: 1, 999 * time.Millisecond: 1, time.Second: 1, 1001 * time.Millisecond: 2, 12 * time.Minute: 720,
