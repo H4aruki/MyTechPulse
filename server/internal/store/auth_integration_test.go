@@ -77,6 +77,18 @@ func queryInt(t *testing.T, pool *pgxpool.Pool, query string, args ...any) int {
 	return n
 }
 
+// ensureTags は、tag 表に無いタグ(前後の空白と大文字小文字を無視)だけを入れる。
+// 会員登録(#262)はタグを作らず、tag 表にあるタグだけを選べるため、試験は登録の前に使うタグを用意する。
+func ensureTags(t *testing.T, pool *pgxpool.Pool, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		if _, err := pool.Exec(context.Background(), `INSERT INTO tag(tag_name) SELECT $1::text
+			WHERE NOT EXISTS (SELECT 1 FROM tag WHERE lower(btrim(tag_name)) = lower(btrim($1::text)))`, name); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func hashOf(b byte) [32]byte {
 	var h [32]byte
 	for i := range h {
@@ -92,7 +104,7 @@ func TestAuthRepositorySignupCreatesUserInterestsAndSession(t *testing.T) {
 	pool := newTestPool(t)
 	repo := store.NewAuth(pool)
 	// 大文字小文字だけ異なる既存タグ。最小IDのタグを使う。
-	if _, err := pool.Exec(ctx, `INSERT INTO tag(tag_name) VALUES ('Go'), ('GO')`); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO tag(tag_name) VALUES ('Go'), ('GO'), ('Rust')`); err != nil {
 		t.Fatal(err)
 	}
 	user, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember,
@@ -135,7 +147,7 @@ func TestAuthRepositorySignupCreatesRowsOnlyForSelectedTags(t *testing.T) {
 	pool := newTestPool(t)
 	repo := store.NewAuth(pool)
 	// 既存の全タグ。選ばなかったタグ(Python, Java)には行を作らない(#240)。
-	if _, err := pool.Exec(ctx, `INSERT INTO tag(tag_name) VALUES ('Go'), ('Python'), ('PYTHON'), ('Java')`); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO tag(tag_name) VALUES ('Go'), ('Rust'), ('Python'), ('PYTHON'), ('Java')`); err != nil {
 		t.Fatal(err)
 	}
 	user, err := repo.CreateWithInterestsAndSession(ctx, "bob", "hash", auth.RoleMember,
@@ -165,19 +177,20 @@ func TestAuthRepositoryDuplicateUsernameRollsBackEverything(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
 	repo := store.NewAuth(pool)
+	ensureTags(t, pool, "Go", "Other-Tag")
 	if _, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember,
 		[]string{"Go"}, hashOf(1), fixedNow.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	_, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash2", auth.RoleMember,
-		[]string{"Brand-New-Tag"}, hashOf(2), fixedNow.Add(time.Hour))
+		[]string{"Other-Tag"}, hashOf(2), fixedNow.Add(time.Hour))
 	if !errors.Is(err, auth.ErrUsernameTaken) {
 		t.Fatalf("want ErrUsernameTaken, got %v", err)
 	}
 	if n := queryInt(t, pool, `SELECT count(*) FROM "user"`); n != 1 {
 		t.Fatalf("user count = %d", n)
 	}
-	if n := queryInt(t, pool, `SELECT count(*) FROM tag`); n != 1 {
+	if n := queryInt(t, pool, `SELECT count(*) FROM tag`); n != 2 {
 		t.Fatalf("tag count = %d", n)
 	}
 	if n := queryInt(t, pool, `SELECT count(*) FROM auth_session`); n != 1 {
@@ -189,28 +202,67 @@ func TestAuthRepositoryFailureAfterUserInsertRollsBackEverything(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
 	repo := store.NewAuth(pool)
+	ensureTags(t, pool, "Go", "Other-Tag")
 	if _, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember,
 		[]string{"Go"}, hashOf(1), fixedNow.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	// セッションの主キー(同じトークンハッシュ)が衝突し、利用者・タグ作成の後で失敗させる
+	// セッションの主キー(同じトークンハッシュ)が衝突し、利用者・初期興味度の作成の後で失敗させる
 	_, err := repo.CreateWithInterestsAndSession(ctx, "bob", "hash", auth.RoleMember,
-		[]string{"Brand-New-Tag"}, hashOf(1), fixedNow.Add(time.Hour))
+		[]string{"Other-Tag"}, hashOf(1), fixedNow.Add(time.Hour))
 	if err == nil || errors.Is(err, auth.ErrUsernameTaken) {
 		t.Fatalf("want generic failure, got %v", err)
 	}
 	if n := queryInt(t, pool, `SELECT count(*) FROM "user" WHERE user_name = 'bob'`); n != 0 {
 		t.Fatalf("bob must be rolled back, got %d", n)
 	}
-	if n := queryInt(t, pool, `SELECT count(*) FROM tag`); n != 1 {
-		t.Fatalf("new tag must be rolled back, got %d", n)
+	if n := queryInt(t, pool, `SELECT count(*) FROM tag`); n != 2 {
+		t.Fatalf("tag count = %d", n)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM recommend`); n != 1 {
+		t.Fatalf("bob's recommend rows must be rolled back, got %d total", n)
 	}
 }
 
-func TestAuthRepositoryConcurrentSignupDoesNotDuplicateTagSpelling(t *testing.T) {
+// #262: 知らないタグが1つでもあれば、tag 表にも利用者・セッション・興味度にも何も作らない。
+func TestAuthRepositorySignupWithUnknownTagCreatesNothing(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
 	repo := store.NewAuth(pool)
+	ensureTags(t, pool, "Go")
+	for _, tags := range [][]string{{"Go", "No-Such-Tag"}, {"No-Such-Tag"}} {
+		_, err := repo.CreateWithInterestsAndSession(ctx, "carol", "hash", auth.RoleMember,
+			tags, hashOf(7), fixedNow.Add(time.Hour))
+		if !errors.Is(err, auth.ErrUnknownFavoriteTag) {
+			t.Fatalf("tags %v: want ErrUnknownFavoriteTag, got %v", tags, err)
+		}
+	}
+	for query, want := range map[string]int{
+		`SELECT count(*) FROM tag`:          1,
+		`SELECT count(*) FROM "user"`:       0,
+		`SELECT count(*) FROM auth_session`: 0,
+		`SELECT count(*) FROM recommend`:    0,
+	} {
+		if n := queryInt(t, pool, query); n != want {
+			t.Errorf("%s = %d, want %d", query, n, want)
+		}
+	}
+	// 用意したタグだけなら登録できる(大文字小文字・前後の空白は無視)
+	if _, err := repo.CreateWithInterestsAndSession(ctx, "carol", "hash", auth.RoleMember,
+		[]string{" GO "}, hashOf(7), fixedNow.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM tag`); n != 1 {
+		t.Fatalf("tag count = %d", n)
+	}
+}
+
+// #262: 既存タグの綴り違い(大文字小文字)で同時に登録しても、全部成功し、タグは増えず、同じタグを指す。
+func TestAuthRepositoryConcurrentSignupWithDifferentSpellingsUsesOneTag(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewAuth(pool)
+	ensureTags(t, pool, "NewTag")
 	var wg sync.WaitGroup
 	errs := make([]error, 6)
 	spellings := []string{"NewTag", "newtag", "NEWTAG", "newTag", "Newtag", "nEwTaG"}
@@ -229,7 +281,40 @@ func TestAuthRepositoryConcurrentSignupDoesNotDuplicateTagSpelling(t *testing.T)
 		}
 	}
 	if n := queryInt(t, pool, `SELECT count(*) FROM tag`); n != 1 {
-		t.Fatalf("tag spellings must collapse to one row, got %d", n)
+		t.Fatalf("tag count must stay 1, got %d", n)
+	}
+	if n := queryInt(t, pool, `SELECT count(DISTINCT "tag_ID") FROM recommend`); n != 1 {
+		t.Fatalf("all recommend rows must point to one tag, got %d", n)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM recommend`); n != len(spellings) {
+		t.Fatalf("recommend rows = %d, want %d", n, len(spellings))
+	}
+}
+
+// #262: 利用者名が重複していて、かつ知らないタグも含むときは、知らないタグの失敗を返し、何も増やさない。
+func TestAuthRepositoryExistingUsernameWithUnknownTagCreatesNothing(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewAuth(pool)
+	ensureTags(t, pool, "Go")
+	if _, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember,
+		[]string{"Go"}, hashOf(1), fixedNow.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	_, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash2", auth.RoleMember,
+		[]string{"No-Such-Tag"}, hashOf(2), fixedNow.Add(time.Hour))
+	if !errors.Is(err, auth.ErrUnknownFavoriteTag) {
+		t.Fatalf("want ErrUnknownFavoriteTag, got %v", err)
+	}
+	for query, want := range map[string]int{
+		`SELECT count(*) FROM "user"`:       1,
+		`SELECT count(*) FROM tag`:          1,
+		`SELECT count(*) FROM auth_session`: 1,
+		`SELECT count(*) FROM recommend`:    1,
+	} {
+		if n := queryInt(t, pool, query); n != want {
+			t.Errorf("%s = %d, want %d", query, n, want)
+		}
 	}
 }
 
@@ -237,6 +322,7 @@ func TestAuthRepositorySessions(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
 	repo := store.NewAuth(pool)
+	ensureTags(t, pool, "Go")
 	user, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember,
 		[]string{"Go"}, hashOf(1), fixedNow.Add(time.Hour))
 	if err != nil {
@@ -292,6 +378,7 @@ func TestAuthRepositoryStoresOnlyTokenHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ensureTags(t, pool, "Go")
 	if _, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember,
 		[]string{"Go"}, hash, fixedNow.Add(time.Hour)); err != nil {
 		t.Fatal(err)
@@ -308,6 +395,7 @@ func TestAuthRepositoryFindByID(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
 	repo := store.NewAuth(pool)
+	ensureTags(t, pool, "Go")
 	created, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember, []string{"go"}, hashOf(1), fixedNow.Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)

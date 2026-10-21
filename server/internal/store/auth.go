@@ -91,6 +91,7 @@ func (a *Auth) FindByID(ctx context.Context, id int64) (auth.User, error) {
 
 // CreateWithInterestsAndSession は利用者・初期興味度・セッションを1つのトランザクションで作る。
 // 初期興味度は、選んだタグだけに interest.InitialSelected で作る。選ばなかったタグには行を作らない(#240)。
+// タグは tag 表にあるものだけを使い、新しく作らない。知らないタグが1つでもあれば auth.ErrUnknownFavoriteTag で、何も作らない(#262)。
 // どこかで失敗した場合は何も残さない。同名の利用者は auth.ErrUsernameTaken。
 func (a *Auth) CreateWithInterestsAndSession(ctx context.Context, username, passwordHash string, role auth.Role,
 	favoriteTags []string, tokenHash [32]byte, expiresAt time.Time) (auth.User, error) {
@@ -102,6 +103,23 @@ func (a *Auth) CreateWithInterestsAndSession(ctx context.Context, username, pass
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := a.q.WithTx(tx)
 
+	// 先に全タグが tag 表にあるか確かめる。知らないタグが1つでもあれば、何も作らずに断る。
+	tagIDs := make([]int32, 0, len(favoriteTags))
+	linked := map[int32]bool{}
+	for _, name := range favoriteTags {
+		tag, err := q.FindTagByNormalizedName(ctx, strings.TrimSpace(name))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return auth.User{}, auth.ErrUnknownFavoriteTag
+		}
+		if err != nil {
+			return auth.User{}, errors.New("store: タグを確定できません")
+		}
+		if !linked[tag.TagID] {
+			linked[tag.TagID] = true
+			tagIDs = append(tagIDs, tag.TagID)
+		}
+	}
+
 	created, err := q.CreateUser(ctx, dbgen.CreateUserParams{UserName: username, Password: passwordHash, Role: string(role)})
 	if isUniqueViolation(err) {
 		return auth.User{}, auth.ErrUsernameTaken
@@ -110,24 +128,8 @@ func (a *Auth) CreateWithInterestsAndSession(ctx context.Context, username, pass
 		return auth.User{}, errors.New("store: 利用者を作成できません")
 	}
 
-	linked := map[int32]bool{}
-	for _, name := range favoriteTags {
-		name = strings.TrimSpace(name)
-		if err := q.LockNormalizedTag(ctx, name); err != nil {
-			return auth.User{}, errors.New("store: タグを確定できません")
-		}
-		tag, err := q.FindTagByNormalizedName(ctx, name)
-		if errors.Is(err, pgx.ErrNoRows) {
-			tag, err = q.CreateTag(ctx, name)
-		}
-		if err != nil {
-			return auth.User{}, errors.New("store: タグを確定できません")
-		}
-		if linked[tag.TagID] {
-			continue
-		}
-		linked[tag.TagID] = true
-		if err := q.CreateInitialRecommendation(ctx, dbgen.CreateInitialRecommendationParams{UserID: created.UserID, TagID: tag.TagID, MatchInt: int32(interest.InitialSelected)}); err != nil {
+	for _, tagID := range tagIDs {
+		if err := q.CreateInitialRecommendation(ctx, dbgen.CreateInitialRecommendationParams{UserID: created.UserID, TagID: tagID, MatchInt: int32(interest.InitialSelected)}); err != nil {
 			return auth.User{}, errors.New("store: 初期の興味度を作成できません")
 		}
 	}

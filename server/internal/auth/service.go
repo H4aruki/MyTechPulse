@@ -107,6 +107,9 @@ func (s Service) Signup(ctx context.Context, in SignupInput) (User, string, time
 	}
 	expires := s.Clock.Now().Add(s.SessionTTL)
 	user, err := s.Users.CreateWithInterestsAndSession(ctx, username, hash, RoleMember, tags, tokenHash, expires)
+	if errors.Is(err, ErrUnknownFavoriteTag) {
+		return User{}, "", time.Time{}, invalid(&FieldError{Field: "favorite_tags", Message: "選べないタグが含まれています"})
+	}
 	if err != nil {
 		return User{}, "", time.Time{}, err
 	}
