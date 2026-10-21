@@ -7,14 +7,18 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/H4aruki/MyTechPulse/server/internal/platform/textcheck"
 )
 
 // 入力の上限。API仕様(設計書 7.2)と同じ。
 const (
 	maxUsernameChars = 50
-	maxTagChars      = 50
 	maxFavoriteTags  = 128
 )
+
+// TagRuleMessage はタグに使えない文字や長さがあるときの説明。会員登録とクリックの記録で同じ文言を使う。
+const TagRuleMessage = "タグは1〜50文字で、見えない文字・改行・使えない記号を含めずに入力してください"
 
 // Service は登録・ログイン・認証・ログアウトの用途を実装する。
 type Service struct {
@@ -47,6 +51,16 @@ func validateUsername(username string) (string, *FieldError) {
 	return name, nil
 }
 
+// validateNewUsername は会員登録の利用者名。ログインの検証に加えて、制御文字・見えない文字・改行・タブをはじく。
+// ログインには足さない(すでにある利用者名でログインできなくならないように)。
+func validateNewUsername(username string) (string, *FieldError) {
+	name, fe := validateUsername(username)
+	if fe == nil && !textcheck.ValidUsername(name) {
+		return "", &FieldError{Field: "username", Message: "利用者名は1〜50文字で、見えない文字や改行を含めずに入力してください"}
+	}
+	return name, fe
+}
+
 func validatePassword(password string) *FieldError {
 	if !ValidPassword(password) {
 		return &FieldError{Field: "password", Message: "パスワードは1文字以上、UTF-8で72バイト以内で入力してください"}
@@ -63,8 +77,8 @@ func normalizeTags(tags []string) ([]string, *FieldError) {
 	out := make([]string, 0, len(tags))
 	for _, raw := range tags {
 		tag := strings.TrimSpace(raw)
-		if n := utf8.RuneCountInString(tag); n < 1 || n > maxTagChars || !utf8.ValidString(tag) {
-			return nil, &FieldError{Field: "favorite_tags", Message: "タグは1〜50文字で入力してください"}
+		if !textcheck.ValidTag(tag) {
+			return nil, &FieldError{Field: "favorite_tags", Message: TagRuleMessage}
 		}
 		key := strings.ToLower(tag)
 		if seen[key] {
@@ -91,7 +105,7 @@ func invalid(fields ...*FieldError) error {
 
 // Signup は利用者を member として登録し、最初のセッションの平文トークンと期限を返す。
 func (s Service) Signup(ctx context.Context, in SignupInput) (User, string, time.Time, error) {
-	username, userErr := validateUsername(in.Username)
+	username, userErr := validateNewUsername(in.Username)
 	passErr := validateNewPassword(in.Password, username)
 	tags, tagErr := normalizeTags(in.FavoriteTags)
 	if err := invalid(userErr, passErr, tagErr); err != nil {

@@ -132,7 +132,7 @@ export interface paths {
         put?: never;
         /**
          * パスキー登録の開始
-         * @description 端末へ渡す登録の設定と、手続きを結び付ける使い捨ての `challengeToken` を返す。トークンは5分で失効し、1回しか使えない。Cookieは使わないので、複数のタブで同時に手続きできる。登録済みのパスキーは `excludeCredentials` に入る。端末の本人確認(userVerification)と、利用者名なしで選べるパスキー(discoverable credential)を必須にする。上限は1人10件。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
+         * @description 端末へ渡す登録の設定と、手続きを結び付ける使い捨ての `challengeToken` を返す。トークンは5分で失効し、1回しか使えない。Cookieは使わないので、複数のタブで同時に手続きできる。登録済みのパスキーは `excludeCredentials` に入る。端末の本人確認(userVerification)と、利用者名なしで選べるパスキー(discoverable credential)を必須にする。上限は1人10件。登録の開始・完了、名前変更、削除を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
          */
         post: operations["auth-passkey-register-begin"];
         delete?: never;
@@ -152,7 +152,7 @@ export interface paths {
         put?: never;
         /**
          * パスキー登録の完了
-         * @description 開始で受け取った `challengeToken` と端末の応答を送る。検証して保存する。トークンは検証の成否にかかわらず、この呼び出しで使い切る。他の利用者が開始したトークンは使えない。パスワードの再入力は求めない。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
+         * @description 開始で受け取った `challengeToken` と端末の応答を送る。検証して保存する。トークンは検証の成否にかかわらず、この呼び出しで使い切る。他の利用者が開始したトークンは使えない。パスワードの再入力は求めない。登録の開始・完了、名前変更、削除を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
          */
         post: operations["auth-passkey-register-finish"];
         delete?: never;
@@ -173,14 +173,14 @@ export interface paths {
         post?: never;
         /**
          * パスキーの削除
-         * @description 自分のパスキーだけを物理削除する。他人のもの・無いものは区別せず404。パスワードの再入力は求めない。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
+         * @description 自分のパスキーだけを物理削除する。他人のもの・無いものは区別せず404。パスワードの再入力は求めない。登録の開始・完了、名前変更、削除を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
          */
         delete: operations["auth-passkey-delete"];
         options?: never;
         head?: never;
         /**
          * パスキーの名前変更
-         * @description 自分のパスキーだけを変えられる。他人のもの・無いものは区別せず404。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
+         * @description 自分のパスキーだけを変えられる。他人のもの・無いものは区別せず404。登録の開始・完了、名前変更、削除を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
          */
         patch: operations["auth-passkey-rename"];
         trace?: never;
@@ -196,7 +196,7 @@ export interface paths {
         put?: never;
         /**
          * 会員登録
-         * @description 利用者を member として登録し、選んだタグを初期の興味として保存して、そのままログイン状態にする。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
+         * @description 利用者を member として登録し、選んだタグを初期の興味として保存して、そのままログイン状態にする。接続元IPごとに1時間に5回まで(成功・失敗とも数える)で、超えると429と `Retry-After`(秒)を返す。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。
          */
         post: operations["auth-signup"];
         delete?: never;
@@ -212,7 +212,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 推薦記事を取得 */
+        /**
+         * 推薦記事を取得
+         * @description 利用者ごとに1分に30回まで。超えると429と `Retry-After`(秒)を返す。
+         */
         get: operations["recommendation-feed"];
         put?: never;
         post?: never;
@@ -231,7 +234,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 記事クリックを記録 */
+        /**
+         * 記事クリックを記録
+         * @description 利用者ごとに1分に60回まで(まとめて20回まで)。超えると429と `Retry-After`(秒)を返す。
+         */
         post: operations["recommendation-clicks"];
         delete?: never;
         options?: never;
@@ -248,7 +254,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 回答せず閉じたことを保存 */
+        /**
+         * 回答せず閉じたことを保存
+         * @description 表示・回答・追加回答・閉じる、を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。
+         */
         post: operations["user-feedback-dismiss"];
         delete?: never;
         options?: never;
@@ -265,7 +274,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** アンケートの表示を要求 */
+        /**
+         * アンケートの表示を要求
+         * @description 表示・回答・追加回答・閉じる、を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。
+         */
         post: operations["user-feedback-present"];
         delete?: never;
         options?: never;
@@ -299,7 +311,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 総合評価を保存 */
+        /**
+         * 総合評価を保存
+         * @description 表示・回答・追加回答・閉じる、を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。
+         */
         post: operations["user-feedback-submit"];
         delete?: never;
         options?: never;
@@ -315,7 +330,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 追加質問の回答を保存 */
+        /**
+         * 追加質問の回答を保存
+         * @description 表示・回答・追加回答・閉じる、を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。
+         */
         put: operations["user-feedback-complete"];
         post?: never;
         delete?: never;
@@ -367,7 +385,7 @@ export interface components {
             user: components["schemas"]["User"];
         };
         ClickRequest: {
-            /** @description クリックした記事タグ。1〜50件、各1〜50文字。サーバーのタグ一覧に無いタグは無視し、新しく登録しない */
+            /** @description クリックした記事タグ。1〜50件、各タグは前後の空白を除いて1〜50文字。使える文字は会員登録の favorite_tags と同じで、使えない文字を含むタグは学習に使わずに無視する(422にはしない)。サーバーのタグ一覧に無いタグは無視し、新しく登録しない。利用者ごとに1分に60回まで(まとめて20回まで) */
             tags: string[] | null;
         };
         ErrorModel: {
@@ -621,7 +639,7 @@ export interface components {
         };
         SignupRequest: {
             /**
-             * @description 興味のあるタグ。1〜128件、各タグは前後の空白を除いて1〜50文字。大文字小文字を無視して重複を除く。サーバーのタグ一覧にあるタグだけ選べる(知らないタグを含むと422)
+             * @description 興味のあるタグ。1〜128件、各タグは前後の空白を除いて1〜50文字。文字・数字・半角の空白(続けて並べない)と . + # - _ / ( ) （ ） & ' ・ だけが使え、見えない文字・改行・タブは使えない。大文字小文字を無視して重複を除く。サーバーのタグ一覧にあるタグだけ選べる(知らないタグを含むと422)
              * @example [
              *       "go",
              *       "react"
@@ -634,7 +652,7 @@ export interface components {
              */
             password: string;
             /**
-             * @description 利用者名。前後の空白を除いて1〜50文字
+             * @description 利用者名。前後の空白を除いて1〜50文字。制御文字・見えない文字・改行・タブは使えない
              * @example synthetic-user
              */
             username: string;
@@ -983,6 +1001,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ErrorModel"];
                 };
             };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Internal Server Error */
             500: {
                 headers: {
@@ -1052,6 +1079,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ErrorModel"];
                 };
             };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Internal Server Error */
             500: {
                 headers: {
@@ -1102,6 +1138,15 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1170,6 +1215,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ErrorModel"];
                 };
             };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Internal Server Error */
             500: {
                 headers: {
@@ -1222,6 +1276,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ErrorModel"];
                 };
             };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Internal Server Error */
             500: {
                 headers: {
@@ -1253,6 +1316,15 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1311,6 +1383,15 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1387,6 +1468,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ErrorModel"];
                 };
             };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Internal Server Error */
             500: {
                 headers: {
@@ -1449,6 +1539,15 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1563,6 +1662,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ErrorModel"];
                 };
             };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
             /** @description Internal Server Error */
             500: {
                 headers: {
@@ -1627,6 +1735,15 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

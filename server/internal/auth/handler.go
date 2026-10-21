@@ -32,9 +32,9 @@ type Handler struct {
 
 // SignupRequest は会員登録の入力。
 type SignupRequest struct {
-	Username     string   `json:"username" minLength:"1" example:"synthetic-user" doc:"利用者名。前後の空白を除いて1〜50文字"`
+	Username     string   `json:"username" minLength:"1" example:"synthetic-user" doc:"利用者名。前後の空白を除いて1〜50文字。制御文字・見えない文字・改行・タブは使えない"`
 	Password     string   `json:"password" minLength:"1" example:"synthetic-password" doc:"パスワード。12文字以上、UTF-8で72バイト以内。よく使われるパスワードと、利用者名と同じ文字列は使えない"`
-	FavoriteTags []string `json:"favorite_tags" minItems:"1" maxItems:"128" example:"[\"go\",\"react\"]" doc:"興味のあるタグ。1〜128件、各タグは前後の空白を除いて1〜50文字。大文字小文字を無視して重複を除く。サーバーのタグ一覧にあるタグだけ選べる(知らないタグを含むと422)"`
+	FavoriteTags []string `json:"favorite_tags" minItems:"1" maxItems:"128" example:"[\"go\",\"react\"]" doc:"興味のあるタグ。1〜128件、各タグは前後の空白を除いて1〜50文字。文字・数字・半角の空白(続けて並べない)と . + # - _ / ( ) （ ） & ' ・ だけが使え、見えない文字・改行・タブは使えない。大文字小文字を無視して重複を除く。サーバーのタグ一覧にあるタグだけ選べる(知らないタグを含むと422)"`
 }
 
 // LoginRequest はログインの入力。
@@ -89,10 +89,10 @@ func (h Handler) Register(api huma.API) {
 		Method:        http.MethodPost,
 		Path:          "/api/v1/auth/signup",
 		Summary:       "会員登録",
-		Description:   "利用者を member として登録し、選んだタグを初期の興味として保存して、そのままログイン状態にする。" + csrfNote,
+		Description:   "利用者を member として登録し、選んだタグを初期の興味として保存して、そのままログイン状態にする。接続元IPごとに1時間に5回まで(成功・失敗とも数える)で、超えると429と `Retry-After`(秒)を返す。" + csrfNote,
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusCreated,
-		Errors:        []int{http.StatusConflict, http.StatusUnprocessableEntity},
+		Errors:        []int{http.StatusConflict, http.StatusUnprocessableEntity, http.StatusTooManyRequests},
 	}, h.signup)
 
 	huma.Register(api, huma.Operation{
@@ -156,6 +156,16 @@ func ClientIPMiddleware(header string) func(huma.Context, func(huma.Context)) {
 		}
 		next(huma.WithValue(ctx, clientIPKey{}, clientIP(value, ctx.RemoteAddr())))
 	}
+}
+
+// ClientIPOfRequest は net/http の要求から、ClientIPMiddleware と同じ規則で接続元IPを決める。
+// Huma を通らない共通の制限(app の回数制限)が、ログインの制限と同じIPを使うために使う。
+func ClientIPOfRequest(header string, r *http.Request) string {
+	value := ""
+	if header != "" {
+		value = r.Header.Get(header)
+	}
+	return clientIP(value, r.RemoteAddr)
 }
 
 // clientIP は信頼するヘッダーに値があればそれを、無ければ接続元アドレスのIPを返す。

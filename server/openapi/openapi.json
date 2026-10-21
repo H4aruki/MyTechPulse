@@ -18,7 +18,7 @@
         "additionalProperties": false,
         "properties": {
           "tags": {
-            "description": "クリックした記事タグ。1〜50件、各1〜50文字。サーバーのタグ一覧に無いタグは無視し、新しく登録しない",
+            "description": "クリックした記事タグ。1〜50件、各タグは前後の空白を除いて1〜50文字。使える文字は会員登録の favorite_tags と同じで、使えない文字を含むタグは学習に使わずに無視する(422にはしない)。サーバーのタグ一覧に無いタグは無視し、新しく登録しない。利用者ごとに1分に60回まで(まとめて20回まで)",
             "items": {
               "type": "string"
             },
@@ -726,7 +726,7 @@
         "additionalProperties": false,
         "properties": {
           "favorite_tags": {
-            "description": "興味のあるタグ。1〜128件、各タグは前後の空白を除いて1〜50文字。大文字小文字を無視して重複を除く。サーバーのタグ一覧にあるタグだけ選べる(知らないタグを含むと422)",
+            "description": "興味のあるタグ。1〜128件、各タグは前後の空白を除いて1〜50文字。文字・数字・半角の空白(続けて並べない)と . + # - _ / ( ) （ ） \u0026 ' ・ だけが使え、見えない文字・改行・タブは使えない。大文字小文字を無視して重複を除く。サーバーのタグ一覧にあるタグだけ選べる(知らないタグを含むと422)",
             "examples": [
               [
                 "go",
@@ -752,7 +752,7 @@
             "type": "string"
           },
           "username": {
-            "description": "利用者名。前後の空白を除いて1〜50文字",
+            "description": "利用者名。前後の空白を除いて1〜50文字。制御文字・見えない文字・改行・タブは使えない",
             "examples": [
               "synthetic-user"
             ],
@@ -1193,7 +1193,7 @@
     },
     "/api/v1/auth/passkeys/register/begin": {
       "post": {
-        "description": "端末へ渡す登録の設定と、手続きを結び付ける使い捨ての `challengeToken` を返す。トークンは5分で失効し、1回しか使えない。Cookieは使わないので、複数のタブで同時に手続きできる。登録済みのパスキーは `excludeCredentials` に入る。端末の本人確認(userVerification)と、利用者名なしで選べるパスキー(discoverable credential)を必須にする。上限は1人10件。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。",
+        "description": "端末へ渡す登録の設定と、手続きを結び付ける使い捨ての `challengeToken` を返す。トークンは5分で失効し、1回しか使えない。Cookieは使わないので、複数のタブで同時に手続きできる。登録済みのパスキーは `excludeCredentials` に入る。端末の本人確認(userVerification)と、利用者名なしで選べるパスキー(discoverable credential)を必須にする。上限は1人10件。登録の開始・完了、名前変更、削除を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。",
         "operationId": "auth-passkey-register-begin",
         "responses": {
           "200": {
@@ -1233,6 +1233,16 @@
             },
             "description": "Conflict"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1257,7 +1267,7 @@
     },
     "/api/v1/auth/passkeys/register/finish": {
       "post": {
-        "description": "開始で受け取った `challengeToken` と端末の応答を送る。検証して保存する。トークンは検証の成否にかかわらず、この呼び出しで使い切る。他の利用者が開始したトークンは使えない。パスワードの再入力は求めない。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。",
+        "description": "開始で受け取った `challengeToken` と端末の応答を送る。検証して保存する。トークンは検証の成否にかかわらず、この呼び出しで使い切る。他の利用者が開始したトークンは使えない。パスワードの再入力は求めない。登録の開始・完了、名前変更、削除を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。",
         "operationId": "auth-passkey-register-finish",
         "requestBody": {
           "content": {
@@ -1320,6 +1330,16 @@
             },
             "description": "Unprocessable Entity"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1344,7 +1364,7 @@
     },
     "/api/v1/auth/passkeys/{id}": {
       "delete": {
-        "description": "自分のパスキーだけを物理削除する。他人のもの・無いものは区別せず404。パスワードの再入力は求めない。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。",
+        "description": "自分のパスキーだけを物理削除する。他人のもの・無いものは区別せず404。パスワードの再入力は求めない。登録の開始・完了、名前変更、削除を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。",
         "operationId": "auth-passkey-delete",
         "parameters": [
           {
@@ -1394,6 +1414,16 @@
             },
             "description": "Unprocessable Entity"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1416,7 +1446,7 @@
         ]
       },
       "patch": {
-        "description": "自分のパスキーだけを変えられる。他人のもの・無いものは区別せず404。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。",
+        "description": "自分のパスキーだけを変えられる。他人のもの・無いものは区別せず404。登録の開始・完了、名前変更、削除を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。",
         "operationId": "auth-passkey-rename",
         "parameters": [
           {
@@ -1476,6 +1506,16 @@
             },
             "description": "Unprocessable Entity"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1500,7 +1540,7 @@
     },
     "/api/v1/auth/signup": {
       "post": {
-        "description": "利用者を member として登録し、選んだタグを初期の興味として保存して、そのままログイン状態にする。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。",
+        "description": "利用者を member として登録し、選んだタグを初期の興味として保存して、そのままログイン状態にする。接続元IPごとに1時間に5回まで(成功・失敗とも数える)で、超えると429と `Retry-After`(秒)を返す。ブラウザからの更新系リクエストには、許可されたOriginと `X-MTP-CSRF: 1` ヘッダーの両方が必要。",
         "operationId": "auth-signup",
         "requestBody": {
           "content": {
@@ -1551,6 +1591,16 @@
             },
             "description": "Unprocessable Entity"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1570,6 +1620,7 @@
     },
     "/api/v1/feed": {
       "get": {
+        "description": "利用者ごとに1分に30回まで。超えると429と `Retry-After`(秒)を返す。",
         "operationId": "recommendation-feed",
         "responses": {
           "200": {
@@ -1591,6 +1642,16 @@
               }
             },
             "description": "Unauthorized"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           },
           "500": {
             "content": {
@@ -1626,6 +1687,7 @@
     },
     "/api/v1/feedback/article-clicks": {
       "post": {
+        "description": "利用者ごとに1分に60回まで(まとめて20回まで)。超えると429と `Retry-After`(秒)を返す。",
         "operationId": "recommendation-clicks",
         "requestBody": {
           "content": {
@@ -1661,6 +1723,16 @@
             },
             "description": "Unprocessable Entity"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1685,6 +1757,7 @@
     },
     "/api/v1/user-feedback/dismissals": {
       "post": {
+        "description": "表示・回答・追加回答・閉じる、を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。",
         "operationId": "user-feedback-dismiss",
         "requestBody": {
           "content": {
@@ -1747,6 +1820,16 @@
             },
             "description": "Unprocessable Entity"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1771,6 +1854,7 @@
     },
     "/api/v1/user-feedback/presentations": {
       "post": {
+        "description": "表示・回答・追加回答・閉じる、を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。",
         "operationId": "user-feedback-present",
         "requestBody": {
           "content": {
@@ -1832,6 +1916,16 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           },
           "500": {
             "content": {
@@ -1903,6 +1997,7 @@
     },
     "/api/v1/user-feedback/submissions": {
       "post": {
+        "description": "表示・回答・追加回答・閉じる、を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。",
         "operationId": "user-feedback-submit",
         "requestBody": {
           "content": {
@@ -1965,6 +2060,16 @@
             },
             "description": "Unprocessable Entity"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
           "500": {
             "content": {
               "application/problem+json": {
@@ -1989,6 +2094,7 @@
     },
     "/api/v1/user-feedback/submissions/{submission_id}": {
       "put": {
+        "description": "表示・回答・追加回答・閉じる、を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。",
         "operationId": "user-feedback-complete",
         "parameters": [
           {
@@ -2061,6 +2167,16 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           },
           "500": {
             "content": {

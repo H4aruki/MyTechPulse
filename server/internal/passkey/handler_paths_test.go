@@ -146,7 +146,7 @@ func newPathsEnv(t *testing.T) *pathsEnv {
 		sess.rows[auth.HashToken(tok)] = auth.Session{User: u, ExpiresAt: clk.now.Add(time.Hour)}
 	}
 	h, _ := app.New(config.Config{Environment: "local", CookieName: "mtp_session", CORSOrigins: []string{testOrigin}},
-		app.Dependencies{Logger: slog.New(slog.NewTextHandler(appLogs, nil)), Auth: &auth.Service{Sessions: sess, Clock: clk}, Passkey: svc})
+		app.Dependencies{Logger: slog.New(slog.NewTextHandler(appLogs, nil)), Auth: &auth.Service{Sessions: sess, Clock: clk}, Passkey: svc, Clock: &tickClock{now: clk.now}})
 	return &pathsEnv{
 		env: &env{t: t, h: h, clock: clk, passkeys: pk.memPasskeys, logs: logs},
 		svc: svc, pk: pk, ch: ch, sess: sess, appLogs: appLogs,

@@ -121,7 +121,7 @@ node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/
 バックエンドは、機能ごとのパッケージに分けたモジュラーモノリスです（`docs/adr/0001-use-go-modular-monolith.md`）。
 
 - `server/cmd/api/`: APIサーバーの起動点。`cmd/migrate/` はDBの移行、`cmd/openapi/` はAPI契約の生成
-- `server/internal/app/`: ルーティングとミドルウェアの組み立て（RequestID → Recover → AccessLog → CORS → CSRF の順）
+- `server/internal/app/`: ルーティングとミドルウェアの組み立て（RequestID → Recover → AccessLog → CORS → CSRF → 回数制限・本文の上限（`limits.go`） の順）
 - `server/internal/auth/`: 登録・ログイン・ログアウト・本人確認（サーバー側セッション）
 - `server/internal/recommendation/`: 記事の取得・順位付け・フィード。`interest/` は興味度とクリック学習
 - `server/internal/provider/`: Qiita・Zennの取得（`qiita/`、`zenn/`）。`article/` は記事の型と検証
@@ -149,6 +149,7 @@ node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/
 - 結果は**HTTPステータス**で表し、エラーの本文はProblem Details（RFC 9457）です。旧Python版の「本文の `status` で表す」規約は、もうありません。
 - 認証は**サーバー側セッション**です（`docs/adr/0002-use-server-side-sessions.md`）。ログインで、HttpOnly・SameSite=LaxのCookie（本番は `__Host-mtp_session`、Secure付き）を発行し、DBには乱数トークンのSHA-256ハッシュだけを保存します。ログアウトで、サーバー側でも失効します。
 - 更新系の要求（`/api/v1/` のPOST）には、許可されたOriginと、専用ヘッダー `X-MTP-CSRF` が必要です（CSRF対策）。
+- 回数制限（会員登録はIPごと、クリック・フィード・アンケート・パスキー管理は利用者ごと、`/api/v1/` 全体はIPごと）は標準ライブラリだけのメモリ上のトークンバケットで、超えると429と `Retry-After` です。本文は64KBまで（超えると413）。タグ・利用者名は見えない文字をはじきます。数値と規則は `docs/BasicDesignSpecifications/API/ApiCommonRules.md` にあります（[Issue #263](https://github.com/H4aruki/MyTechPulse/issues/263)）。
 - `login` は、利用者名が存在しない場合とパスワードが違う場合を区別せず、同じ `invalid_credentials`（HTTP 401）を返します。
 - パスワードは、旧Python版が作ったbcryptの形式をそのまま検証できます。
 - 保護APIを変更するときは、`server/openapi/openapi.json`（生成物）と、`frontend/src/api/` の型・呼び出しを同時に更新します（CIが差分を検査します）。

@@ -13,6 +13,7 @@ import (
 	"github.com/H4aruki/MyTechPulse/server/internal/passkey"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/config"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/httpx"
+	"github.com/H4aruki/MyTechPulse/server/internal/platform/ratelimit"
 	"github.com/H4aruki/MyTechPulse/server/internal/recommendation"
 	"github.com/H4aruki/MyTechPulse/server/internal/userfeedback"
 )
@@ -27,6 +28,8 @@ type Dependencies struct {
 	UserFeedback   *userfeedback.Service
 	// Passkey が nil のときはパスキーAPIを登録しない。
 	Passkey *passkey.Service
+	// Clock は回数制限の時刻。nilなら実際の時刻(テストで進めるために差し替える)。
+	Clock ratelimit.Clock
 }
 
 // New はHTTPハンドラーとOpenAPI仕様を返す。
@@ -41,22 +44,24 @@ func New(cfg config.Config, deps Dependencies) (http.Handler, *huma.OpenAPI) {
 		hc.DocsPath, hc.OpenAPIPath, hc.SchemasPath = "", "", ""
 	}
 	httpx.UseProblemErrors()
+	lim := newLimits(deps.Clock)
 	api := humago.New(mux, hc)
 	health.Register(api, deps.Ready)
 	if deps.Auth != nil {
 		auth.Handler{Service: *deps.Auth, CookieName: cfg.CookieName, CookieSecure: cfg.CookieSecure, ClientIPHeader: cfg.ClientIPHeader}.Register(api)
 	}
 	if deps.Auth != nil && deps.Recommendation != nil {
-		recommendation.Handler{Service: *deps.Recommendation, Auth: *deps.Auth, CookieName: cfg.CookieName}.Register(api)
+		recommendation.Handler{Service: *deps.Recommendation, Auth: *deps.Auth, CookieName: cfg.CookieName, FeedLimit: lim.feed, ClickLimit: lim.click}.Register(api)
 	}
 	if deps.Auth != nil && deps.Passkey != nil {
-		passkey.Handler{Service: *deps.Passkey, Auth: *deps.Auth, CookieName: cfg.CookieName, CookieSecure: cfg.CookieSecure, ClientIPHeader: cfg.ClientIPHeader}.Register(api)
+		passkey.Handler{Service: *deps.Passkey, Auth: *deps.Auth, CookieName: cfg.CookieName, CookieSecure: cfg.CookieSecure, ClientIPHeader: cfg.ClientIPHeader, ManageLimit: lim.passkeys}.Register(api)
 	}
 	if deps.Auth != nil && deps.UserFeedback != nil {
-		userfeedback.Handler{Service: deps.UserFeedback, Auth: *deps.Auth, CookieName: cfg.CookieName}.Register(api)
+		userfeedback.Handler{Service: deps.UserFeedback, Auth: *deps.Auth, CookieName: cfg.CookieName, Limit: lim.userFeedback}.Register(api)
 	}
-	// 外側から RequestID -> Recover -> AccessLog -> CORS -> CSRF -> Huma の順に通す
+	// 外側から RequestID -> Recover -> AccessLog -> CORS -> CSRF -> 回数制限・本文の上限 -> Huma の順に通す
 	var h http.Handler = mux
+	h = requestLimits(cfg.ClientIPHeader, lim, h)
 	h = httpx.CSRF(cfg.CORSOrigins, h)
 	h = httpx.CORS(cfg.CORSOrigins, h)
 	h = httpx.AccessLog(deps.Logger, h)
