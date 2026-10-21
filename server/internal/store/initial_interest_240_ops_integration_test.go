@@ -83,8 +83,16 @@ func seedTags(t *testing.T, pool *pgxpool.Pool, n int) []string {
 	return names
 }
 
+// click は、#239 より前のクリックを再現する。当時はクリックしたタグが tag 表に無ければ作っていた。
+// いまのクリックはタグを作らないので、先に tag 表へ入れてから押す。
 func click(t *testing.T, pool *pgxpool.Pool, userID int64, tags ...string) {
 	t.Helper()
+	for _, tag := range tags {
+		if _, err := pool.Exec(context.Background(), `INSERT INTO tag(tag_name) SELECT $1::text
+			WHERE NOT EXISTS (SELECT 1 FROM tag WHERE lower(btrim(tag_name)) = lower(btrim($1::text)))`, tag); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if _, err := store.NewInterest(pool).UpdateForClick(context.Background(), userID, tags); err != nil {
 		t.Fatal(err)
 	}

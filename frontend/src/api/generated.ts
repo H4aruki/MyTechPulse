@@ -367,7 +367,7 @@ export interface components {
             user: components["schemas"]["User"];
         };
         ClickRequest: {
-            /** @description クリックした記事タグ。1〜50件、各1〜50文字 */
+            /** @description クリックした記事タグ。1〜50件、各1〜50文字。サーバーのタグ一覧に無いタグは無視し、新しく登録しない */
             tags: string[] | null;
         };
         ErrorModel: {

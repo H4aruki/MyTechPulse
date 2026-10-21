@@ -75,4 +75,64 @@ func TestInterestRepositoryCollisionDoesNotChangeRows(t *testing.T) {
 	}
 }
 
+// #239: クリックAPIは、送られたタグ名から tag 表の行を作らない。tag 表にあるタグだけを学習に使う。
+func TestInterestRepositoryClickIgnoresUnknownTags(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	user, err := store.NewAuth(pool).CreateWithInterestsAndSession(ctx, "unknown-tag-user", "hash", auth.RoleMember, []string{"Go"}, hashOf(43), fixedNow.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Rust は tag 表にあるが、この利用者はまだ行を持っていない(選ばなかったタグ)
+	if _, err := pool.Exec(ctx, `INSERT INTO tag(tag_name) VALUES ('Rust')`); err != nil {
+		t.Fatal(err)
+	}
+	tagsBefore := queryInt(t, pool, `SELECT count(*) FROM tag`)
+	repo := store.NewInterest(pool)
+	got, err := repo.UpdateForClick(ctx, user.ID, []string{"GO", " rust ", "no-such-tag-239", "evil\u0007tag"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("updated = %#v", got)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM tag`); n != tagsBefore {
+		t.Fatalf("tag rows = %d, want %d", n, tagsBefore)
+	}
+	list, err := repo.List(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int64{"Go": 10000, "Rust": 2000}
+	if len(list) != len(want) {
+		t.Fatalf("interests = %#v", list)
+	}
+	for _, w := range list {
+		if w.TagID == 0 || want[w.Tag] != w.Value {
+			t.Fatalf("interests = %#v", list)
+		}
+	}
+
+	// 知らないタグだけのクリックでも、0.8倍の減衰はかかる。行もタグも増えない
+	if _, err := repo.UpdateForClick(ctx, user.ID, []string{"no-such-tag-239"}); err != nil {
+		t.Fatal(err)
+	}
+	list, err = repo.List(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = map[string]int64{"Go": 8000, "Rust": 1600}
+	if len(list) != len(want) {
+		t.Fatalf("interests = %#v", list)
+	}
+	for _, w := range list {
+		if want[w.Tag] != w.Value {
+			t.Fatalf("interests = %#v", list)
+		}
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM tag`); n != tagsBefore {
+		t.Fatalf("tag rows = %d, want %d", n, tagsBefore)
+	}
+}
+
 var _ = time.Second

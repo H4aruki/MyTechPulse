@@ -69,15 +69,14 @@ func (r *Interest) UpdateForClick(ctx context.Context, userID int64, tags []stri
 	if err != nil {
 		return nil, err
 	}
-	for i := range updated {
-		weight := &updated[i]
+	// クリックAPIは、クライアントが送ったタグ名から tag 表の行を作らない（#239）。
+	// まだ行の無いタグは、tag 表にすでにある名前だけを結びつけ、知らない名前は捨てる。
+	known := updated[:0]
+	for _, weight := range updated {
 		if weight.TagID == 0 {
-			if err := q.LockNormalizedTag(ctx, weight.Tag); err != nil {
-				return nil, errors.New("store: タグを確定できません")
-			}
 			row, e := q.FindTagByNormalizedName(ctx, weight.Tag)
 			if errors.Is(e, pgx.ErrNoRows) {
-				row, e = q.CreateTag(ctx, weight.Tag)
+				continue
 			}
 			if e != nil {
 				return nil, errors.New("store: タグを確定できません")
@@ -88,7 +87,9 @@ func (r *Interest) UpdateForClick(ctx context.Context, userID int64, tags []stri
 		if weight.Value > math.MaxInt32 || weight.Value < math.MinInt32 {
 			return nil, errors.New("store: 興味度を更新できません")
 		}
+		known = append(known, weight)
 	}
+	updated = known
 	for _, weight := range updated {
 		if err := q.UpsertRecommendation(ctx, dbgen.UpsertRecommendationParams{UserID: id, TagID: int32(weight.TagID), MatchInt: int32(weight.Value)}); err != nil {
 			return nil, errors.New("store: 興味度を更新できません")
