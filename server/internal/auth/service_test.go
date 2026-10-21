@@ -50,6 +50,7 @@ type fakeStore struct {
 	createdRoles []Role
 	cleanupErr   error
 	cleanupCalls []time.Time
+	unknownTag   bool
 }
 
 func newFakeStore() *fakeStore {
@@ -75,6 +76,10 @@ func (f *fakeStore) FindByID(_ context.Context, id int64) (User, error) {
 
 func (f *fakeStore) CreateWithInterestsAndSession(_ context.Context, name, hash string, role Role,
 	tags []string, token [32]byte, exp time.Time) (User, error) {
+	// 本物のstoreと同じく、知らないタグの確認を利用者名の重複より先に行う
+	if f.unknownTag {
+		return User{}, ErrUnknownFavoriteTag
+	}
 	if _, ok := f.users[name]; ok {
 		return User{}, ErrUsernameTaken
 	}
@@ -276,6 +281,23 @@ func TestServiceLoginFailuresAreIndistinguishable(t *testing.T) {
 	}
 	if len(h.store.sessions) != 1 {
 		t.Fatalf("failed logins must not create sessions, have %d", len(h.store.sessions))
+	}
+}
+
+func TestServiceSignupUnknownFavoriteTagIsValidationError(t *testing.T) {
+	h := newHarness()
+	h.store.unknownTag = true
+	_, _, _, err := h.svc.Signup(context.Background(), validSignup())
+	var ve *ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("want ValidationError, got %v", err)
+	}
+	want := []FieldError{{Field: "favorite_tags", Message: "選べないタグが含まれています"}}
+	if !reflect.DeepEqual(ve.Fields, want) {
+		t.Fatalf("fields = %+v", ve.Fields)
+	}
+	if len(h.store.users) != 0 || len(h.store.sessions) != 0 {
+		t.Fatal("rejected signup must not leave a user or session")
 	}
 }
 

@@ -197,6 +197,25 @@ describe('SignupPage', () => {
     expect(screen.getByRole('heading', { name: '新規登録' })).toBeInTheDocument()
   })
 
+  test('422でサーバーがタグの問題を返したら、選び直してもらう文言を出す', async () => {
+    vi.mocked(signup).mockRejectedValue(
+      new ApiError({
+        status: 422,
+        code: 'validation_failed',
+        errors: [{ field: 'favorite_tags', message: '選べないタグが含まれています' }],
+      }),
+    )
+    renderSignup()
+
+    await goToTagStep()
+    selectTags('Go')
+    clickRegister()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('選べないタグが含まれています')
+    expect(screen.getByRole('alert')).toHaveTextContent('タグを選び直してください')
+    expect(screen.getByRole('heading', { name: '新規登録' })).toBeInTheDocument()
+  })
+
   test('タグが未選択なら登録できない', async () => {
     renderSignup()
 

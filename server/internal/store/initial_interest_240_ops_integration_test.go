@@ -44,6 +44,7 @@ func ii240Conn(t *testing.T, pool *pgxpool.Pool) *pgxpool.Conn {
 func oldSignup(t *testing.T, pool *pgxpool.Pool, name string, token byte, selected []string) int64 {
 	t.Helper()
 	ctx := context.Background()
+	ensureTags(t, pool, selected...)
 	user, err := store.NewAuth(pool).CreateWithInterestsAndSession(ctx, name, "hash", auth.RoleMember, selected, hashOf(token), fixedNow.Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
@@ -62,6 +63,7 @@ func oldSignup(t *testing.T, pool *pgxpool.Pool, name string, token byte, select
 // legacySignup は #203 より前の登録(選んだタグだけ、値1)を再現する。
 func legacySignup(t *testing.T, pool *pgxpool.Pool, name string, token byte, selected []string) int64 {
 	t.Helper()
+	ensureTags(t, pool, selected...)
 	user, err := store.NewAuth(pool).CreateWithInterestsAndSession(context.Background(), name, "hash", auth.RoleMember, selected, hashOf(token), fixedNow.Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)

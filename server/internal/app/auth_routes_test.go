@@ -41,7 +41,12 @@ func (m *memStore) FindByID(_ context.Context, id int64) (auth.User, error) {
 }
 
 func (m *memStore) CreateWithInterestsAndSession(_ context.Context, name, hash string, role auth.Role,
-	_ []string, token [32]byte, exp time.Time) (auth.User, error) {
+	tags []string, token [32]byte, exp time.Time) (auth.User, error) {
+	for _, tag := range tags {
+		if tag == unknownTag {
+			return auth.User{}, auth.ErrUnknownFavoriteTag
+		}
+	}
 	if _, ok := m.users[name]; ok {
 		return auth.User{}, auth.ErrUsernameTaken
 	}
@@ -124,6 +129,24 @@ func post(h http.Handler, path, body string, headers map[string]string, cookies 
 var csrfHeaders = map[string]string{"Origin": webOrigin, "X-MTP-CSRF": "1"}
 
 const signupJSON = `{"username":"synthetic-user","password":"synthetic-pass-12","favorite_tags":["go"]}`
+
+// unknownTag は memStore が「tag 表に無いタグ」として断る名前。
+const unknownTag = "unknown-tag"
+
+func TestAuthRoutesSignupWithUnknownTagIs422(t *testing.T) {
+	h := newAuthHandler()
+	body := `{"username":"synthetic-user","password":"synthetic-pass-12","favorite_tags":["go","` + unknownTag + `"]}`
+	rec := post(h, "/api/v1/auth/signup", body, csrfHeaders)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("signup = %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "favorite_tags") || !strings.Contains(rec.Body.String(), "選べないタグが含まれています") {
+		t.Fatalf("body = %s", rec.Body.String())
+	}
+	if len(rec.Header().Values("Set-Cookie")) != 0 {
+		t.Fatal("must not set a cookie")
+	}
+}
 
 func TestAuthRoutesRejectStateChangesWithoutOriginOrCSRFHeader(t *testing.T) {
 	h := newAuthHandler()

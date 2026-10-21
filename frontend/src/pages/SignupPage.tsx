@@ -90,8 +90,16 @@ export function SignupPage() {
           error instanceof ApiError
             ? error.problem.errors?.find((e) => e.field === 'password')?.message
             : undefined
+        // サーバーのタグ一覧に無いタグを送ったとき(画面の古さなど)。サーバーの文言に、選び直す案内を足す
+        const tagMessage =
+          error instanceof ApiError
+            ? error.problem.errors?.find((e) => e.field === 'favorite_tags')?.message
+            : undefined
         setFormError(
           passwordMessage ??
+            (tagMessage !== undefined
+              ? `${tagMessage.replace(/。$/, '')}。画面を再読み込みして、タグを選び直してください。`
+              : undefined) ??
             '入力内容に誤りがあります。ユーザー名・パスワード・タグを確認して、もう一度お試しください。',
         )
       } else {

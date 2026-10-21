@@ -24,37 +24,16 @@ func (q *Queries) CreateInitialRecommendation(ctx context.Context, arg CreateIni
 	return err
 }
 
-const createTag = `-- name: CreateTag :one
-INSERT INTO tag (tag_name) VALUES ($1) RETURNING "tag_ID", tag_name
-`
-
-func (q *Queries) CreateTag(ctx context.Context, tagName string) (Tag, error) {
-	row := q.db.QueryRow(ctx, createTag, tagName)
-	var i Tag
-	err := row.Scan(&i.TagID, &i.TagName)
-	return i, err
-}
-
 const findTagByNormalizedName = `-- name: FindTagByNormalizedName :one
+
 SELECT "tag_ID", tag_name FROM tag
 WHERE lower(btrim(tag_name)) = lower(btrim($1::text)) ORDER BY "tag_ID" LIMIT 1
 `
 
+// 会員登録とクリックは tag 表に行を作らない(#239、#262)。タグは正規化した名前(前後空白・大文字小文字を無視)で探すだけ。
 func (q *Queries) FindTagByNormalizedName(ctx context.Context, dollar_1 string) (Tag, error) {
 	row := q.db.QueryRow(ctx, findTagByNormalizedName, dollar_1)
 	var i Tag
 	err := row.Scan(&i.TagID, &i.TagName)
 	return i, err
-}
-
-const lockNormalizedTag = `-- name: LockNormalizedTag :exec
-
-SELECT pg_advisory_xact_lock(hashtext('tag:' || lower(btrim($1::text))))
-`
-
-// 表記違い(大文字小文字・前後空白)のタグをGo書き込み同士で重複作成しないよう、
-// 正規化したタグ名ごとにトランザクション内の排他ロックを取ってから再検索する。
-func (q *Queries) LockNormalizedTag(ctx context.Context, dollar_1 string) error {
-	_, err := q.db.Exec(ctx, lockNormalizedTag, dollar_1)
-	return err
 }

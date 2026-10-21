@@ -50,6 +50,8 @@ var (
 	ErrNotFound = errors.New("auth: not found")
 	// ErrUsernameTaken は利用者名が既に使われていることを表す。
 	ErrUsernameTaken = errors.New("auth: username taken")
+	// ErrUnknownFavoriteTag は選んだタグに、サーバーのタグ一覧(tag 表)に無いものが含まれることを表す。
+	ErrUnknownFavoriteTag = errors.New("auth: unknown favorite tag")
 	// ErrInvalidCredentials は利用者不存在・誤パスワード・期限切れ・未ログインをまとめて表す。
 	// 呼び出し側が原因を区別できないよう、1つの値にする。
 	ErrInvalidCredentials = errors.New("auth: invalid credentials")

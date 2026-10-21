@@ -34,7 +34,7 @@ type Handler struct {
 type SignupRequest struct {
 	Username     string   `json:"username" minLength:"1" example:"synthetic-user" doc:"利用者名。前後の空白を除いて1〜50文字"`
 	Password     string   `json:"password" minLength:"1" example:"synthetic-password" doc:"パスワード。12文字以上、UTF-8で72バイト以内。よく使われるパスワードと、利用者名と同じ文字列は使えない"`
-	FavoriteTags []string `json:"favorite_tags" minItems:"1" maxItems:"128" example:"[\"go\",\"react\"]" doc:"興味のあるタグ。1〜128件、各タグは前後の空白を除いて1〜50文字。大文字小文字を無視して重複を除く"`
+	FavoriteTags []string `json:"favorite_tags" minItems:"1" maxItems:"128" example:"[\"go\",\"react\"]" doc:"興味のあるタグ。1〜128件、各タグは前後の空白を除いて1〜50文字。大文字小文字を無視して重複を除く。サーバーのタグ一覧にあるタグだけ選べる(知らないタグを含むと422)"`
 }
 
 // LoginRequest はログインの入力。

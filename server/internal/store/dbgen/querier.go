@@ -18,7 +18,6 @@ type Querier interface {
 	CreateInitialRecommendation(ctx context.Context, arg CreateInitialRecommendationParams) error
 	CreatePasskey(ctx context.Context, arg CreatePasskeyParams) (AuthPasskey, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
-	CreateTag(ctx context.Context, tagName string) (Tag, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	CreateWebAuthnChallenge(ctx context.Context, arg CreateWebAuthnChallengeParams) error
 	// 保持期限（終了日時、未終了なら表示日時）の古い順に、上限件数まで消す。回答などは連鎖して消える
@@ -29,6 +28,7 @@ type Querier interface {
 	DeleteSession(ctx context.Context, tokenHash []byte) error
 	FindPasskeyByCredentialID(ctx context.Context, credentialID []byte) (AuthPasskey, error)
 	FindSessionUser(ctx context.Context, arg FindSessionUserParams) (FindSessionUserRow, error)
+	// 会員登録とクリックは tag 表に行を作らない(#239、#262)。タグは正規化した名前(前後空白・大文字小文字を無視)で探すだけ。
 	FindTagByNormalizedName(ctx context.Context, dollar_1 string) (Tag, error)
 	FindUserByID(ctx context.Context, userID int32) (FindUserByIDRow, error)
 	FindUserByUsername(ctx context.Context, userName string) (User, error)
@@ -49,9 +49,6 @@ type Querier interface {
 	ListRecommendations(ctx context.Context, userID int32) ([]ListRecommendationsRow, error)
 	LockFeedbackPrompt(ctx context.Context, id pgtype.UUID) (LockFeedbackPromptRow, error)
 	LockFeedbackSubmission(ctx context.Context, id pgtype.UUID) (LockFeedbackSubmissionRow, error)
-	// 表記違い(大文字小文字・前後空白)のタグをGo書き込み同士で重複作成しないよう、
-	// 正規化したタグ名ごとにトランザクション内の排他ロックを取ってから再検索する。
-	LockNormalizedTag(ctx context.Context, dollar_1 string) error
 	// 同じ利用者・同じフォームの表示判定を1つずつ行う（まだ表示記録が無い初回でも効く）
 	LockUserFeedbackForm(ctx context.Context, lockKey string) error
 	LockUserForPasskey(ctx context.Context, userID int32) (int32, error)
