@@ -11,6 +11,7 @@ import (
 
 	"github.com/H4aruki/MyTechPulse/server/internal/auth"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/httpx"
+	"github.com/H4aruki/MyTechPulse/server/internal/platform/ratelimit"
 )
 
 const (
@@ -29,6 +30,8 @@ type Handler struct {
 	CookieSecure bool
 	// ClientIPHeader は接続元IPを読むヘッダー名。パスワードログインと同じ値を渡す。
 	ClientIPHeader string
+	// ManageLimit は利用者ごとの回数制限(登録の開始・完了、名前変更、削除)。nilなら制限しない。
+	ManageLimit *ratelimit.Limiter
 }
 
 // PasskeyItem は登録済みのパスキー1件。公開鍵や認証情報IDは返さない。
@@ -123,21 +126,22 @@ func (h Handler) Register(api huma.API) {
 	security := []map[string][]string{{cookieAuthScheme: {}}}
 	mw := huma.Middlewares{h.readSession}
 	tags := []string{"auth"}
+	const manageNote = "登録の開始・完了、名前変更、削除を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。"
 
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-passkey-register-begin", Method: http.MethodPost, Path: "/api/v1/auth/passkeys/register/begin",
 		Summary:     "パスキー登録の開始",
-		Description: "端末へ渡す登録の設定と、手続きを結び付ける使い捨ての `challengeToken` を返す。トークンは5分で失効し、1回しか使えない。Cookieは使わないので、複数のタブで同時に手続きできる。登録済みのパスキーは `excludeCredentials` に入る。端末の本人確認(userVerification)と、利用者名なしで選べるパスキー(discoverable credential)を必須にする。上限は1人10件。" + csrfNote,
+		Description: "端末へ渡す登録の設定と、手続きを結び付ける使い捨ての `challengeToken` を返す。トークンは5分で失効し、1回しか使えない。Cookieは使わないので、複数のタブで同時に手続きできる。登録済みのパスキーは `excludeCredentials` に入る。端末の本人確認(userVerification)と、利用者名なしで選べるパスキー(discoverable credential)を必須にする。上限は1人10件。" + manageNote + csrfNote,
 		Tags:        tags, Security: security, Middlewares: mw, DefaultStatus: http.StatusOK,
-		Errors: []int{http.StatusUnauthorized, http.StatusConflict},
+		Errors: []int{http.StatusUnauthorized, http.StatusConflict, http.StatusTooManyRequests},
 	}, h.registerBegin)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-passkey-register-finish", Method: http.MethodPost, Path: "/api/v1/auth/passkeys/register/finish",
 		Summary:     "パスキー登録の完了",
-		Description: "開始で受け取った `challengeToken` と端末の応答を送る。検証して保存する。トークンは検証の成否にかかわらず、この呼び出しで使い切る。他の利用者が開始したトークンは使えない。パスワードの再入力は求めない。" + csrfNote,
+		Description: "開始で受け取った `challengeToken` と端末の応答を送る。検証して保存する。トークンは検証の成否にかかわらず、この呼び出しで使い切る。他の利用者が開始したトークンは使えない。パスワードの再入力は求めない。" + manageNote + csrfNote,
 		Tags:        tags, Security: security, Middlewares: mw, DefaultStatus: http.StatusCreated,
-		Errors: []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusConflict, http.StatusUnprocessableEntity},
+		Errors: []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusTooManyRequests},
 	}, h.registerFinish)
 
 	// ログインは未ログインの利用者が使うので、セキュリティ要件は付けない
@@ -171,17 +175,17 @@ func (h Handler) Register(api huma.API) {
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-passkey-rename", Method: http.MethodPatch, Path: "/api/v1/auth/passkeys/{id}",
 		Summary:     "パスキーの名前変更",
-		Description: "自分のパスキーだけを変えられる。他人のもの・無いものは区別せず404。" + csrfNote,
+		Description: "自分のパスキーだけを変えられる。他人のもの・無いものは区別せず404。" + manageNote + csrfNote,
 		Tags:        tags, Security: security, Middlewares: mw, DefaultStatus: http.StatusNoContent,
-		Errors: []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusUnprocessableEntity},
+		Errors: []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusUnprocessableEntity, http.StatusTooManyRequests},
 	}, h.rename)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-passkey-delete", Method: http.MethodDelete, Path: "/api/v1/auth/passkeys/{id}",
 		Summary:     "パスキーの削除",
-		Description: "自分のパスキーだけを物理削除する。他人のもの・無いものは区別せず404。パスワードの再入力は求めない。" + csrfNote,
+		Description: "自分のパスキーだけを物理削除する。他人のもの・無いものは区別せず404。パスワードの再入力は求めない。" + manageNote + csrfNote,
 		Tags:        tags, Security: security, Middlewares: mw, DefaultStatus: http.StatusNoContent,
-		Errors: []int{http.StatusUnauthorized, http.StatusNotFound},
+		Errors: []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusTooManyRequests},
 	}, h.delete)
 }
 
@@ -210,8 +214,20 @@ func toItem(c Credential) PasskeyItem {
 	return PasskeyItem{ID: c.ID, Name: c.Name, CreatedAt: c.CreatedAt, LastUsedAt: c.LastUsedAt}
 }
 
-func (h Handler) registerBegin(ctx context.Context, _ *struct{}) (*beginOutput, error) {
+// limitedUser は認証したあとで、利用者ごとの回数制限(登録・名前変更・削除)を数える。
+func (h Handler) limitedUser(ctx context.Context) (auth.User, error) {
 	user, err := h.user(ctx)
+	if err != nil {
+		return auth.User{}, err
+	}
+	if err := h.ManageLimit.CheckUser(user.ID); err != nil {
+		return auth.User{}, err
+	}
+	return user, nil
+}
+
+func (h Handler) registerBegin(ctx context.Context, _ *struct{}) (*beginOutput, error) {
+	user, err := h.limitedUser(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +248,7 @@ func (h Handler) registerBegin(ctx context.Context, _ *struct{}) (*beginOutput, 
 }
 
 func (h Handler) registerFinish(ctx context.Context, in *finishInput) (*finishOutput, error) {
-	user, err := h.user(ctx)
+	user, err := h.limitedUser(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +322,7 @@ func (h Handler) list(ctx context.Context, _ *struct{}) (*listOutput, error) {
 }
 
 func (h Handler) rename(ctx context.Context, in *renameInput) (*struct{}, error) {
-	user, err := h.user(ctx)
+	user, err := h.limitedUser(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +333,7 @@ func (h Handler) rename(ctx context.Context, in *renameInput) (*struct{}, error)
 }
 
 func (h Handler) delete(ctx context.Context, in *deleteInput) (*struct{}, error) {
-	user, err := h.user(ctx)
+	user, err := h.limitedUser(ctx)
 	if err != nil {
 		return nil, err
 	}

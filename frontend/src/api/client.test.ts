@@ -94,6 +94,38 @@ describe('request', () => {
     expect(error.message).toBe('使用済み')
   })
 
+  test('429はRetry-Afterの秒数を保ち、待ち時間つきの案内文にする', async () => {
+    const { request, ApiError } = await loadClient()
+    const limited = (retryAfter?: string) =>
+      new Response(
+        JSON.stringify({ type: 'about:blank', title: 'x', status: 429, code: 'too_many_requests', detail: 'サーバーの文' }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/problem+json',
+            ...(retryAfter === undefined ? {} : { 'Retry-After': retryAfter }),
+          },
+        },
+      )
+    const cases: [string | undefined, number | undefined, string][] = [
+      ['30', 30, '操作が多すぎます。30秒ほど待ってからもう一度お試しください。'],
+      ['720', 720, '操作が多すぎます。12分ほど待ってからもう一度お試しください。'],
+      [undefined, undefined, '操作が多すぎます。しばらく待ってからもう一度お試しください。'],
+      ['abc', undefined, '操作が多すぎます。しばらく待ってからもう一度お試しください。'],
+    ]
+    for (const [header, seconds, message] of cases) {
+      fetchMock.mockResolvedValueOnce(limited(header))
+      const error = (await request('POST', '/api/v1/auth/signup', {}).catch((e: unknown) => e)) as InstanceType<
+        typeof ApiError
+      >
+      expect(error).toBeInstanceOf(ApiError)
+      expect(error.problem.status).toBe(429)
+      expect(error.problem.code).toBe('too_many_requests')
+      expect(error.retryAfterSeconds).toBe(seconds)
+      expect(error.message).toBe(message)
+    }
+  })
+
   test('HTMLなど想定外の失敗応答は内容を出さず安全な文言にする', async () => {
     const { request, ApiError } = await loadClient()
     fetchMock.mockResolvedValue(new Response('<html>secret</html>', { status: 502 }))

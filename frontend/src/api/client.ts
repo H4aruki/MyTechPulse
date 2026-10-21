@@ -24,12 +24,34 @@ export class UnauthorizedError extends Error {
 /** 401以外の失敗。403/409/422/5xxや通信障害の区別を problem に保つ */
 export class ApiError extends Error {
   readonly problem: PartialProblem
+  /** 429のときだけ。Retry-After ヘッダー（秒）が読めたら入る */
+  readonly retryAfterSeconds?: number
 
-  constructor(problem: PartialProblem, message?: string) {
+  constructor(problem: PartialProblem, message?: string, retryAfterSeconds?: number) {
     super(message ?? problem.detail ?? `サーバーエラーが発生しました（HTTP ${problem.status}）。`)
     this.name = 'ApiError'
     this.problem = problem
+    this.retryAfterSeconds = retryAfterSeconds
   }
+}
+
+/** 回数制限（429）で利用者に見せる文言。待ち時間が分かれば添える */
+export function rateLimitMessage(retryAfterSeconds?: number): string {
+  const wait =
+    retryAfterSeconds !== undefined && retryAfterSeconds > 0
+      ? `${formatWait(retryAfterSeconds)}ほど`
+      : 'しばらく'
+  return `操作が多すぎます。${wait}待ってからもう一度お試しください。`
+}
+
+function formatWait(seconds: number): string {
+  if (seconds < 60) return `${seconds}秒`
+  return `${Math.ceil(seconds / 60)}分`
+}
+
+function parseRetryAfter(response: Response): number | undefined {
+  const value = Number(response.headers.get('Retry-After'))
+  return Number.isInteger(value) && value > 0 ? value : undefined
 }
 
 function isProblem(response: Response): boolean {
@@ -75,6 +97,10 @@ export async function request<T>(
       } catch {
         // 本文が壊れていてもステータスだけで失敗を表す
       }
+    }
+    if (response.status === 429) {
+      const retryAfter = parseRetryAfter(response)
+      throw new ApiError(problem, rateLimitMessage(retryAfter), retryAfter)
     }
     throw new ApiError(problem)
   }

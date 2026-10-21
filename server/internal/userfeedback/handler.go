@@ -8,6 +8,7 @@ import (
 
 	"github.com/H4aruki/MyTechPulse/server/internal/auth"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/httpx"
+	"github.com/H4aruki/MyTechPulse/server/internal/platform/ratelimit"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -15,6 +16,8 @@ type Handler struct {
 	Service    *Service
 	Auth       auth.Service
 	CookieName string
+	// Limit は利用者ごとの回数制限(表示・回答・追加回答・閉じる)。nilなら制限しない。
+	Limit *ratelimit.Limiter
 }
 type tokenKey struct{}
 
@@ -104,12 +107,13 @@ func (h Handler) Register(api huma.API) {
 	security := []map[string][]string{{"cookieAuth": {}}}
 	mw := huma.Middlewares{h.readToken}
 	tags := []string{"user-feedback"}
-	errs := []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusInternalServerError}
+	errs := []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusTooManyRequests, http.StatusInternalServerError}
+	const limitNote = "表示・回答・追加回答・閉じる、を合わせて利用者ごとに1分に10回まで。超えると429と `Retry-After`(秒)を返す。"
 	huma.Register(api, huma.Operation{OperationID: "user-feedback-status", Method: http.MethodGet, Path: "/api/v1/user-feedback/status", Summary: "アンケートの表示可否と直近の状態", Tags: tags, Security: security, Middlewares: mw, Errors: []int{http.StatusUnauthorized, http.StatusInternalServerError}}, h.status)
-	huma.Register(api, huma.Operation{OperationID: "user-feedback-present", Method: http.MethodPost, Path: "/api/v1/user-feedback/presentations", Summary: "アンケートの表示を要求", Tags: tags, Security: security, Middlewares: mw, Errors: errs}, h.present)
-	huma.Register(api, huma.Operation{OperationID: "user-feedback-submit", Method: http.MethodPost, Path: "/api/v1/user-feedback/submissions", Summary: "総合評価を保存", Tags: tags, Security: security, Middlewares: mw, Errors: errs}, h.submit)
-	huma.Register(api, huma.Operation{OperationID: "user-feedback-complete", Method: http.MethodPut, Path: "/api/v1/user-feedback/submissions/{submission_id}", Summary: "追加質問の回答を保存", Tags: tags, Security: security, Middlewares: mw, Errors: errs}, h.complete)
-	huma.Register(api, huma.Operation{OperationID: "user-feedback-dismiss", Method: http.MethodPost, Path: "/api/v1/user-feedback/dismissals", Summary: "回答せず閉じたことを保存", Tags: tags, Security: security, Middlewares: mw, Errors: errs}, h.dismiss)
+	huma.Register(api, huma.Operation{OperationID: "user-feedback-present", Method: http.MethodPost, Path: "/api/v1/user-feedback/presentations", Summary: "アンケートの表示を要求", Description: limitNote, Tags: tags, Security: security, Middlewares: mw, Errors: errs}, h.present)
+	huma.Register(api, huma.Operation{OperationID: "user-feedback-submit", Method: http.MethodPost, Path: "/api/v1/user-feedback/submissions", Summary: "総合評価を保存", Description: limitNote, Tags: tags, Security: security, Middlewares: mw, Errors: errs}, h.submit)
+	huma.Register(api, huma.Operation{OperationID: "user-feedback-complete", Method: http.MethodPut, Path: "/api/v1/user-feedback/submissions/{submission_id}", Summary: "追加質問の回答を保存", Description: limitNote, Tags: tags, Security: security, Middlewares: mw, Errors: errs}, h.complete)
+	huma.Register(api, huma.Operation{OperationID: "user-feedback-dismiss", Method: http.MethodPost, Path: "/api/v1/user-feedback/dismissals", Summary: "回答せず閉じたことを保存", Description: limitNote, Tags: tags, Security: security, Middlewares: mw, Errors: errs}, h.dismiss)
 }
 
 func (h Handler) readToken(ctx huma.Context, next func(huma.Context)) {
@@ -126,6 +130,18 @@ func (h Handler) userID(ctx context.Context) (int64, error) {
 		return 0, httpx.NewProblem(http.StatusUnauthorized, "unauthenticated", "ログインが必要です")
 	}
 	return session.User.ID, nil
+}
+
+// limitedUserID は認証したあとで、利用者ごとの回数制限を数える(表示・回答・追加回答・閉じる)。
+func (h Handler) limitedUserID(ctx context.Context) (int64, error) {
+	uid, err := h.userID(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if err := h.Limit.CheckUser(uid); err != nil {
+		return 0, err
+	}
+	return uid, nil
 }
 func problem(err error) error {
 	switch {
@@ -170,7 +186,7 @@ func (h Handler) status(ctx context.Context, _ *struct{}) (*statusOutput, error)
 	return out, nil
 }
 func (h Handler) present(ctx context.Context, in *presentationInput) (*presentationOutput, error) {
-	uid, err := h.userID(ctx)
+	uid, err := h.limitedUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +204,7 @@ func (h Handler) present(ctx context.Context, in *presentationInput) (*presentat
 	return &presentationOutput{Body: body}, nil
 }
 func (h Handler) submit(ctx context.Context, in *submissionInput) (*submissionOutput, error) {
-	uid, err := h.userID(ctx)
+	uid, err := h.limitedUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +215,7 @@ func (h Handler) submit(ctx context.Context, in *submissionInput) (*submissionOu
 	return &submissionOutput{Body: FeedbackSubmissionResponse{SubmissionID: r.SubmissionID, Status: string(r.Status), FollowupRequired: r.FollowupRequired}}, nil
 }
 func (h Handler) complete(ctx context.Context, in *followupInput) (*submissionOutput, error) {
-	uid, err := h.userID(ctx)
+	uid, err := h.limitedUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +230,7 @@ func (h Handler) complete(ctx context.Context, in *followupInput) (*submissionOu
 	return &submissionOutput{Body: FeedbackSubmissionResponse{SubmissionID: r.SubmissionID, Status: string(r.Status), FollowupRequired: r.FollowupRequired}}, nil
 }
 func (h Handler) dismiss(ctx context.Context, in *dismissalInput) (*dismissalOutput, error) {
-	uid, err := h.userID(ctx)
+	uid, err := h.limitedUserID(ctx)
 	if err != nil {
 		return nil, err
 	}

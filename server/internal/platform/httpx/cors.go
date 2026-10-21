@@ -50,7 +50,7 @@ func CORS(allowed []string, next http.Handler) http.Handler {
 		}
 		if ok {
 			setCORSOrigin(w, origin)
-			w.Header().Set("Access-Control-Expose-Headers", requestIDHeader)
+			w.Header().Set("Access-Control-Expose-Headers", requestIDHeader+", Retry-After") // 画面が429の待ち時間を読めるように
 		}
 		next.ServeHTTP(w, r)
 	})

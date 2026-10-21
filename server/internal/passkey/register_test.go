@@ -24,6 +24,7 @@ import (
 	"github.com/H4aruki/MyTechPulse/server/internal/auth"
 	"github.com/H4aruki/MyTechPulse/server/internal/passkey"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/config"
+	"github.com/H4aruki/MyTechPulse/server/internal/platform/ratelimit"
 )
 
 const (
@@ -241,6 +242,20 @@ type clock struct{ now time.Time }
 
 func (c *clock) Now() time.Time { return c.now }
 
+// tickClock は呼ばれるたびに10秒進む。回数制限(登録・名前変更・削除は1分に10回)に、1つのテストで多くの操作をしても当たらないようにする。
+// 回数制限そのものを調べるテストは、これを使わず clock を渡す。
+type tickClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+func (c *tickClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(10 * time.Second)
+	return c.now
+}
+
 // ---- テスト環境 ----
 
 type env struct {
@@ -252,9 +267,15 @@ type env struct {
 	logs     *bytes.Buffer
 }
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { return newEnvWithLimitClock(t, nil) }
+
+// newEnvWithLimitClock は回数制限の時刻を指定して環境を作る。nil なら呼ぶたびに進む時計(tickClock)を使う。
+func newEnvWithLimitClock(t *testing.T, limitClock ratelimit.Clock) *env {
 	t.Helper()
 	clk := &clock{now: time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC)}
+	if limitClock == nil {
+		limitClock = &tickClock{now: clk.now}
+	}
 	logs := &bytes.Buffer{}
 	logger := slog.New(slog.NewTextHandler(logs, nil))
 	w, err := passkey.NewWebAuthn(passkey.Config{RPID: testRPID, RPDisplayName: "MyTechPulse", Origins: []string{testOrigin}})
@@ -273,7 +294,7 @@ func newEnv(t *testing.T) *env {
 	}
 	authSvc := &auth.Service{Sessions: sessions, Clock: clk}
 	h, _ := app.New(config.Config{Environment: "local", CookieName: "mtp_session", CORSOrigins: []string{testOrigin}},
-		app.Dependencies{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Auth: authSvc, Passkey: svc})
+		app.Dependencies{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Auth: authSvc, Passkey: svc, Clock: limitClock})
 	return &env{t: t, h: h, clock: clk, passkeys: pk, ch: ch, logs: logs}
 }
 

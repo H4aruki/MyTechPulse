@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { ApiError } from '@/api/client'
+import { ApiError, rateLimitMessage } from '@/api/client'
 import { signup } from '@/api/endpoints'
 import { authQueryKey } from '@/lib/auth'
 import { SignupPage } from './SignupPage'
@@ -100,6 +100,23 @@ describe('SignupPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('入力内容に誤りがあります')
     expect(screen.getByRole('heading', { name: '新規登録' })).toBeInTheDocument()
+  })
+
+  test('429は待ってからやり直す案内を出して最初の手順へ戻り、再送しない', async () => {
+    vi.mocked(signup).mockRejectedValue(
+      new ApiError({ status: 429, code: 'too_many_requests' }, rateLimitMessage(720), 720),
+    )
+    renderSignup()
+
+    await goToTagStep()
+    selectTags('Go')
+    clickRegister()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '操作が多すぎます。12分ほど待ってからもう一度お試しください。',
+    )
+    expect(screen.getByRole('heading', { name: '新規登録' })).toBeInTheDocument()
+    expect(signup).toHaveBeenCalledTimes(1)
   })
 
   test('その他の失敗はApiErrorの文言を出して最初の手順へ戻り、再送しない', async () => {

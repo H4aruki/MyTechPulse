@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { ApiError, UnauthorizedError } from '@/api/client'
+import { ApiError, rateLimitMessage, UnauthorizedError } from '@/api/client'
 import {
   fetchFeed,
   fetchFeedbackStatus,
@@ -169,6 +169,18 @@ describe('ArticlesPage', () => {
     renderArticles()
 
     expect(await screen.findByRole('heading', { name: 'ログイン' })).toBeInTheDocument()
+  })
+
+  test('記事取得が429なら待ってからやり直す案内と再読み込みを出す', async () => {
+    vi.mocked(fetchFeed).mockRejectedValueOnce(
+      new ApiError({ status: 429, code: 'too_many_requests' }, rateLimitMessage(2), 2),
+    )
+    renderArticles()
+
+    expect(
+      await screen.findByText('操作が多すぎます。2秒ほど待ってからもう一度お試しください。'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '再読み込み' })).toBeInTheDocument()
   })
 
   test('記事取得のその他の失敗は再読み込みを出す', async () => {
