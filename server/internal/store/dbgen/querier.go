@@ -55,7 +55,13 @@ type Querier interface {
 	ListFeedbackQuestions(ctx context.Context, formID int64) ([]ListFeedbackQuestionsRow, error)
 	ListFetchRunsForSlot(ctx context.Context, slotAt pgtype.Timestamptz) ([]ListFetchRunsForSlotRow, error)
 	ListPasskeysByUser(ctx context.Context, userID int32) ([]AuthPasskey, error)
+	// フィードの空き枠の候補。タグを問わず、提供元の記事をいいね数の多い順に返す。
+	ListPopularArticles(ctx context.Context, arg ListPopularArticlesParams) ([]ListPopularArticlesRow, error)
 	ListRecommendations(ctx context.Context, userID int32) ([]ListRecommendationsRow, error)
+	// フィードの候補（Issue #66 段取り2）。指定したタグ（前後の空白を除いた小文字で比べる）のどれかが付いた、
+	// 提供元の記事を新しい順に返す。tags には記事に付いた全タグの表示名をまとめる。
+	// タグを先に tag 表で引き、article_tags は ("tag_ID", published_at) の索引で絞る。
+	ListTaggedArticles(ctx context.Context, arg ListTaggedArticlesParams) ([]ListTaggedArticlesRow, error)
 	ListTagsForMatching(ctx context.Context) ([]Tag, error)
 	LockFeedbackPrompt(ctx context.Context, id pgtype.UUID) (LockFeedbackPromptRow, error)
 	LockFeedbackSubmission(ctx context.Context, id pgtype.UUID) (LockFeedbackSubmissionRow, error)

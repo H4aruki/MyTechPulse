@@ -196,6 +196,138 @@ func (q *Queries) ListFetchRunsForSlot(ctx context.Context, slotAt pgtype.Timest
 	return items, nil
 }
 
+const listPopularArticles = `-- name: ListPopularArticles :many
+SELECT a.id, a.source, a.title, a.url, a.author_name, a.likes, a.published_at,
+       COALESCE((SELECT array_agg(t2.tag_name ORDER BY t2."tag_ID")
+                 FROM article_tags at2 JOIN tag t2 ON t2."tag_ID" = at2."tag_ID"
+                 WHERE at2.article_id = a.id), '{}')::text[] AS tags
+FROM articles a
+WHERE a.source = $1 AND a.published_at >= $2
+ORDER BY a.likes DESC, a.published_at DESC, a.id DESC
+LIMIT $3
+`
+
+type ListPopularArticlesParams struct {
+	Source  string
+	Since   pgtype.Timestamptz
+	MaxRows int32
+}
+
+type ListPopularArticlesRow struct {
+	ID          int64
+	Source      string
+	Title       string
+	Url         string
+	AuthorName  string
+	Likes       int32
+	PublishedAt pgtype.Timestamptz
+	Tags        []string
+}
+
+// フィードの空き枠の候補。タグを問わず、提供元の記事をいいね数の多い順に返す。
+func (q *Queries) ListPopularArticles(ctx context.Context, arg ListPopularArticlesParams) ([]ListPopularArticlesRow, error) {
+	rows, err := q.db.Query(ctx, listPopularArticles, arg.Source, arg.Since, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPopularArticlesRow{}
+	for rows.Next() {
+		var i ListPopularArticlesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Source,
+			&i.Title,
+			&i.Url,
+			&i.AuthorName,
+			&i.Likes,
+			&i.PublishedAt,
+			&i.Tags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaggedArticles = `-- name: ListTaggedArticles :many
+WITH matched AS (
+    SELECT DISTINCT at.article_id
+    FROM tag t
+    JOIN article_tags at ON at."tag_ID" = t."tag_ID"
+    WHERE lower(btrim(t.tag_name)) = ANY($4::text[])
+      AND at.published_at >= $2
+)
+SELECT a.id, a.source, a.title, a.url, a.author_name, a.likes, a.published_at,
+       COALESCE((SELECT array_agg(t2.tag_name ORDER BY t2."tag_ID")
+                 FROM article_tags at2 JOIN tag t2 ON t2."tag_ID" = at2."tag_ID"
+                 WHERE at2.article_id = a.id), '{}')::text[] AS tags
+FROM articles a
+JOIN matched m ON m.article_id = a.id
+WHERE a.source = $1 AND a.published_at >= $2
+ORDER BY a.published_at DESC, a.id DESC
+LIMIT $3
+`
+
+type ListTaggedArticlesParams struct {
+	Source  string
+	Since   pgtype.Timestamptz
+	MaxRows int32
+	Tags    []string
+}
+
+type ListTaggedArticlesRow struct {
+	ID          int64
+	Source      string
+	Title       string
+	Url         string
+	AuthorName  string
+	Likes       int32
+	PublishedAt pgtype.Timestamptz
+	Tags        []string
+}
+
+// フィードの候補（Issue #66 段取り2）。指定したタグ（前後の空白を除いた小文字で比べる）のどれかが付いた、
+// 提供元の記事を新しい順に返す。tags には記事に付いた全タグの表示名をまとめる。
+// タグを先に tag 表で引き、article_tags は ("tag_ID", published_at) の索引で絞る。
+func (q *Queries) ListTaggedArticles(ctx context.Context, arg ListTaggedArticlesParams) ([]ListTaggedArticlesRow, error) {
+	rows, err := q.db.Query(ctx, listTaggedArticles,
+		arg.Source,
+		arg.Since,
+		arg.MaxRows,
+		arg.Tags,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTaggedArticlesRow{}
+	for rows.Next() {
+		var i ListTaggedArticlesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Source,
+			&i.Title,
+			&i.Url,
+			&i.AuthorName,
+			&i.Likes,
+			&i.PublishedAt,
+			&i.Tags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTagsForMatching = `-- name: ListTagsForMatching :many
 SELECT "tag_ID", tag_name FROM tag
 `

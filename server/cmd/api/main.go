@@ -70,6 +70,11 @@ func run(ctx context.Context, lookup func(string) (string, bool), stdout, stderr
 		Providers:   recommendation.ProviderSet{Qiita: qiita.New(fetcher, cfg.QiitaToken), Zenn: zenn.New(fetcher)},
 		FeedTimeout: cfg.FeedTimeout,
 	}
+	// DB読み出しは一括取得が有効なときだけ(Issue #66)。有効ならフィードは外部APIを呼ばない。
+	// 無効な環境(開発・試験)では、DBに記事が貯まらないため、従来の即時検索を使う。
+	if cfg.ArticleFetch.Enabled {
+		recommendService.Articles = store.NewFeedArticles(pool)
+	}
 	feedbackService := &userfeedback.Service{Repo: store.NewFeedback(pool), Clock: auth.SystemClock{}, Logger: logger}
 	// パスワードとパスキーで、同じ制限器を共有する(失敗を合算して数える)
 	passkeyService, err := newPasskeyService(cfg, pool, logger, authService.Limiter)

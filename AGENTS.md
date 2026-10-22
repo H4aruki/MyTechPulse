@@ -125,7 +125,7 @@ node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/
 - `server/internal/auth/`: 登録・ログイン・ログアウト・本人確認（サーバー側セッション）
 - `server/internal/recommendation/`: 記事の取得・順位付け・フィード。`interest/` は興味度とクリック学習
 - `server/internal/provider/`: Qiita・Zennの取得（`qiita/`、`zenn/`）。`article/` は記事の型と検証
-- `server/internal/articlefetch/`: 記事の定期一括取得（日本時間 6:00/11:30/16:30。DBの `articles` に貯める。`ARTICLE_FETCH_ENABLED=true` のときだけ動き、既定は無効。フィードはまだ読まない。[Issue #66](https://github.com/H4aruki/MyTechPulse/issues/66)）
+- `server/internal/articlefetch/`: 記事の定期一括取得（日本時間 6:00/11:30/16:30。DBの `articles` に貯める。`ARTICLE_FETCH_ENABLED=true` のときだけ動き、既定は無効。有効なときは、フィードもこの表から読み、外部APIを呼ばない（`recommendation.Service.Articles`）。無効なときは従来の即時検索。[Issue #66](https://github.com/H4aruki/MyTechPulse/issues/66)）
 - `server/internal/health/`: 稼働確認（`/health/live`、`/health/ready`）
 - `server/internal/store/`、`server/db/`: DBアクセス（sqlcで生成）、問い合わせ（`db/queries/`）、移行（`db/migrations/`）
 - `server/internal/platform/`: 設定・ログ・DB接続・HTTPの共通部品
@@ -141,6 +141,7 @@ node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/
 2. 記事クリック時は、全タグの興味度を0.8倍（`DecayNumerator / DecayDenominator` = 8/10）に減衰し、クリックした記事のタグへ0.2（`ClickBoost` = 2000）を加えます。上限は1です。加えるのは `tag` 表にすでにあるタグだけです。クリックAPIは送られたタグ名から `tag` の行を作らず、知らないタグは無視します（[Issue #239](https://github.com/H4aruki/MyTechPulse/issues/239)）。
 3. 記事取得は、興味度上位5タグを使います（興味度0のタグは入れない。同じ強さは正規化したタグ名の順。`interest.Top`。アンケートの興味スナップショットも同じ選び方）。QiitaとZennから並行取得し、Qiitaは直近5日、Zennは直近14日（タグで見つけた新しいものが0件なら古いものを使う）で絞ります。順位は提供元で違います。Qiitaはタグ重みの合計 × (likes + 1)、Zennはタグ重みの合計のみです。提供元ごとに上位10件を返します。Zennに likes を掛けない理由は、IssueやPRのコメントには残っていません。移行設計（`docs/superpowers/specs/2026-09-14-go-backend-migration-design.md`）には「提供元側の並び順を利用するため」とあります（実装は [PR #145](https://github.com/H4aruki/MyTechPulse/pull/145)）。
    - 興味度が0より大きいタグが5つに満たないときは、提供元ごとに1回だけ、タグを問わない人気の記事（`provider.Client.Popular`）も取り、空いた枠の候補にします。点数0の記事どうしは、いいね数の多い順です。
+   - 上は即時検索（`ARTICLE_FETCH_ENABLED` が無効。開発・試験）の動きです。有効なとき（本番）は、外部APIを呼ばず、一括取得で貯めたDB（`articles`・`article_tags`）から同じ期間・順位付けで読みます（Zennの古い記事は30日以内）。提供元ごとに、タグで見つけた記事が10件に満たなければ、タグの数を問わず、DBの人気の記事（いいね数順に20件まで読み、重複を除いて同じ点数で並べ直す。Zennは14日以内だけ）で後ろを埋めます。DBの失敗は500で、即時検索へは切り替えません（`recommendation.Service.getFromDB`）。
 4. タグの比較は、前後の空白を除いて小文字にそろえて行います（`interest.NormalizeTag`）。大文字小文字だけが違うタグが、DBに複数あってはいけません。
 5. 外部提供元の片方だけが失敗したときは、成功した側の記事を返し、本文の `warnings` に知らせます。両方失敗したときだけエラーです。
 
