@@ -149,14 +149,11 @@ jobs:
   # 次の試験は、ここでは実行しない。
   # - ops/deploy_go_integration_test.sh、ops/tests/test_database_restore_integration.sh:
   #   本物のDocker・PostgreSQLと、専用の環境変数が要るため
-  # - ops/tests/test_database_safety.sh: ripgrep（rg）を使うが、ubuntu-latest に
-  #   入っている保証がないため（依存は追加しない方針）
-  # なお test_fix_initial_interest_240.sh も、移行の確認の1か所だけ rg を使う。
-  # rg が無いとその確認は「該当なし」と同じ扱いで通ってしまうが、ほかの確認は動くので含める。
+  # なお test_fix_initial_interest_240.sh と test_database_safety.sh は、確認に grep だけを使い
+  # （DBは要らない）、ここで実行できる。
   #
-  # 公開の工程（go-release の needs）には入れていない。既存の試験
-  # （scripts/verify-go-deploy-gated.test.mjs）はこのjobを公開の前提に求めておらず、
-  # 公開を止める条件を広げるかどうかは、別に決めるため。失敗すれば、ほかの検査と同じく赤く出る
+  # 運用スクリプトは本番の入れ替えそのものなので、公開の工程（go-release の needs）に
+  # 入れている。壊れたまま配布物を作らないようにするため
   ops-test:
     name: 運用スクリプトの試験
     runs-on: ubuntu-latest
@@ -177,6 +174,9 @@ jobs:
 
       - name: 古いバックアップの削除（prune_backups.sh）
         run: bash ops/tests/test_prune_backups.sh
+
+      - name: DB運用スクリプトの安全の静的検査（test_database_safety.sh）
+        run: bash ops/tests/test_database_safety.sh
 
   go-check:
     name: Goバックエンドの検査
@@ -334,7 +334,7 @@ jobs:
 
   go-release:
     name: 配布物の作成
-    needs: [frontend-lint, hooks-test, go-check, go-generated, go-image, deploy-changes]
+    needs: [frontend-lint, hooks-test, ops-test, go-check, go-generated, go-image, deploy-changes]
     if: needs.deploy-changes.outputs.needed == 'true'
     permissions:
       contents: read
