@@ -142,6 +142,42 @@ jobs:
           node scripts/check-doc-links.mjs
           node scripts/check-current-docs.mjs
 
+  # サーバーで動かす運用スクリプト（ops/）の試験。偽のdocker・curlを使い、
+  # ネットワーク・DB・本番には触れない。手元で実行し忘れると、壊れたまま
+  # main に入り、本番の入れ替えのときに初めて分かるため、ここで毎回確かめる。
+  #
+  # 次の試験は、ここでは実行しない。
+  # - ops/deploy_go_integration_test.sh、ops/tests/test_database_restore_integration.sh:
+  #   本物のDocker・PostgreSQLと、専用の環境変数が要るため
+  # - ops/tests/test_database_safety.sh: ripgrep（rg）を使うが、ubuntu-latest に
+  #   入っている保証がないため（依存は追加しない方針）
+  # なお test_fix_initial_interest_240.sh も、移行の確認の1か所だけ rg を使う。
+  # rg が無いとその確認は「該当なし」と同じ扱いで通ってしまうが、ほかの確認は動くので含める。
+  #
+  # 公開の工程（go-release の needs）には入れていない。既存の試験
+  # （scripts/verify-go-deploy-gated.test.mjs）はこのjobを公開の前提に求めておらず、
+  # 公開を止める条件を広げるかどうかは、別に決めるため。失敗すれば、ほかの検査と同じく赤く出る
+  ops-test:
+    name: 運用スクリプトの試験
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Go版の入れ替え（deploy_go.sh）
+        run: bash ops/deploy_go_test.sh
+
+      - name: 配布物の反映（deploy_release.sh）
+        run: bash ops/deploy_release_test.sh
+
+      - name: 配布物の検証（verify_release.sh）
+        run: bash ops/verify_release_test.sh
+
+      - name: 初期の興味度の修正（fix_initial_interest_240.sh）
+        run: bash ops/tests/test_fix_initial_interest_240.sh
+
+      - name: 古いバックアップの削除（prune_backups.sh）
+        run: bash ops/tests/test_prune_backups.sh
+
   go-check:
     name: Goバックエンドの検査
     runs-on: ubuntu-latest

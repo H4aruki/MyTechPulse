@@ -161,6 +161,7 @@ bash ops/deploy_go_test.sh
 ```
 
 - DBが要る試験は、環境変数 `TEST_DATABASE_URL` が無いとスキップされます。
+- `ops/` の試験のうち、Docker・DBが要らないものは、CI（`ci.yml` の `ops-test`）でも実行します。ripgrep が要る `test_database_safety.sh` は除きます。また、`test_fix_initial_interest_240.sh` の中で ripgrep を使う確認が1つあり、CIでは実質的に飛ばされます。
 - Windowsでは、`gofmt -l` が改行コードの違いで、実際には問題のないファイルも列挙することがあります。その場合はCIの結果で判断してください。
 - 判定の基準は、Goは標準の `gofmt`・`go vet`、フロントエンドは `frontend/.oxlintrc.json` です。
 
