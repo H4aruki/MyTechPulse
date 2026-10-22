@@ -108,13 +108,16 @@ type Page struct {
 	Articles []article.Article
 	// RateRemaining は応答の Rate-Remaining（このトークンの、この時間枠の残り回数）。読めなければ -1。
 	RateRemaining int
+	// Skipped は、必須項目が欠けるなどで飛ばした記事の数。
+	Skipped int
 }
 
-// FullPage は、このページが満杯（次のページがありうる）かを返す。
-func (c Client) FullPage(p Page) bool { return len(p.Articles) >= c.perPage() }
+// FullPage は、このページが満杯（次のページがありうる）かを返す。飛ばした記事も件数に含める。
+func (c Client) FullPage(p Page) bool { return len(p.Articles)+p.Skipped >= c.perPage() }
 
 // ListCreated は、UTCの日付 day に作られた記事を、新しい順の page ページ目（1始まり）で返す（定期一括取得用）。
-// 記事ID（external_id）と著者も読む。タグが0件の記事も返す。必須項目が欠けた記事があれば応答不正にする。
+// 記事ID（external_id）と著者も読む。タグが0件の記事も返す。必須項目が欠けた記事はその記事だけ飛ばし、
+// Skipped に数える。ページ内の全件が不正なら応答不正にする。
 // Qiitaが日付をどのタイムゾーンで解釈しても、連続する日付をたどれば取りこぼさない（重なりは呼び出し側が upsert で吸収する）。
 func (c Client) ListCreated(ctx context.Context, day time.Time, page int) (Page, error) {
 	perPage := c.perPage()
@@ -138,9 +141,13 @@ func (c Client) ListCreated(ctx context.Context, day time.Time, page int) (Page,
 	for _, it := range items {
 		a, ok := convertBatch(it)
 		if !ok {
-			return out, provider.Annotate(&provider.Error{Kind: provider.ErrInvalidResponse}, providerName)
+			out.Skipped++
+			continue
 		}
 		out.Articles = append(out.Articles, a)
+	}
+	if len(items) > 0 && len(out.Articles) == 0 {
+		return out, provider.Annotate(&provider.Error{Kind: provider.ErrInvalidResponse}, providerName)
 	}
 	return out, nil
 }

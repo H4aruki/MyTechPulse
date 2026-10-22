@@ -35,6 +35,11 @@ import (
 
 const shutdownTimeout = 10 * time.Second
 
+// articleFetchMaxBytes は記事の定期一括取得での1応答の上限。Qiitaの1ページ20件は本文を含み、
+// PROVIDER_MAX_BYTES(既定2MB)を超えうるため大きくする(20件で約2.3MBの実測あり)。
+// PROVIDER_MAX_BYTES の方が大きければ、そちらを使う。
+const articleFetchMaxBytes int64 = 8 << 20
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -91,8 +96,7 @@ func startArticleFetch(ctx context.Context, cfg config.Config, pool *pgxpool.Poo
 	if !cfg.ArticleFetch.Enabled {
 		return func() {}
 	}
-	fetcher := provider.NewJSONFetcher(cfg.ProviderTimeout, cfg.ProviderMaxBytes)
-	fetcher.MaxAttempts = 1
+	fetcher := newArticleFetchFetcher(cfg)
 	repo := store.NewArticleFetch(pool)
 	clock := articlefetch.SystemClock{}
 	fetchLogger := logger.With("component", "articlefetch")
@@ -127,6 +131,13 @@ func startArticleFetch(ctx context.Context, cfg config.Config, pool *pgxpool.Poo
 			logger.Warn("article fetch did not stop in time")
 		}
 	}
+}
+
+// newArticleFetchFetcher は記事の定期一括取得用の取得部品を返す。内部の再試行はせず、1応答の上限を広げる。
+func newArticleFetchFetcher(cfg config.Config) provider.JSONFetcher {
+	fetcher := provider.NewJSONFetcher(cfg.ProviderTimeout, max(cfg.ProviderMaxBytes, articleFetchMaxBytes))
+	fetcher.MaxAttempts = 1
+	return fetcher
 }
 
 // newAuthService は認証の実依存を組み立てる。

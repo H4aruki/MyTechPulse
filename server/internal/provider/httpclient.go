@@ -162,9 +162,17 @@ func (f JSONFetcher) handle(ctx context.Context, req *http.Request, resp *http.R
 	}
 }
 
+// ErrResponseTooLarge は、応答本文が MaxBytes を超えたことを表す原因。
+// 分類（Kind）は ErrInvalidResponse のままで、errors.Is で他の応答不正と区別できる。
+var ErrResponseTooLarge = errors.New("provider response too large")
+
+func tooLarge(status int) *Error {
+	return &Error{Kind: ErrInvalidResponse, StatusCode: status, cause: ErrResponseTooLarge}
+}
+
 func (f JSONFetcher) decode(ctx context.Context, resp *http.Response, out any) *Error {
 	if resp.ContentLength > f.MaxBytes {
-		return newError(ErrInvalidResponse, resp.StatusCode)
+		return tooLarge(resp.StatusCode)
 	}
 	// 上限+1バイトまで読み、超えたかどうかだけを判定する。
 	body, err := io.ReadAll(io.LimitReader(resp.Body, f.MaxBytes+1))
@@ -174,7 +182,7 @@ func (f JSONFetcher) decode(ctx context.Context, resp *http.Response, out any) *
 		return e
 	}
 	if int64(len(body)) > f.MaxBytes {
-		return newError(ErrInvalidResponse, resp.StatusCode)
+		return tooLarge(resp.StatusCode)
 	}
 	if err := json.Unmarshal(body, out); err != nil {
 		return newError(ErrInvalidResponse, resp.StatusCode)

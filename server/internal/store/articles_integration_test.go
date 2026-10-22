@@ -116,6 +116,31 @@ func TestArticleFetchTagsOnlyLinkToExistingTagsAndNeverCreateTags(t *testing.T) 
 	}
 }
 
+func TestArticleFetchStripsNULAndClampsLikes(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	s := store.NewArticleFetch(pool)
+	nul := record(article.SourceQiita, "nul", "https://qiita.com/u/items/nul", articlePublished)
+	nul.Article.Title, nul.Article.Author, nul.Article.Likes = "ti\x00tle", "au\x00thor", -3
+	big := record(article.SourceQiita, "big", "https://qiita.com/u/items/big", articlePublished)
+	big.Article.Likes = 1 << 40
+	res, err := s.SaveArticles(ctx, []articlefetch.Record{nul, big})
+	if err != nil || res.Saved != 2 || res.Skipped != 0 {
+		t.Fatalf("res = %+v, err = %v", res, err)
+	}
+	var title, author string
+	var likes int64
+	if err := pool.QueryRow(ctx, `SELECT title, author_name, likes FROM articles WHERE external_id = 'nul'`).Scan(&title, &author, &likes); err != nil {
+		t.Fatal(err)
+	}
+	if title != "title" || author != "author" || likes != 0 {
+		t.Fatalf("title = %q, author = %q, likes = %d", title, author, likes)
+	}
+	if n := queryInt(t, pool, `SELECT likes FROM articles WHERE external_id = 'big'`); n != 2147483647 {
+		t.Fatalf("likes = %d", n)
+	}
+}
+
 func TestArticleFetchSkipsOnlyTheArticleWithDuplicateURL(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)

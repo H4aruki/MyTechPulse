@@ -75,6 +75,22 @@ func TestListCreatedRejectsMissingRequiredFields(t *testing.T) {
 	}
 }
 
+func TestListCreatedSkipsOnlyArticlesMissingRequiredFields(t *testing.T) {
+	broken := strings.Replace(batchItem, `,"user":{"id":"alice"}`, "", 1)
+	srv, _ := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "["+batchItem+","+broken+"]")
+	})
+	c := newClient(srv)
+	c.PerPage = 2
+	page, err := c.ListCreated(context.Background(), time.Now(), 1)
+	if err != nil || len(page.Articles) != 1 || page.Skipped != 1 {
+		t.Fatalf("page = %+v, err = %v", page, err)
+	}
+	if !c.FullPage(page) {
+		t.Fatal("飛ばした記事も含めて満杯なら、次のページがありうる")
+	}
+}
+
 func TestListCreatedRateRemainingMissingIsMinusOne(t *testing.T) {
 	srv, _ := serve(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "[]") })
 	page, err := newClient(srv).ListCreated(context.Background(), time.Now(), 1)

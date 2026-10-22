@@ -454,8 +454,8 @@ func TestJobSaveFailureStopsRunAndHidesDBError(t *testing.T) {
 			t.Fatalf("%q が漏れている: message = %q, logs = %s", leak, res.Message, f.logs.String())
 		}
 	}
-	if len(f.store.deletes) != 0 {
-		t.Fatalf("保存に失敗したときは期限切れの削除をしない: %v", f.store.deletes)
+	if len(f.store.deletes) != 2 || f.store.deleteCtxErr != nil {
+		t.Fatalf("保存に失敗しても、取り消されていない ctx で期限切れを消す: deletes = %v, ctxErr = %v", f.store.deletes, f.store.deleteCtxErr)
 	}
 	if n := f.q.callCount(); n > qiitaWorkers*2 {
 		t.Fatalf("保存に失敗しても通信し続けた: calls = %d", n)
@@ -480,18 +480,72 @@ func TestJobCanceledContext(t *testing.T) {
 	if res.Status != StatusFailed || !strings.Contains(res.Message, "中断") {
 		t.Fatalf("res = %+v", res)
 	}
-	if f.q.callCount() != 0 || f.z.callCount() != 0 || len(f.store.deletes) != 0 {
-		t.Fatal("取り消し後は通信も削除もしない")
+	if f.q.callCount() != 0 || f.z.callCount() != 0 {
+		t.Fatal("取り消し後は通信しない")
+	}
+	if len(f.store.deletes) != 2 || f.store.deleteCtxErr != nil || !f.store.deleteHasDead {
+		t.Fatalf("中断されても、期限付きの別の ctx で期限切れを消す: deletes = %v, ctxErr = %v, deadline = %v",
+			f.store.deletes, f.store.deleteCtxErr, f.store.deleteHasDead)
 	}
 }
 
 func TestJobTimeoutMessage(t *testing.T) {
 	f := newJobFixture()
+	f.store.deleted = 3
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
 	res := f.job.Execute(ctx)
 	if !strings.Contains(res.Message, "実行時間の上限") {
 		t.Fatalf("res = %+v", res)
+	}
+	if res.Deleted != 6 || f.store.deleteCtxErr != nil {
+		t.Fatalf("時間切れでも期限切れを消す: deleted = %d, ctxErr = %v", res.Deleted, f.store.deleteCtxErr)
+	}
+}
+
+func TestJobRetentionFailureIsOnlyLogged(t *testing.T) {
+	f := newJobFixture()
+	f.store.deleteErr = errors.New("secret delete detail")
+	res := f.job.Execute(context.Background())
+	if res.Status != StatusSucceeded || res.Deleted != 0 || strings.Contains(res.Message, "secret") {
+		t.Fatalf("res = %+v", res)
+	}
+	if !strings.Contains(f.logs.String(), "retention delete failed") || strings.Contains(f.logs.String(), "secret") {
+		t.Fatalf("logs = %s", f.logs.String())
+	}
+}
+
+func TestQiitaOtherInvalidResponseStillGivesUpTheDay(t *testing.T) {
+	f := newJobFixture()
+	f.q.fn = func(day time.Time, p int) (qiita.Page, error) {
+		if day.Day() == 22 && p == 1 {
+			return page(-1), qErr(provider.ErrInvalidResponse, 200)
+		}
+		return page(-1), nil
+	}
+	res := f.job.Execute(context.Background())
+	if res.QiitaRequests != 6 || strings.Contains(res.Message, "大きすぎる") {
+		t.Fatalf("res = %+v, calls = %v", res, f.q.calls)
+	}
+}
+
+func TestQiitaSkippedArticlesAreCountedAndLogged(t *testing.T) {
+	f := newJobFixture()
+	f.q.fn = func(day time.Time, p int) (qiita.Page, error) {
+		if day.Day() == 22 && p == 1 {
+			pg := page(-1, qArticle("ok"))
+			pg.Skipped = 1 // 飛ばした記事も含めて満杯(2件)なので、次のページも取りに行く
+			return pg, nil
+		}
+		return page(-1), nil
+	}
+	res := f.job.Execute(context.Background())
+	if res.Status != StatusSucceeded || res.Upserted != 1 || res.QiitaRequests != 7 {
+		t.Fatalf("res = %+v, calls = %v", res, f.q.calls)
+	}
+	logs := f.logs.String()
+	if !strings.Contains(logs, "qiita_invalid_articles=1") || !strings.Contains(logs, "missing fields skipped") {
+		t.Fatalf("logs = %s", logs)
 	}
 }
 

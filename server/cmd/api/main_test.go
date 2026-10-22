@@ -92,3 +92,17 @@ func TestStartArticleFetchStopsOnShutdown(t *testing.T) {
 		t.Fatal("停止が終わらない")
 	}
 }
+
+func TestArticleFetchFetcherWidensMaxBytesAndDisablesRetry(t *testing.T) {
+	for name, tc := range map[string]struct{ cfg, want int64 }{
+		"既定の2MBは8MBへ広げる": {cfg: 2 << 20, want: articleFetchMaxBytes},
+		"大きい設定はそのまま使う":   {cfg: 16 << 20, want: 16 << 20},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newArticleFetchFetcher(config.Config{ProviderTimeout: time.Second, ProviderMaxBytes: tc.cfg})
+			if f.MaxBytes != tc.want || f.MaxAttempts != 1 {
+				t.Fatalf("MaxBytes = %d, MaxAttempts = %d", f.MaxBytes, f.MaxAttempts)
+			}
+		})
+	}
+}

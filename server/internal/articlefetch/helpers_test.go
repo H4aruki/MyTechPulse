@@ -149,6 +149,10 @@ type fakeJobStore struct {
 	listErr   error
 	deletes   map[string]time.Time
 	deleted   int64
+	deleteErr error
+	// deleteCtxErr は、DeleteExpired が受けた ctx の Err()。
+	deleteCtxErr  error
+	deleteHasDead bool // DeleteExpired が受けた ctx に期限があったか
 }
 
 func (s *fakeJobStore) ListTags(context.Context) ([]TagRef, error) { return s.tags, s.listErr }
@@ -166,13 +170,18 @@ func (s *fakeJobStore) SaveArticles(_ context.Context, recs []Record) (SaveResul
 	return SaveResult{Saved: len(recs)}, nil
 }
 
-func (s *fakeJobStore) DeleteExpired(_ context.Context, source string, before time.Time) (int64, error) {
+func (s *fakeJobStore) DeleteExpired(ctx context.Context, source string, before time.Time) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.deletes == nil {
 		s.deletes = map[string]time.Time{}
 	}
 	s.deletes[source] = before
+	s.deleteCtxErr = ctx.Err()
+	_, s.deleteHasDead = ctx.Deadline()
+	if s.deleteErr != nil {
+		return 0, s.deleteErr
+	}
 	return s.deleted, nil
 }
 
@@ -202,7 +211,7 @@ func (f *fakeQiita) ListCreated(_ context.Context, day time.Time, page int) (qii
 	return f.fn(day, page)
 }
 
-func (f *fakeQiita) FullPage(p qiita.Page) bool { return len(p.Articles) >= f.perPage }
+func (f *fakeQiita) FullPage(p qiita.Page) bool { return len(p.Articles)+p.Skipped >= f.perPage }
 
 func (f *fakeQiita) callCount() int {
 	f.mu.Lock()

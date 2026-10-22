@@ -31,6 +31,8 @@ const (
 	maxMessageRunes = 500
 	// maxLoggedTopics は、記事が0件だったトピックとして、ログに出す最大数。
 	maxLoggedTopics = 30
+	// retainTimeout は期限切れの削除にかける時間の上限。実行の時間切れ・中断の後でも削除できるよう、別の期限にする。
+	retainTimeout = 30 * time.Second
 )
 
 // 固定の説明文。fetch_runs.error_message に入れてよいのは、これと provider.Error の文だけ。
@@ -44,6 +46,7 @@ const (
 	msgPageLimit   = "Qiitaの1日分が検索の上限に達したため、取りこぼしの可能性があります"
 	msgZennDown    = "Zennの失敗が続いたため、残りのトピックを取りに行きませんでした"
 	msgTagsFailed  = "タグの一覧を読めませんでした"
+	msgPageTooBig  = "Qiitaの応答が大きすぎるページを飛ばしました"
 )
 
 // Job は1回の取得を行う。
@@ -68,6 +71,7 @@ type outcome struct {
 	failed    int // 再試行しても取れなかった単位
 	truncated bool
 	upserted  int
+	invalid   int // 必須項目が欠けるなどで、提供元の応答から飛ばした記事
 	messages  []string
 	zero      []string // Zennで記事が0件だったトピック
 }
@@ -83,6 +87,20 @@ func (o *outcome) addFailed(err error) {
 	o.mu.Lock()
 	o.failed++
 	o.addMessageLocked(describe(err))
+	o.mu.Unlock()
+}
+
+// addFailedMsg は失敗単位を1つ数え、固定の説明文を残す。
+func (o *outcome) addFailedMsg(msg string) {
+	o.mu.Lock()
+	o.failed++
+	o.addMessageLocked(msg)
+	o.mu.Unlock()
+}
+
+func (o *outcome) addInvalid(n int) {
+	o.mu.Lock()
+	o.invalid += n
 	o.mu.Unlock()
 }
 
@@ -158,9 +176,8 @@ func (j *Job) Execute(ctx context.Context) Result {
 	wg.Wait()
 
 	res := Result{QiitaRequests: qCalls.count(), ZennRequests: zCalls.count(), Upserted: q.upserted + z.upserted}
-	if !db.failed.Load() && ctx.Err() == nil {
-		res.Deleted = j.retain(ctx, now, db)
-	}
+	// 保存の失敗・時間切れ・中断の実行でも、期限切れの記事は消す。
+	res.Deleted = j.retain(ctx, now)
 
 	var msgs []string
 	msgs = append(msgs, q.messages...)
@@ -192,8 +209,11 @@ func (j *Job) Execute(ctx context.Context) Result {
 		"status", res.Status,
 		"qiita_requests", res.QiitaRequests, "zenn_requests", res.ZennRequests,
 		"upserted", res.Upserted, "deleted", res.Deleted,
-		"qiita_pages_ok", q.ok, "qiita_failed", q.failed,
+		"qiita_pages_ok", q.ok, "qiita_failed", q.failed, "qiita_invalid_articles", q.invalid,
 		"zenn_topics_ok", z.ok, "zenn_failed", z.failed, "zenn_topics_empty", len(z.zero))
+	if q.invalid > 0 {
+		log.Warn("article fetch: qiita articles with missing fields skipped", "count", q.invalid)
+	}
 	if len(z.zero) > 0 {
 		shown := z.zero
 		if len(shown) > maxLoggedTopics {
@@ -216,7 +236,10 @@ func (j *Job) newCaller(p *pacer, calls *counter) *caller {
 }
 
 // retain は保持期間を過ぎた記事を消す。消した数を返す。失敗してもログに種類だけ残して続ける（削除は次の回でもできる）。
-func (j *Job) retain(ctx context.Context, now time.Time, db *dbFailure) int {
+// 実行の ctx が時間切れ・中断でも消せるよう、取り消しを切り離し、retainTimeout の期限を付けて使う。
+func (j *Job) retain(ctx context.Context, now time.Time) int {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), retainTimeout)
+	defer cancel()
 	total := 0
 	for _, r := range []struct {
 		source string
@@ -304,6 +327,7 @@ func (j *Job) qiitaDay(ctx context.Context, c *caller, day, cutoff time.Time, m 
 		var pg = struct {
 			articles []article.Article
 			full     bool
+			invalid  int
 		}{}
 		err := c.do(ctx, func(ctx context.Context) error {
 			p, err := j.Qiita.ListCreated(ctx, day, page)
@@ -315,11 +339,18 @@ func (j *Job) qiitaDay(ctx context.Context, c *caller, day, cutoff time.Time, m 
 			if err != nil {
 				return err
 			}
-			pg.articles, pg.full = p.Articles, j.Qiita.FullPage(p)
+			pg.articles, pg.full, pg.invalid = p.Articles, j.Qiita.FullPage(p), p.Skipped
 			return nil
 		})
 		switch {
 		case err == nil:
+		case errors.Is(err, provider.ErrResponseTooLarge):
+			// 再試行しても同じ大きさなので、このページだけ飛ばして次のページへ進む。
+			out.addFailedMsg(msgPageTooBig)
+			if page == qiitaMaxPage {
+				out.warn(msgPageLimit)
+			}
+			continue
 		case errors.Is(err, errCallLimit):
 			stopped.Store(true)
 			out.truncate(msgCallLimit)
@@ -337,6 +368,9 @@ func (j *Job) qiitaDay(ctx context.Context, c *caller, day, cutoff time.Time, m 
 			return // この日はあきらめ、次の日へ
 		}
 
+		if pg.invalid > 0 {
+			out.addInvalid(pg.invalid)
+		}
 		recs := make([]Record, 0, len(pg.articles))
 		for _, a := range pg.articles {
 			if a.PublishedAt.Before(cutoff) {

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"time"
 
@@ -18,8 +19,13 @@ import (
 // ArticleFetchLockKey は、記事の定期取得が同時に1つだけ動くようにするアドバイザリロックのキー。
 const ArticleFetchLockKey int64 = 6_600_001
 
-// pgForeignKeyViolation は外部キー違反のSQLSTATE。一意制約違反は pgUniqueViolation(auth.go)。
-const pgForeignKeyViolation = "23503"
+// 記事1件だけを飛ばしてよい失敗のSQLSTATE。一意制約違反は pgUniqueViolation(auth.go)。
+const (
+	pgForeignKeyViolation      = "23503"
+	pgCheckViolation           = "23514"
+	pgCharacterNotInRepertoire = "22021" // 文字コードとして不正な文字
+	pgUntranslatableCharacter  = "22P05"
+)
 
 // ArticleFetch は記事の定期一括取得のDB操作。
 type ArticleFetch struct {
@@ -105,9 +111,9 @@ func (s *ArticleFetch) saveOne(ctx context.Context, q *dbgen.Queries, rec articl
 		Source:      strings.ToLower(a.Source),
 		ExternalID:  a.ExternalID,
 		Url:         a.URL,
-		Title:       a.Title,
-		AuthorName:  a.Author,
-		Likes:       int32(a.Likes),
+		Title:       stripNUL(a.Title),
+		AuthorName:  stripNUL(a.Author),
+		Likes:       clampLikes(a.Likes),
 		PublishedAt: tstz(a.PublishedAt),
 	})
 	if err != nil {
@@ -121,11 +127,33 @@ func (s *ArticleFetch) saveOne(ctx context.Context, q *dbgen.Queries, rec articl
 	return nil
 }
 
+// stripNUL は、PostgreSQLのtextに入らないNUL文字を除く。
+func stripNUL(s string) string { return strings.ReplaceAll(s, "\x00", "") }
+
+// clampLikes は、いいね数を int32 の範囲に収める。負は0にする。
+func clampLikes(n int) int32 {
+	switch {
+	case n < 0:
+		return 0
+	case n > math.MaxInt32:
+		return math.MaxInt32
+	}
+	return int32(n)
+}
+
 // isSkippable は、その記事だけを飛ばしてよい失敗か。
-// 同じURLが別の記事IDで既にある（一意制約違反）、取得の途中でタグが消された（外部キー違反）。
+// 同じURLが別の記事IDで既にある（一意制約違反）、取得の途中でタグが消された（外部キー違反）、
+// 値が表の決まりに合わない（CHECK違反）、文字として不正・変換できない文字を含む。
 func isSkippable(err error) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && (pgErr.Code == pgUniqueViolation || pgErr.Code == pgForeignKeyViolation)
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	switch pgErr.Code {
+	case pgUniqueViolation, pgForeignKeyViolation, pgCheckViolation, pgCharacterNotInRepertoire, pgUntranslatableCharacter:
+		return true
+	}
+	return false
 }
 
 func (s *ArticleFetch) DeleteExpired(ctx context.Context, source string, before time.Time) (int64, error) {

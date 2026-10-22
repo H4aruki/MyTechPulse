@@ -143,6 +143,65 @@ func TestJobOverHTTPNeverRecordsSecrets(t *testing.T) {
 	}
 }
 
+func TestJobOverHTTPSkipsTooLargePageAndContinues(t *testing.T) {
+	var calls atomic.Int32
+	huge := `[{"id":"x","body":"` + strings.Repeat("a", 2<<20) + `"}]` // 上限(1MB)を超える
+	f := newHTTPFixture(t,
+		func(w http.ResponseWriter, r *http.Request) {
+			calls.Add(1)
+			q := r.URL.Query()
+			if !strings.HasPrefix(q.Get("query"), "created:>=2026-10-22") {
+				_, _ = io.WriteString(w, "[]")
+				return
+			}
+			switch q.Get("page") {
+			case "1":
+				_, _ = io.WriteString(w, huge)
+			case "2":
+				_, _ = io.WriteString(w, "["+qiitaItemJSON("p2a")+","+qiitaItemJSON("p2b")+"]")
+			default:
+				_, _ = io.WriteString(w, "["+qiitaItemJSON("p3")+"]")
+			}
+		},
+		func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, `{"articles":[]}`) })
+	res := f.job.Execute(context.Background())
+	// 6日分 + 10-22 の2・3ページ目。大きすぎるページは再試行しない
+	if calls.Load() != 8 || res.QiitaRequests != 8 {
+		t.Fatalf("calls = %d, res = %+v", calls.Load(), res)
+	}
+	if res.Status != StatusPartial || !strings.Contains(res.Message, "大きすぎるページを飛ばしました") {
+		t.Fatalf("res = %+v", res)
+	}
+	if res.Upserted != 3 || len(f.store.saved) != 3 {
+		t.Fatalf("upserted = %d", res.Upserted)
+	}
+	if !strings.Contains(f.logs.String(), "qiita_failed=1") {
+		t.Fatalf("失敗単位として数える: logs = %s", f.logs.String())
+	}
+}
+
+func TestJobOverHTTPSkipsOnlyArticlesMissingFields(t *testing.T) {
+	broken := strings.Replace(qiitaItemJSON("bad"), `,"user":{"id":"alice"}`, "", 1)
+	f := newHTTPFixture(t,
+		func(w http.ResponseWriter, r *http.Request) {
+			q := r.URL.Query()
+			if strings.HasPrefix(q.Get("query"), "created:>=2026-10-22") && q.Get("page") == "1" {
+				_, _ = io.WriteString(w, "["+qiitaItemJSON("ok")+","+broken+"]")
+				return
+			}
+			_, _ = io.WriteString(w, "[]")
+		},
+		func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, `{"articles":[]}`) })
+	res := f.job.Execute(context.Background())
+	// 飛ばした記事も数えて満杯なので、10-22 の2ページ目も取りに行く
+	if res.Status != StatusSucceeded || res.Upserted != 1 || res.QiitaRequests != 7 {
+		t.Fatalf("res = %+v", res)
+	}
+	if !strings.Contains(f.logs.String(), "qiita_invalid_articles=1") {
+		t.Fatalf("logs = %s", f.logs.String())
+	}
+}
+
 func TestJobOverHTTPStopsOnRateLimit(t *testing.T) {
 	var calls atomic.Int32
 	f := newHTTPFixture(t,
