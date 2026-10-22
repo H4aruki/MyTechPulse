@@ -58,3 +58,35 @@ ORDER BY started_at DESC, id DESC;
 UPDATE fetch_runs
 SET status = 'failed', finished_at = $1, error_message = '実行が中断されました'
 WHERE status = 'running';
+
+-- name: ListTaggedArticles :many
+-- フィードの候補（Issue #66 段取り2）。指定したタグ（前後の空白を除いた小文字で比べる）のどれかが付いた、
+-- 提供元の記事を新しい順に返す。tags には記事に付いた全タグの表示名をまとめる。
+-- タグを先に tag 表で引き、article_tags は ("tag_ID", published_at) の索引で絞る。
+WITH matched AS (
+    SELECT DISTINCT at.article_id
+    FROM tag t
+    JOIN article_tags at ON at."tag_ID" = t."tag_ID"
+    WHERE lower(btrim(t.tag_name)) = ANY(sqlc.arg(tags)::text[])
+      AND at.published_at >= sqlc.arg(since)
+)
+SELECT a.id, a.source, a.title, a.url, a.author_name, a.likes, a.published_at,
+       COALESCE((SELECT array_agg(t2.tag_name ORDER BY t2."tag_ID")
+                 FROM article_tags at2 JOIN tag t2 ON t2."tag_ID" = at2."tag_ID"
+                 WHERE at2.article_id = a.id), '{}')::text[] AS tags
+FROM articles a
+JOIN matched m ON m.article_id = a.id
+WHERE a.source = sqlc.arg(source) AND a.published_at >= sqlc.arg(since)
+ORDER BY a.published_at DESC, a.id DESC
+LIMIT sqlc.arg(max_rows);
+
+-- name: ListPopularArticles :many
+-- フィードの空き枠の候補。タグを問わず、提供元の記事をいいね数の多い順に返す。
+SELECT a.id, a.source, a.title, a.url, a.author_name, a.likes, a.published_at,
+       COALESCE((SELECT array_agg(t2.tag_name ORDER BY t2."tag_ID")
+                 FROM article_tags at2 JOIN tag t2 ON t2."tag_ID" = at2."tag_ID"
+                 WHERE at2.article_id = a.id), '{}')::text[] AS tags
+FROM articles a
+WHERE a.source = sqlc.arg(source) AND a.published_at >= sqlc.arg(since)
+ORDER BY a.likes DESC, a.published_at DESC, a.id DESC
+LIMIT sqlc.arg(max_rows);

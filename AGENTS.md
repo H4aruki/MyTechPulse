@@ -125,7 +125,7 @@ node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/
 - `server/internal/auth/`: 登録・ログイン・ログアウト・本人確認（サーバー側セッション）
 - `server/internal/recommendation/`: 記事の取得・順位付け・フィード。`interest/` は興味度とクリック学習
 - `server/internal/provider/`: Qiita・Zennの取得（`qiita/`、`zenn/`）。`article/` は記事の型と検証
-- `server/internal/articlefetch/`: 記事の定期一括取得（日本時間 6:00/11:30/16:30。DBの `articles` に貯める。`ARTICLE_FETCH_ENABLED=true` のときだけ動き、既定は無効。フィードはまだ読まない。[Issue #66](https://github.com/H4aruki/MyTechPulse/issues/66)）
+- `server/internal/articlefetch/`: 記事の定期一括取得（日本時間 6:00/11:30/16:30。DBの `articles` に貯める。`ARTICLE_FETCH_ENABLED=true` のときだけ動き、既定は無効。有効なときは、フィードもこの表から読み、外部APIを呼ばない（`recommendation.Service.Articles`）。無効なときは従来の即時検索。[Issue #66](https://github.com/H4aruki/MyTechPulse/issues/66)）
 - `server/internal/health/`: 稼働確認（`/health/live`、`/health/ready`）
 - `server/internal/store/`、`server/db/`: DBアクセス（sqlcで生成）、問い合わせ（`db/queries/`）、移行（`db/migrations/`）
 - `server/internal/platform/`: 設定・ログ・DB接続・HTTPの共通部品
