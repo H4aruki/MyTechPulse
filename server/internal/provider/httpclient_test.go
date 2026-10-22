@@ -468,7 +468,17 @@ func TestJSONFetcherBodyLimit(t *testing.T) {
 		}))
 		defer srv.Close()
 		err := tlsFetcher(srv, 64).GetJSON(context.Background(), srv.URL, nil, &anyBody{})
-		if !errors.Is(err, ErrInvalidResponse) {
+		if !errors.Is(err, ErrInvalidResponse) || !errors.Is(err, ErrResponseTooLarge) {
+			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("壊れたJSONは大きすぎるとは区別する", func(t *testing.T) {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.WriteString(w, `{"a":`)
+		}))
+		defer srv.Close()
+		err := tlsFetcher(srv, 64).GetJSON(context.Background(), srv.URL, nil, &anyBody{})
+		if !errors.Is(err, ErrInvalidResponse) || errors.Is(err, ErrResponseTooLarge) {
 			t.Fatalf("err = %v", err)
 		}
 	})
@@ -493,7 +503,7 @@ func TestJSONFetcherBodyLimit(t *testing.T) {
 		}))
 		defer srv.Close()
 		err := tlsFetcher(srv, 64).GetJSON(context.Background(), srv.URL, nil, &anyBody{})
-		if !errors.Is(err, ErrInvalidResponse) {
+		if !errors.Is(err, ErrInvalidResponse) || !errors.Is(err, ErrResponseTooLarge) {
 			t.Fatalf("err = %v", err)
 		}
 	})

@@ -49,18 +49,30 @@ type listResponse struct {
 
 // item はZenn応答のうち使う項目だけ。欠落を検出するため、数値は零値と区別できる型にする。
 type item struct {
-	Title       string `json:"title"`
-	Path        string `json:"path"`
-	LikedCount  *int   `json:"liked_count"`
-	PublishedAt string `json:"published_at"`
+	Slug        string    `json:"slug"`
+	Title       string    `json:"title"`
+	Path        string    `json:"path"`
+	LikedCount  *int      `json:"liked_count"`
+	PublishedAt string    `json:"published_at"`
+	User        *itemUser `json:"user"`
+}
+
+type itemUser struct {
+	Username string `json:"username"`
+}
+
+// TopicFor は、タグ名から Zenn の topicname を導く（小文字にして空白を除く）。
+// Search と、取得対象タグの初期値（DBの移行）が同じ導き方を使う。
+func TopicFor(tag string) string {
+	// Zennのtopicnameは小文字でないとヒットしない。空白もないため、"Spring Boot" は "springboot" にする。
+	return strings.ToLower(strings.Join(strings.Fields(tag), ""))
 }
 
 // Search は topic を持つ記事を、Zennが返す順のまま返す。
 // 一覧APIは記事本来のトピックを返さないため、記事のタグには検索に使ったトピックだけを入れる。
 // 期間での絞り込みは、古い候補をフォールバックに残すため呼び出し側（推薦処理）で行う。
 func (c Client) Search(ctx context.Context, tag string) ([]article.Article, error) {
-	// Zennのtopicnameは小文字でないとヒットしない。空白もないため、"Spring Boot" は "springboot" にする。
-	topic := strings.ToLower(strings.Join(strings.Fields(tag), ""))
+	topic := TopicFor(tag)
 	count := c.Count
 	if count == 0 {
 		count = defaultCount
@@ -77,6 +89,54 @@ func (c Client) Search(ctx context.Context, tag string) ([]article.Article, erro
 	q.Set("topicname", topic)
 	q.Set("count", strconv.Itoa(count))
 	return c.fetch(ctx, endpoint, q, []string{topic})
+}
+
+// SearchTopic は、導き済みのトピック名 topic の記事を、Zennが返す順のまま返す（定期一括取得用）。
+// 記事ID（slug）と著者も読む。記事にタグは付けない（呼び出し側が、検索に使ったタグを結ぶ）。
+// topic はそのまま使う（小文字・空白なしであること）。slug が欠けた記事があれば応答不正にする。
+func (c Client) SearchTopic(ctx context.Context, topic string) ([]article.Article, error) {
+	count := c.Count
+	if count == 0 {
+		count = defaultCount
+	}
+	if topic == "" || topic != TopicFor(topic) || count < 1 {
+		return nil, provider.Annotate(&provider.Error{Kind: provider.ErrInvalidRequest}, providerName)
+	}
+	endpoint := c.Endpoint
+	if endpoint == "" {
+		endpoint = defaultEndpoint
+	}
+	q := url.Values{}
+	q.Set("topicname", topic)
+	q.Set("count", strconv.Itoa(count))
+	return c.fetchBatch(ctx, endpoint, q)
+}
+
+// fetchBatch は fetch と同じ取得で、記事IDと著者を必須にして変換する。
+func (c Client) fetchBatch(ctx context.Context, endpoint string, q url.Values) ([]article.Article, error) {
+	var resp listResponse
+	if err := c.Fetcher.GetJSON(ctx, endpoint+"?"+q.Encode(), nil, &resp); err != nil {
+		return nil, provider.Annotate(err, providerName)
+	}
+	if resp.Articles == nil {
+		return nil, provider.Annotate(&provider.Error{Kind: provider.ErrInvalidResponse}, providerName)
+	}
+	articles := make([]article.Article, 0, len(*resp.Articles))
+	seen := make(map[string]struct{}, len(*resp.Articles))
+	for _, it := range *resp.Articles {
+		a, ok := convert(it, []string{})
+		if !ok || strings.TrimSpace(it.Slug) == "" || it.User == nil || strings.TrimSpace(it.User.Username) == "" {
+			return nil, provider.Annotate(&provider.Error{Kind: provider.ErrInvalidResponse}, providerName)
+		}
+		a.ExternalID = it.Slug
+		a.Author = it.User.Username
+		if _, dup := seen[a.URL]; dup {
+			continue
+		}
+		seen[a.URL] = struct{}{}
+		articles = append(articles, a)
+	}
+	return articles, nil
 }
 
 // Popular は、トピックを問わず直近1週間の人気の技術記事を、Zennが返す順(週間の人気順)のまま最大 Count 件返す。

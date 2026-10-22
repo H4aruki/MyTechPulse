@@ -8,6 +8,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Article struct {
+	ID          int64
+	Source      string
+	ExternalID  string
+	Url         string
+	Title       string
+	AuthorName  string
+	Likes       int32
+	PublishedAt pgtype.Timestamptz
+	FetchedAt   pgtype.Timestamptz
+	LastSeenAt  pgtype.Timestamptz
+}
+
+type ArticleTag struct {
+	ArticleID   int64
+	TagID       int32
+	PublishedAt pgtype.Timestamptz
+}
+
 type AuthPasskey struct {
 	ID             int64
 	UserID         int32
@@ -100,6 +119,28 @@ type FeedbackSubmission struct {
 	Status      string
 	StartedAt   pgtype.Timestamptz
 	CompletedAt pgtype.Timestamptz
+}
+
+type FetchRun struct {
+	ID            int64
+	SlotAt        pgtype.Timestamptz
+	Trigger       string
+	Attempt       int16
+	StartedAt     pgtype.Timestamptz
+	FinishedAt    pgtype.Timestamptz
+	Status        string
+	ErrorMessage  string
+	QiitaRequests int32
+	ZennRequests  int32
+	Upserted      int32
+	Deleted       int32
+}
+
+type FetchTag struct {
+	TagID     int32
+	ZennTopic string
+	Enabled   bool
+	CreatedAt pgtype.Timestamptz
 }
 
 type Recommend struct {

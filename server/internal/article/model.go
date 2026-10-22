@@ -22,6 +22,10 @@ type Article struct {
 	Tags        []string
 	Likes       int
 	PublishedAt time.Time
+	// ExternalID と Author は定期一括取得(articlefetch)だけが使う。提供元の記事ID（QiitaのID・Zennのslug）と著者名。
+	// フィードの応答には出さない。
+	ExternalID string
+	Author     string
 }
 
 // Validate は不変条件を確認し、PublishedAt をUTCへ揃えた複製を返す。

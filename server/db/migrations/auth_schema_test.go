@@ -133,10 +133,9 @@ func TestAuthMigrationsDownKeepsLegacyTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	for _, version := range []int64{7, 6, 5, 4, 3, 2} {
-		if err := goose.DownContext(ctx, db, "."); err != nil {
-			t.Fatalf("down %05d: %v", version, err)
-		}
+	// 最新の版数に依存しないよう、既存3表だけの版（00001）まで明示して戻す。
+	if err := goose.DownToContext(ctx, db, ".", 1); err != nil {
+		t.Fatalf("down to 00001: %v", err)
 	}
 	if n := count(t, db, `SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='auth_session'`); n != 0 {
 		t.Fatal("auth_session must be dropped by down")

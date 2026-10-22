@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/H4aruki/MyTechPulse/server/internal/app"
+	"github.com/H4aruki/MyTechPulse/server/internal/articlefetch"
 	"github.com/H4aruki/MyTechPulse/server/internal/auth"
 	"github.com/H4aruki/MyTechPulse/server/internal/passkey"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/config"
@@ -32,6 +34,11 @@ import (
 )
 
 const shutdownTimeout = 10 * time.Second
+
+// articleFetchMaxBytes は記事の定期一括取得での1応答の上限。Qiitaの1ページ20件は本文を含み、
+// PROVIDER_MAX_BYTES(既定2MB)を超えうるため大きくする(20件で約2.3MBの実測あり)。
+// PROVIDER_MAX_BYTES の方が大きければ、そちらを使う。
+const articleFetchMaxBytes int64 = 8 << 20
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -74,9 +81,63 @@ func run(ctx context.Context, lookup func(string) (string, bool), stdout, stderr
 	if err != nil {
 		return fmt.Errorf("%sで待ち受けできません", cfg.HTTPAddr)
 	}
+	// 記事の定期一括取得(既定は無効)。pool.Close より先に止めるため、defer で後に登録する。
+	stopArticleFetch := startArticleFetch(ctx, cfg, pool, logger, shutdownTimeout)
+	defer stopArticleFetch()
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	logger.Info("server started", "addr", ln.Addr().String(), "env", cfg.Environment)
 	return serveUntilCanceled(ctx, server, ln, shutdownTimeout)
+}
+
+// startArticleFetch は、ARTICLE_FETCH_ENABLED=true のときだけ、記事の定期一括取得を別のゴルーチンで起動する。
+// 無効なら何も起動せず、何もしない stop を返す。返した stop は、取得を止めて、timeout 以内に終わるのを待つ。
+// 取得には、再試行を自分で持つため JSONFetcher の内部の再試行を切った(MaxAttempts=1)部品を使う。
+func startArticleFetch(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger, timeout time.Duration) (stop func()) {
+	if !cfg.ArticleFetch.Enabled {
+		return func() {}
+	}
+	fetcher := newArticleFetchFetcher(cfg)
+	repo := store.NewArticleFetch(pool)
+	clock := articlefetch.SystemClock{}
+	fetchLogger := logger.With("component", "articlefetch")
+	scheduler := &articlefetch.Scheduler{
+		Runs:   repo,
+		Locker: repo,
+		Job: &articlefetch.Job{
+			Store:            repo,
+			Qiita:            qiita.New(fetcher, cfg.QiitaToken),
+			Zenn:             zenn.New(fetcher),
+			Clock:            clock,
+			Logger:           fetchLogger,
+			QiitaMaxRequests: cfg.ArticleFetch.QiitaMaxRequests,
+			Jitter:           func() float64 { return rand.Float64()*2 - 1 },
+		},
+		Clock:      clock,
+		Logger:     fetchLogger,
+		RunTimeout: cfg.ArticleFetch.RunTimeout,
+	}
+	fetchCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		scheduler.Run(fetchCtx)
+	}()
+	logger.Info("article fetch enabled", "qiita_max_requests", cfg.ArticleFetch.QiitaMaxRequests, "run_timeout", cfg.ArticleFetch.RunTimeout.String())
+	return func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(timeout):
+			logger.Warn("article fetch did not stop in time")
+		}
+	}
+}
+
+// newArticleFetchFetcher は記事の定期一括取得用の取得部品を返す。内部の再試行はせず、1応答の上限を広げる。
+func newArticleFetchFetcher(cfg config.Config) provider.JSONFetcher {
+	fetcher := provider.NewJSONFetcher(cfg.ProviderTimeout, max(cfg.ProviderMaxBytes, articleFetchMaxBytes))
+	fetcher.MaxAttempts = 1
+	return fetcher
 }
 
 // newAuthService は認証の実依存を組み立てる。

@@ -45,6 +45,8 @@ services:
       # ログイン試行の制限に使う接続元IPのヘッダー。本番はCloudflare経由のため既定でCF-Connecting-IP。
       # 空だと、Caddyの裏では全員が同じIPに見える。ローカル(go run)の既定は空
       CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-CF-Connecting-IP}
+      # 記事の定期一括取得（日本時間 6:00/11:30/16:30）。true のときだけ動く。既定は無効
+      ARTICLE_FETCH_ENABLED: ${ARTICLE_FETCH_ENABLED:-false}
     # サーバー再起動後に自動で復帰させる。止めたときは止まったままになる
     restart: unless-stopped
     # 外部への公開は caddy が443で受けて中継する。ここはローカルからの疎通確認用に
