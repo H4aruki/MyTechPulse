@@ -62,14 +62,17 @@ const (
 
 // DBから読む候補の上限。提供元ごとにタグで見つけた記事は新しい順に最大 dbTaggedLimit 件、
 // 人気の記事は最大 dbPopularLimit 件。順位を付けて10件に絞る前の候補なので、十分に多くとる。
+// 人気の記事は、すでに選んだ記事(10件未満)と重なる分を除いても、空いた枠を埋められる件数にする。
 const (
 	dbTaggedLimit  = 500
 	dbPopularLimit = 20
 )
 
 // Get retrieves the top five interest tags concurrently, then filters, merges, scores, and limits each feed.
-// 興味度が0より大きいタグが5つに満たないときは、提供元ごとに1回だけ、タグを問わない人気の記事も取り、
-// 空いた枠の候補にする(#240)。5つあるときは人気の記事を取らない。
+// 即時検索(Articles が無いとき)では、興味度が0より大きいタグが5つに満たないときだけ、提供元ごとに1回、
+// タグを問わない人気の記事も取り、タグで見つけた記事と混ぜて候補にする(#240)。5つあるときは人気の記事を取らない。
+// DBから読むとき(Articles があるとき)は、タグの数を問わず、提供元ごとにタグで見つけた記事が10件に満たなければ、
+// 空いた枠だけを人気の記事で埋める(getFromDB)。
 func (s Service) Get(ctx context.Context, userID int64) (Result, error) {
 	weights, err := s.Interests.List(ctx, userID)
 	if err != nil {
@@ -91,7 +94,7 @@ func (s Service) Get(ctx context.Context, userID int64) (Result, error) {
 	requestCtx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	if s.Articles != nil {
-		return s.getFromDB(requestCtx, weights, ordered, fill, now)
+		return s.getFromDB(requestCtx, weights, ordered, now)
 	}
 	targets := []struct {
 		name   string
@@ -188,9 +191,11 @@ func (s Service) Get(ctx context.Context, userID int64) (Result, error) {
 }
 
 // getFromDB は、定期一括取得で貯めた記事から候補を読む。外部APIは呼ばず、即時検索へも切り替えない。
-// 期間・古い記事での埋め合わせ・人気の記事の扱い・順位付けは、即時検索と同じ。
+// 期間・古い記事での埋め合わせ・順位付けは、即時検索と同じ。人気の記事の扱いだけが違い、
+// 提供元ごとに、タグで見つけた記事が10件に満たないときは、タグの数を問わず、空いた枠を人気の記事で埋める。
+// タグで見つけた記事を必ず先に並べ、人気の記事はその後ろに足す。10件そろった提供元では人気の記事を読まない。
 // DBには取得の時点の記事が残っているため、取得が失敗しても、残っている記事を出す。
-func (s Service) getFromDB(ctx context.Context, weights []interest.Weight, ordered []interest.Weight, fill bool, now time.Time) (Result, error) {
+func (s Service) getFromDB(ctx context.Context, weights []interest.Weight, ordered []interest.Weight, now time.Time) (Result, error) {
 	tags := make([]string, 0, len(ordered))
 	for _, weight := range ordered {
 		tags = append(tags, weight.Tag)
@@ -215,29 +220,44 @@ func (s Service) getFromDB(ctx context.Context, weights []interest.Weight, order
 			}
 		}
 	}
-	zennPopular := []article.Article{}
-	if fill {
-		items, err := s.Articles.ListPopular(ctx, article.SourceQiita, qiitaSince, dbPopularLimit)
-		if err != nil {
-			return Result{}, err
-		}
-		qiitaRaw = append(qiitaRaw, validArticlesSince(items, qiitaSince)...)
-		// 人気の記事は、古い記事での埋め合わせに使わない
-		items, err = s.Articles.ListPopular(ctx, article.SourceZenn, zennSince, dbPopularLimit)
-		if err != nil {
-			return Result{}, err
-		}
-		zennPopular = validArticlesSince(items, zennSince)
-	}
 	// 古い記事での埋め合わせは、タグで見つけた記事が14日以内に1件も無いときだけ(人気の記事の有無は問わない)
 	if len(zennFresh) == 0 {
 		zennFresh = zennOld
 	}
-	return Result{
-		QiitaArticles: rankLimit(weights, dedupe(qiitaRaw), 10),
-		ZennArticles:  rankLimit(weights, dedupe(append(zennFresh, zennPopular...)), 10),
-		Warnings:      []Warning{},
-	}, nil
+	qiita, err := s.fillWithPopular(ctx, weights, rankLimit(weights, dedupe(qiitaRaw), 10), article.SourceQiita, qiitaSince)
+	if err != nil {
+		return Result{}, err
+	}
+	// 人気の記事は14日以内だけで、古い記事での埋め合わせに使わない
+	zenn, err := s.fillWithPopular(ctx, weights, rankLimit(weights, dedupe(zennFresh), 10), article.SourceZenn, zennSince)
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{QiitaArticles: qiita, ZennArticles: zenn, Warnings: []Warning{}}, nil
+}
+
+// fillWithPopular は、ranked が10件に満たないとき、source の since 以降の人気の記事で空いた枠を埋める。
+// ranked にある記事(URLが同じもの)は除き、残りを ScoreArticles と同じ順に並べて ranked の後ろに足す。
+// 除くのは多くても ranked の9件なので、dbPopularLimit(20)件読めば、空いた枠を埋めるのに足りる。
+func (s Service) fillWithPopular(ctx context.Context, weights []interest.Weight, ranked []article.Article, source string, since time.Time) ([]article.Article, error) {
+	if len(ranked) >= 10 {
+		return ranked, nil
+	}
+	items, err := s.Articles.ListPopular(ctx, source, since, dbPopularLimit)
+	if err != nil {
+		return nil, err
+	}
+	chosen := make(map[string]bool, len(ranked))
+	for _, item := range ranked {
+		chosen[item.URL] = true
+	}
+	popular := make([]article.Article, 0, len(items))
+	for _, item := range validArticlesSince(items, since) {
+		if !chosen[item.URL] {
+			popular = append(popular, item)
+		}
+	}
+	return append(ranked, rankLimit(weights, dedupe(popular), 10-len(ranked))...), nil
 }
 
 // validArticlesSince は、article.Validate を通り、since 以降に公開された記事だけを返す。不正な記事は飛ばす。

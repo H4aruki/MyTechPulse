@@ -3,6 +3,7 @@ package recommendation
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -40,6 +41,7 @@ type popularCall struct {
 type memoryArticles struct {
 	items        []article.Article
 	err          error
+	popularErr   error
 	taggedCalls  []taggedCall
 	popularCalls []popularCall
 }
@@ -76,6 +78,9 @@ func (m *memoryArticles) ListPopular(_ context.Context, source string, since tim
 	m.popularCalls = append(m.popularCalls, popularCall{source, since, limit})
 	if m.err != nil {
 		return nil, m.err
+	}
+	if m.popularErr != nil {
+		return nil, m.popularErr
 	}
 	out := []article.Article{}
 	for _, item := range m.items {
@@ -122,7 +127,8 @@ func TestServiceGetFromDBDoesNotCallProvidersAndRespectsWindows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u := urls(got.QiitaArticles); len(u) != 1 || u[0] != "https://qiita.com/edge" {
+	// 5日を過ぎた記事は、人気の記事としても出さない
+	if u := urls(got.QiitaArticles); len(u) != 2 || u[0] != "https://qiita.com/edge" || u[1] != "https://qiita.com/other" {
 		t.Fatalf("Qiita = %v", u)
 	}
 	// 14日以内のZenn記事があるので、古い記事は使わない
@@ -132,9 +138,18 @@ func TestServiceGetFromDBDoesNotCallProvidersAndRespectsWindows(t *testing.T) {
 	if got.Warnings == nil || len(got.Warnings) != 0 {
 		t.Fatalf("Warnings = %#v", got.Warnings)
 	}
-	// 興味度が0より大きいタグが5つあるので、人気の記事は読まない
-	if len(repo.popularCalls) != 0 {
+	// タグが5つあっても、10件に満たない提供元は人気の記事で埋める
+	if len(repo.popularCalls) != 2 {
 		t.Fatalf("popular calls = %+v", repo.popularCalls)
+	}
+	for _, call := range repo.popularCalls {
+		want := dbNow.Add(-qiitaWindow)
+		if call.source == article.SourceZenn {
+			want = dbNow.Add(-zennWindow)
+		}
+		if !call.since.Equal(want) || call.limit != dbPopularLimit {
+			t.Fatalf("popular call = %+v", call)
+		}
 	}
 	if len(repo.taggedCalls) != 2 {
 		t.Fatalf("tagged calls = %+v", repo.taggedCalls)
@@ -175,49 +190,109 @@ func TestServiceGetFromDBFallsBackToOldZennOnlyWithoutFreshTagged(t *testing.T) 
 	}
 }
 
-func TestServiceGetFromDBFillsWithPopularOnlyWhenFewerThanFiveTags(t *testing.T) {
+func TestServiceGetFromDBFillsRemainingSlotsWithPopularForFiveTagUser(t *testing.T) {
+	hour := dbNow.Add(-time.Hour)
+	items := []article.Article{
+		testArticle(article.SourceQiita, "https://qiita.com/go", []string{"Go"}, 0, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/rust", []string{"Rust"}, 0, hour),
+		// タグで見つかり、人気の記事としても返る。重ねて出さない
+		testArticle(article.SourceQiita, "https://qiita.com/react-hot", []string{"React"}, 1000, hour),
+		// 5日を過ぎた人気の記事は使わない
+		testArticle(article.SourceQiita, "https://qiita.com/popular-old", []string{"Kotlin"}, 9999, dbNow.Add(-6*24*time.Hour)),
+	}
+	for i := range 9 {
+		items = append(items, testArticle(article.SourceQiita, "https://qiita.com/popular/"+string(rune('a'+i)), []string{"Kotlin"}, 100-i, hour))
+	}
+	repo := &memoryArticles{items: items}
+	got, err := dbService(t, fiveTags(), repo).Get(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		// タグで見つけた記事を点数の順に先に並べる(Go 0.5×1、Rust 0.4×1、React 0.1×1001)
+		"https://qiita.com/react-hot", "https://qiita.com/go", "https://qiita.com/rust",
+		// 空いた7枠を、いいね数の多い人気の記事で埋める
+		"https://qiita.com/popular/a", "https://qiita.com/popular/b", "https://qiita.com/popular/c", "https://qiita.com/popular/d",
+		"https://qiita.com/popular/e", "https://qiita.com/popular/f", "https://qiita.com/popular/g",
+	}
+	if u := urls(got.QiitaArticles); !slices.Equal(u, want) {
+		t.Fatalf("Qiita = %v", u)
+	}
+}
+
+func TestServiceGetFromDBSkipsPopularWhenTaggedFillsTen(t *testing.T) {
+	items := []article.Article{
+		testArticle(article.SourceZenn, "https://zenn.dev/go", []string{"Go"}, 0, dbNow.Add(-time.Hour)),
+		testArticle(article.SourceZenn, "https://zenn.dev/popular", []string{"Kotlin"}, 50, dbNow.Add(-time.Hour)),
+	}
+	for i := range 10 {
+		items = append(items, testArticle(article.SourceQiita, "https://qiita.com/go/"+string(rune('a'+i)), []string{"Go"}, 0, dbNow.Add(-time.Hour)))
+	}
+	items = append(items, testArticle(article.SourceQiita, "https://qiita.com/popular", []string{"Kotlin"}, 999, dbNow.Add(-time.Hour)))
+	repo := &memoryArticles{items: items}
+	got, err := dbService(t, fiveTags(), repo).Get(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.QiitaArticles) != 10 {
+		t.Fatalf("Qiita = %v", urls(got.QiitaArticles))
+	}
+	for _, u := range urls(got.QiitaArticles) {
+		if u == "https://qiita.com/popular" {
+			t.Fatalf("Qiita = %v", urls(got.QiitaArticles))
+		}
+	}
+	if u := urls(got.ZennArticles); len(u) != 2 || u[0] != "https://zenn.dev/go" || u[1] != "https://zenn.dev/popular" {
+		t.Fatalf("Zenn = %v", u)
+	}
+	// 10件そろったQiitaでは人気の記事を読まない
+	if len(repo.popularCalls) != 1 || repo.popularCalls[0].source != article.SourceZenn {
+		t.Fatalf("popular calls = %+v", repo.popularCalls)
+	}
+}
+
+func TestServiceGetFromDBFillsZennAfterOldFallback(t *testing.T) {
+	day := 24 * time.Hour
 	repo := &memoryArticles{items: []article.Article{
-		testArticle(article.SourceQiita, "https://qiita.com/tagged", []string{"Go"}, 0, dbNow.Add(-time.Hour)),
-		testArticle(article.SourceQiita, "https://qiita.com/popular", []string{"Kotlin"}, 50, dbNow.Add(-time.Hour)),
-		testArticle(article.SourceQiita, "https://qiita.com/popular-old", []string{"Kotlin"}, 99, dbNow.Add(-6*24*time.Hour)),
-		testArticle(article.SourceZenn, "https://zenn.dev/popular", nil, 3, dbNow.Add(-time.Hour)),
+		testArticle(article.SourceZenn, "https://zenn.dev/old-go", []string{"Go"}, 0, dbNow.Add(-20*day)),
+		testArticle(article.SourceZenn, "https://zenn.dev/popular-fresh", []string{"Kotlin"}, 5, dbNow.Add(-14*day)),
+		// 14日を過ぎた人気の記事は使わない
+		testArticle(article.SourceZenn, "https://zenn.dev/popular-old", []string{"Kotlin"}, 99, dbNow.Add(-14*day-time.Second)),
 	}}
-	weights := []interest.Weight{{TagID: 1, Tag: "Go", Value: 5000}, {TagID: 2, Tag: "Rust", Value: 0}}
+	got, err := dbService(t, fiveTags(), repo).Get(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u := urls(got.ZennArticles); len(u) != 2 || u[0] != "https://zenn.dev/old-go" || u[1] != "https://zenn.dev/popular-fresh" {
+		t.Fatalf("Zenn = %v", u)
+	}
+
+	// 14日以内にタグで見つけた記事があれば、古い記事は使わず、人気の記事で埋める
+	repo.items = append(repo.items, testArticle(article.SourceZenn, "https://zenn.dev/fresh-go", []string{"Go"}, 0, dbNow.Add(-day)))
+	got, err = dbService(t, fiveTags(), repo).Get(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u := urls(got.ZennArticles); len(u) != 2 || u[0] != "https://zenn.dev/fresh-go" || u[1] != "https://zenn.dev/popular-fresh" {
+		t.Fatalf("Zenn = %v", u)
+	}
+}
+
+func TestServiceGetFromDBWithoutPositiveTagsUsesPopularOnly(t *testing.T) {
+	items := []article.Article{}
+	for i := range 12 {
+		items = append(items, testArticle(article.SourceQiita, "https://qiita.com/popular/"+string(rune('a'+i)), []string{"Kotlin"}, 100-i, dbNow.Add(-time.Hour)))
+	}
+	repo := &memoryArticles{items: items}
+	weights := []interest.Weight{{TagID: 1, Tag: "Go", Value: 0}}
 	got, err := dbService(t, weights, repo).Get(context.Background(), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u := urls(got.QiitaArticles); len(u) != 2 || u[0] != "https://qiita.com/tagged" || u[1] != "https://qiita.com/popular" {
+	if u := urls(got.QiitaArticles); len(u) != 10 || u[0] != "https://qiita.com/popular/a" || u[9] != "https://qiita.com/popular/j" {
 		t.Fatalf("Qiita = %v", u)
 	}
-	if u := urls(got.ZennArticles); len(u) != 1 || u[0] != "https://zenn.dev/popular" {
-		t.Fatalf("Zenn = %v", u)
-	}
-	// 興味度0のタグは検索に使わない
-	for _, call := range repo.taggedCalls {
-		if len(call.tags) != 1 || call.tags[0] != "Go" {
-			t.Fatalf("tagged call = %+v", call)
-		}
-	}
-	if len(repo.popularCalls) != 2 {
-		t.Fatalf("popular calls = %+v", repo.popularCalls)
-	}
-	for _, call := range repo.popularCalls {
-		want := dbNow.Add(-qiitaWindow)
-		if call.source == article.SourceZenn {
-			want = dbNow.Add(-zennWindow)
-		}
-		if !call.since.Equal(want) || call.limit != dbPopularLimit {
-			t.Fatalf("popular call = %+v", call)
-		}
-	}
-
-	// 興味度が0より大きいタグが無い利用者は、タグで探さず、人気の記事だけを読む
-	repo.taggedCalls, repo.popularCalls = nil, nil
-	got, err = dbService(t, nil, repo).Get(context.Background(), 1)
-	if err != nil || len(got.QiitaArticles) != 2 || len(got.ZennArticles) != 1 {
-		t.Fatalf("got %#v err %v", got, err)
-	}
+	// 興味度が0より大きいタグが無い利用者は、タグで探さない
 	if len(repo.taggedCalls) != 0 || len(repo.popularCalls) != 2 {
 		t.Fatalf("calls: tagged %+v popular %+v", repo.taggedCalls, repo.popularCalls)
 	}
@@ -271,6 +346,14 @@ func TestServiceGetFromDBReturnsRepositoryError(t *testing.T) {
 		if _, err := dbService(t, weights, repo).Get(context.Background(), 1); !errors.Is(err, dbErr) {
 			t.Fatalf("err = %v", err)
 		}
+	}
+	// タグの記事は読めても、人気の記事が読めなければエラーを返す
+	repo := &memoryArticles{popularErr: dbErr}
+	if _, err := dbService(t, fiveTags(), repo).Get(context.Background(), 1); !errors.Is(err, dbErr) {
+		t.Fatalf("popular err = %v", err)
+	}
+	if len(repo.taggedCalls) != 2 {
+		t.Fatalf("tagged calls = %+v", repo.taggedCalls)
 	}
 }
 
