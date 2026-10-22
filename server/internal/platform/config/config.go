@@ -30,7 +30,20 @@ type Config struct {
 	WebAuthnRPID    string
 	WebAuthnRPName  string
 	WebAuthnOrigins []string
+	// ArticleFetch は記事の定期一括取得(Issue #66)。既定は無効(全環境)。
+	ArticleFetch ArticleFetch
 }
+
+// ArticleFetch は記事の定期一括取得の設定。定時・保持期間・件数・並列数は決定事項なので設定にしない。
+type ArticleFetch struct {
+	Enabled bool
+	// QiitaMaxRequests は1回の実行でQiitaへ通信してよい回数（再試行を含む）。
+	QiitaMaxRequests int
+	// RunTimeout は1回の実行の上限。
+	RunTimeout time.Duration
+}
+
+const maxQiitaMaxRequests = 800
 
 // Load は lookup から設定を読む。エラーに入力値は含めない。
 func Load(lookup func(string) (string, bool)) (Config, error) {
@@ -81,6 +94,10 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	articleFetch, err := parseArticleFetch(lookup)
+	if err != nil {
+		return Config{}, err
+	}
 	cookieName, cookieSecure := "mtp_session", false
 	if environment == "production" {
 		cookieName, cookieSecure = "__Host-mtp_session", true
@@ -102,7 +119,25 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 		WebAuthnRPID:     rpID,
 		WebAuthnRPName:   rpName,
 		WebAuthnOrigins:  rpOrigins,
+		ArticleFetch:     articleFetch,
 	}, nil
+}
+
+// parseArticleFetch は記事の定期一括取得の設定を読む。ARTICLE_FETCH_ENABLED の既定は、どの環境でも false。
+func parseArticleFetch(lookup func(string) (string, bool)) (ArticleFetch, error) {
+	enabled, err := parseBool(lookup, "ARTICLE_FETCH_ENABLED", false)
+	if err != nil {
+		return ArticleFetch{}, err
+	}
+	maxRequests, err := parsePositiveInt64(lookup, "ARTICLE_FETCH_QIITA_MAX_REQUESTS", "300")
+	if err != nil || maxRequests > maxQiitaMaxRequests {
+		return ArticleFetch{}, fmt.Errorf("ARTICLE_FETCH_QIITA_MAX_REQUESTSは1〜%dの整数で指定してください", maxQiitaMaxRequests)
+	}
+	timeout, err := parseDuration(lookup, "ARTICLE_FETCH_RUN_TIMEOUT", "20m")
+	if err != nil {
+		return ArticleFetch{}, err
+	}
+	return ArticleFetch{Enabled: enabled, QiitaMaxRequests: int(maxRequests), RunTimeout: timeout}, nil
 }
 
 func required(lookup func(string) (string, bool), key string) (string, error) {

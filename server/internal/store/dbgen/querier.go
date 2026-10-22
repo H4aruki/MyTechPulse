@@ -11,6 +11,9 @@ import (
 )
 
 type Querier interface {
+	// 'running' のまま残った行（実行中に止まったもの）を失敗にする。アドバイザリロックを持っているときだけ呼ぶ。
+	AbandonStaleFetchRuns(ctx context.Context, finishedAt pgtype.Timestamptz) error
+	AddArticleTag(ctx context.Context, arg AddArticleTagParams) error
 	CompleteFeedbackSubmission(ctx context.Context, arg CompleteFeedbackSubmissionParams) error
 	// 未使用かつ期限内のときだけ、使用済みにして返す(1回限り。同時に呼ばれても1回しか成功しない)。
 	ConsumeWebAuthnChallenge(ctx context.Context, arg ConsumeWebAuthnChallengeParams) (ConsumeWebAuthnChallengeRow, error)
@@ -20,6 +23,8 @@ type Querier interface {
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	CreateWebAuthnChallenge(ctx context.Context, arg CreateWebAuthnChallengeParams) error
+	// 保持期間を過ぎた記事を消す。article_tags は連動して消える。
+	DeleteExpiredArticles(ctx context.Context, arg DeleteExpiredArticlesParams) (int64, error)
 	// 保持期限（終了日時、未終了なら表示日時）の古い順に、上限件数まで消す。回答などは連鎖して消える
 	DeleteExpiredFeedbackPrompts(ctx context.Context, arg DeleteExpiredFeedbackPromptsParams) (int64, error)
 	DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error
@@ -33,6 +38,7 @@ type Querier interface {
 	FindUserByID(ctx context.Context, userID int32) (FindUserByIDRow, error)
 	FindUserByUsername(ctx context.Context, userName string) (User, error)
 	FindUserIDByWebAuthnHandle(ctx context.Context, userHandle []byte) (int32, error)
+	FinishFetchRun(ctx context.Context, arg FinishFetchRunParams) error
 	GetActiveFeedbackForm(ctx context.Context) (GetActiveFeedbackFormRow, error)
 	GetFeedbackAnswerScore(ctx context.Context, arg GetFeedbackAnswerScoreParams) (int32, error)
 	GetFeedbackFormByID(ctx context.Context, id int64) (GetFeedbackFormByIDRow, error)
@@ -42,11 +48,15 @@ type Querier interface {
 	InsertFeedbackPrompt(ctx context.Context, arg InsertFeedbackPromptParams) (int64, error)
 	InsertFeedbackSnapshot(ctx context.Context, arg InsertFeedbackSnapshotParams) error
 	InsertFeedbackSubmission(ctx context.Context, arg InsertFeedbackSubmissionParams) (pgtype.UUID, error)
+	InsertFetchRun(ctx context.Context, arg InsertFetchRunParams) (int64, error)
 	// 版をまたいで、同じフォームの直近の表示を返す
 	LastFeedbackPrompt(ctx context.Context, arg LastFeedbackPromptParams) (LastFeedbackPromptRow, error)
+	ListEnabledFetchTags(ctx context.Context) ([]ListEnabledFetchTagsRow, error)
 	ListFeedbackQuestions(ctx context.Context, formID int64) ([]ListFeedbackQuestionsRow, error)
+	ListFetchRunsForSlot(ctx context.Context, slotAt pgtype.Timestamptz) ([]ListFetchRunsForSlotRow, error)
 	ListPasskeysByUser(ctx context.Context, userID int32) ([]AuthPasskey, error)
 	ListRecommendations(ctx context.Context, userID int32) ([]ListRecommendationsRow, error)
+	ListTagsForMatching(ctx context.Context) ([]Tag, error)
 	LockFeedbackPrompt(ctx context.Context, id pgtype.UUID) (LockFeedbackPromptRow, error)
 	LockFeedbackSubmission(ctx context.Context, id pgtype.UUID) (LockFeedbackSubmissionRow, error)
 	// 同じ利用者・同じフォームの表示判定を1つずつ行う（まだ表示記録が無い初回でも効く）
@@ -59,6 +69,9 @@ type Querier interface {
 	RenamePasskey(ctx context.Context, arg RenamePasskeyParams) (int64, error)
 	// 認証回数が増えたときだけ更新する(巻き戻りと同時ログインの競合を、DBの側で止める)。0のまま変わらない認証器(同期パスキー)だけは許す。
 	UpdatePasskeyUsage(ctx context.Context, arg UpdatePasskeyUsageParams) (int64, error)
+	// 同じ (source, external_id) は上書きする。fetched_at（最初に取得した日時）は変えない。
+	// 同じURLが別のIDで来たときは一意制約違反になる。呼び出し側がその記事だけを飛ばす。
+	UpsertArticle(ctx context.Context, arg UpsertArticleParams) (int64, error)
 	UpsertRecommendation(ctx context.Context, arg UpsertRecommendationParams) error
 	// 初回だけ乱数のハンドルを保存し、2回目以降は保存済みの値を返す(同時に呼ばれても1つに決まる)。
 	UpsertWebAuthnUser(ctx context.Context, arg UpsertWebAuthnUserParams) ([]byte, error)

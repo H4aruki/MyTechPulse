@@ -20,6 +20,7 @@ const (
 	defaultBaseURL = "https://qiita.com"
 	defaultPerPage = 20
 	maxPerPage     = 100 // Qiita APIが受け付ける上限
+	maxPage        = 100 // 検索のページ番号の上限
 
 	// 人気の記事(Popular)の取得条件。Qiita API v2 には「いいね数の順」に並べる指定が無く、
 	// 検索結果は新しい順に返る。そのため、ストック数の下限で反響のあった記事に絞ってから、
@@ -47,11 +48,17 @@ func New(fetcher provider.JSONFetcher, token string) Client {
 
 // item はQiita応答のうち使う項目だけ。欠落を検出するため、必須項目は零値と区別できる型にする。
 type item struct {
+	ID         string    `json:"id"`
 	Title      string    `json:"title"`
 	URL        string    `json:"url"`
 	LikesCount *int      `json:"likes_count"`
 	CreatedAt  string    `json:"created_at"`
 	Tags       []itemTag `json:"tags"`
+	User       *itemUser `json:"user"`
+}
+
+type itemUser struct {
+	ID string `json:"id"`
 }
 
 type itemTag struct {
@@ -96,6 +103,75 @@ func (c Client) Popular(ctx context.Context, since time.Time) ([]article.Article
 	return c.fetch(ctx, endpoint, q)
 }
 
+// Page は ListCreated の1ページ分。
+type Page struct {
+	Articles []article.Article
+	// RateRemaining は応答の Rate-Remaining（このトークンの、この時間枠の残り回数）。読めなければ -1。
+	RateRemaining int
+}
+
+// FullPage は、このページが満杯（次のページがありうる）かを返す。
+func (c Client) FullPage(p Page) bool { return len(p.Articles) >= c.perPage() }
+
+// ListCreated は、UTCの日付 day に作られた記事を、新しい順の page ページ目（1始まり）で返す（定期一括取得用）。
+// 記事ID（external_id）と著者も読む。タグが0件の記事も返す。必須項目が欠けた記事があれば応答不正にする。
+// Qiitaが日付をどのタイムゾーンで解釈しても、連続する日付をたどれば取りこぼさない（重なりは呼び出し側が upsert で吸収する）。
+func (c Client) ListCreated(ctx context.Context, day time.Time, page int) (Page, error) {
+	perPage := c.perPage()
+	if day.IsZero() || page < 1 || page > maxPage || perPage < 1 || perPage > maxPerPage {
+		return Page{}, provider.Annotate(&provider.Error{Kind: provider.ErrInvalidRequest}, providerName)
+	}
+	from := day.UTC().Truncate(24 * time.Hour)
+	endpoint := strings.TrimRight(c.baseURL(), "/") + "/api/v2/items"
+	q := url.Values{}
+	q.Set("page", strconv.Itoa(page))
+	q.Set("per_page", strconv.Itoa(perPage))
+	q.Set("query", "created:>="+from.Format("2006-01-02")+" created:<"+from.AddDate(0, 0, 1).Format("2006-01-02"))
+
+	var items []item
+	header, err := c.Fetcher.GetJSONHeader(ctx, endpoint+"?"+q.Encode(), c.headers(), &items)
+	out := Page{RateRemaining: rateRemaining(header)}
+	if err != nil {
+		return out, provider.Annotate(err, providerName)
+	}
+	out.Articles = make([]article.Article, 0, len(items))
+	for _, it := range items {
+		a, ok := convertBatch(it)
+		if !ok {
+			return out, provider.Annotate(&provider.Error{Kind: provider.ErrInvalidResponse}, providerName)
+		}
+		out.Articles = append(out.Articles, a)
+	}
+	return out, nil
+}
+
+func (c Client) perPage() int {
+	if c.PerPage == 0 {
+		return defaultPerPage
+	}
+	return c.PerPage
+}
+
+func (c Client) headers() http.Header {
+	headers := http.Header{}
+	if c.Token != "" {
+		headers.Set("Authorization", "Bearer "+c.Token)
+	}
+	return headers
+}
+
+// rateRemaining は Rate-Remaining ヘッダーを整数で返す。無い・不正なら -1。
+func rateRemaining(h http.Header) int {
+	if h == nil {
+		return -1
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(h.Get("Rate-Remaining")))
+	if err != nil || n < 0 {
+		return -1
+	}
+	return n
+}
+
 func (c Client) baseURL() string {
 	if c.BaseURL == "" {
 		return defaultBaseURL
@@ -104,13 +180,8 @@ func (c Client) baseURL() string {
 }
 
 func (c Client) fetch(ctx context.Context, endpoint string, q url.Values) ([]article.Article, error) {
-	headers := http.Header{}
-	if c.Token != "" {
-		headers.Set("Authorization", "Bearer "+c.Token)
-	}
-
 	var items []item
-	if err := c.Fetcher.GetJSON(ctx, endpoint+"?"+q.Encode(), headers, &items); err != nil {
+	if err := c.Fetcher.GetJSON(ctx, endpoint+"?"+q.Encode(), c.headers(), &items); err != nil {
 		return nil, provider.Annotate(err, providerName)
 	}
 
@@ -125,8 +196,29 @@ func (c Client) fetch(ctx context.Context, endpoint string, q url.Values) ([]art
 	return articles, nil
 }
 
+// convertBatch は定期一括取得用の変換。記事IDと著者が必須で、タグは0件でもよい。
+func convertBatch(it item) (article.Article, bool) {
+	if strings.TrimSpace(it.ID) == "" || it.User == nil || strings.TrimSpace(it.User.ID) == "" {
+		return article.Article{}, false
+	}
+	a, ok := build(it)
+	if !ok {
+		return article.Article{}, false
+	}
+	a.ExternalID = it.ID
+	a.Author = it.User.ID
+	return a, true
+}
+
 func convert(it item) (article.Article, bool) {
-	if it.LikesCount == nil || len(it.Tags) == 0 {
+	if len(it.Tags) == 0 {
+		return article.Article{}, false
+	}
+	return build(it)
+}
+
+func build(it item) (article.Article, bool) {
+	if it.LikesCount == nil {
 		return article.Article{}, false
 	}
 	u, err := url.Parse(it.URL)

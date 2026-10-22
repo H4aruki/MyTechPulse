@@ -16,6 +16,9 @@ import (
 // defaultRetryDelay は再試行までの待ち時間。
 const defaultRetryDelay = 100 * time.Millisecond
 
+// defaultMaxAttempts は MaxAttempts が0のときの通信回数（最初の1回＋再試行1回）。
+const defaultMaxAttempts = 2
+
 // HTTPClient は http.Client を差し替え可能にするための最小の窓口。
 type HTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
@@ -27,7 +30,7 @@ type HTTPClient interface {
 //   - リダイレクトは追従せず、受けたら拒否する
 //   - 応答本文は MaxBytes を超えて読まない
 //   - GETの一時的な失敗（期限切れ・接続失敗・502/503/504）だけ、
-//     呼び出しの期限内で最大1回再試行する。429とその他の4xxは再試行しない
+//     呼び出しの期限内で最大1回再試行する（MaxAttempts で変えられる）。429とその他の4xxは再試行しない
 type JSONFetcher struct {
 	Client       HTTPClient
 	MaxBytes     int64
@@ -35,6 +38,9 @@ type JSONFetcher struct {
 
 	// RetryDelay は再試行までの待ち時間。0なら100ms。
 	RetryDelay time.Duration
+	// MaxAttempts は1回の呼び出しで通信してよい最大回数。0なら2回（再試行1回）、1なら再試行しない。
+	// 呼び出し側が再試行を自分で持つとき（記事の定期一括取得）は1にする。
+	MaxAttempts int
 	// Now はRetry-Afterの解釈に使う現在時刻。nilなら time.Now。
 	Now func() time.Time
 }
@@ -65,17 +71,29 @@ func NewJSONFetcher(timeout time.Duration, maxBytes int64) JSONFetcher {
 // GetJSON は rawURL へGETし、200応答の本文を out へ復号する。
 // 返すエラーは *Error で、URL・ヘッダー・本文は含まない。
 func (f JSONFetcher) GetJSON(ctx context.Context, rawURL string, headers http.Header, out any) error {
+	_, err := f.GetJSONHeader(ctx, rawURL, headers, out)
+	return err
+}
+
+// GetJSONHeader は GetJSON と同じ取得を行い、最後に受けた応答のヘッダーも返す
+// （Qiitaの Rate-Remaining を読むため）。応答を受けられなかったときのヘッダーは nil。
+func (f JSONFetcher) GetJSONHeader(ctx context.Context, rawURL string, headers http.Header, out any) (http.Header, error) {
 	if f.Client == nil || f.MaxBytes <= 0 {
-		return newError(ErrInvalidRequest, 0)
+		return nil, newError(ErrInvalidRequest, 0)
 	}
 	if !f.allowed(rawURL) {
-		return newError(ErrInvalidRequest, 0)
+		return nil, newError(ErrInvalidRequest, 0)
+	}
+	maxAttempts := f.MaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = defaultMaxAttempts
 	}
 
 	for attempt := 0; ; attempt++ {
+		canRetry := attempt+1 < maxAttempts
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 		if err != nil {
-			return newError(ErrInvalidRequest, 0)
+			return nil, newError(ErrInvalidRequest, 0)
 		}
 		req.Header.Set("Accept", "application/json")
 		for k, vs := range headers {
@@ -87,20 +105,21 @@ func (f JSONFetcher) GetJSON(ctx context.Context, rawURL string, headers http.He
 		resp, err := f.Client.Do(req)
 		if err != nil {
 			perr := classifyTransport(ctx, err)
-			if attempt == 0 && ctx.Err() == nil && f.waitRetry(ctx) {
+			if canRetry && ctx.Err() == nil && f.waitRetry(ctx) {
 				continue
 			}
-			return perr
+			return nil, perr
 		}
 
+		header := resp.Header
 		perr, retryable := f.handle(ctx, req, resp, out)
 		if perr == nil {
-			return nil
+			return header, nil
 		}
-		if attempt == 0 && retryable && f.waitRetry(ctx) {
+		if canRetry && retryable && f.waitRetry(ctx) {
 			continue
 		}
-		return perr
+		return header, perr
 	}
 }
 
