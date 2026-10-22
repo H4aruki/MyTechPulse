@@ -149,9 +149,8 @@ jobs:
   # 次の試験は、ここでは実行しない。
   # - ops/deploy_go_integration_test.sh、ops/tests/test_database_restore_integration.sh:
   #   本物のDocker・PostgreSQLと、専用の環境変数が要るため
-  # - ops/tests/test_database_safety.sh: ripgrep（rg）を使うが、ubuntu-latest に
-  #   入っている保証がないため（依存は追加しない方針）
-  # なお test_fix_initial_interest_240.sh は、移行の確認に grep を使うので、ここで実行できる。
+  # なお test_fix_initial_interest_240.sh と test_database_safety.sh は、確認に grep だけを使い
+  # （DBは要らない）、ここで実行できる。
   #
   # 運用スクリプトは本番の入れ替えそのものなので、公開の工程（go-release の needs）に
   # 入れている。壊れたまま配布物を作らないようにするため
@@ -175,6 +174,9 @@ jobs:
 
       - name: 古いバックアップの削除（prune_backups.sh）
         run: bash ops/tests/test_prune_backups.sh
+
+      - name: DB運用スクリプトの安全の静的検査（test_database_safety.sh）
+        run: bash ops/tests/test_database_safety.sh
 
   go-check:
     name: Goバックエンドの検査
