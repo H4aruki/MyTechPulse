@@ -114,7 +114,7 @@ reset
 FAKE_REMAINING=3 run 1 --execute --backup "$work/b.dump" --yes
 
 # --- SQLファイルは移行ではない（DELETE/UPDATE は ops/ の関数の中だけ） ---
-if rg -q 'initial_interest_240|ii240' "$repo_root/server/db/migrations"; then
+if grep -rqE 'initial_interest_240|ii240' "$repo_root/server/db/migrations"; then
   fail "移行に #240 の書き換えが入っている"
 fi
 

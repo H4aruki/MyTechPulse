@@ -48,7 +48,7 @@ function evaluate(expression, context) {
 }
 
 const jobs = splitJobs(text);
-const checks = ["frontend-lint", "hooks-test", "go-check", "go-generated", "go-image"];
+const checks = ["frontend-lint", "hooks-test", "ops-test", "go-check", "go-generated", "go-image"];
 const main = { "github.event_name": "push", "github.ref": "refs/heads/main" };
 
 test("自動デプロイの3つのjobが存在する", () => {
