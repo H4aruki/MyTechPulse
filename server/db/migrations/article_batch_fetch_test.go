@@ -116,8 +116,9 @@ func TestArticleBatchFetchSeedsTheSignupTagsWithZennTopics(t *testing.T) {
 		if err := rows.Scan(&name, &topic); err != nil {
 			t.Fatal(err)
 		}
-		if topic != zenn.TopicFor(name) {
-			t.Errorf("%q の zenn_topic = %q, zenn.TopicFor = %q", name, topic, zenn.TopicFor(name))
+		// 00008 はタグ名から導いた値を入れ、Zennのトピック名と違う11件だけを 00009 が直す
+		if want := expectedZennTopic(name); topic != want {
+			t.Errorf("%q の zenn_topic = %q, want %q (zenn.TopicFor = %q)", name, topic, want, zenn.TopicFor(name))
 		}
 		seen++
 	}
