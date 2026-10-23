@@ -1,6 +1,58 @@
 {
   "components": {
     "schemas": {
+      "ArticleItem": {
+        "additionalProperties": false,
+        "properties": {
+          "author_name": {
+            "description": "著者名",
+            "type": "string"
+          },
+          "id": {
+            "description": "記事ID",
+            "format": "int64",
+            "type": "integer"
+          },
+          "likes": {
+            "description": "いいね数",
+            "format": "int64",
+            "type": "integer"
+          },
+          "published_at": {
+            "description": "記事の公開日時",
+            "format": "date-time",
+            "type": "string"
+          },
+          "saved_at": {
+            "description": "保存した日時",
+            "format": "date-time",
+            "type": "string"
+          },
+          "source": {
+            "description": "提供元(qiita または zenn)",
+            "type": "string"
+          },
+          "title": {
+            "description": "記事のタイトル",
+            "type": "string"
+          },
+          "url": {
+            "description": "記事のURL",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "url",
+          "title",
+          "author_name",
+          "likes",
+          "published_at",
+          "saved_at"
+        ],
+        "type": "object"
+      },
       "AuthResponse": {
         "additionalProperties": false,
         "properties": {
@@ -506,6 +558,43 @@
         "required": [
           "field",
           "message"
+        ],
+        "type": "object"
+      },
+      "ListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "description": "保存の新しい順の記事",
+            "items": {
+              "$ref": "#/components/schemas/ArticleItem"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "limit": {
+            "description": "このページの最大件数",
+            "format": "int64",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "このページの先頭の位置(0始まり)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "保存している記事の総件数(ページングする前)",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
         ],
         "type": "object"
       },
@@ -1752,6 +1841,258 @@
         "summary": "記事クリックを記録",
         "tags": [
           "recommendation"
+        ]
+      }
+    },
+    "/api/v1/saved-articles": {
+      "get": {
+        "description": "自分が保存した記事だけを、保存の新しい順に返す。個別の回数制限はない(`/api/v1/` 全体の接続元IP制限だけ)。",
+        "operationId": "saved-articles-list",
+        "parameters": [
+          {
+            "description": "1ページの件数。1〜100、既定20",
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "description": "1ページの件数。1〜100、既定20",
+              "format": "int64",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "先頭から読み飛ばす件数。0以上",
+            "explode": false,
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "description": "先頭から読み飛ばす件数。0以上",
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "保存した記事の一覧",
+        "tags": [
+          "saved-articles"
+        ]
+      }
+    },
+    "/api/v1/saved-articles/{article_id}": {
+      "delete": {
+        "description": "冪等。保存していない記事でも、存在しない記事IDでも204を返す(存在を探られないよう、404にしない)。利用者ごとに1分に30回まで(保存と解除を合わせて数える)。超えると429と `Retry-After`(秒)を返す。",
+        "operationId": "saved-articles-unsave",
+        "parameters": [
+          {
+            "description": "記事ID(1以上の整数)",
+            "in": "path",
+            "name": "article_id",
+            "required": true,
+            "schema": {
+              "description": "記事ID(1以上の整数)",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "記事の保存を解除",
+        "tags": [
+          "saved-articles"
+        ]
+      },
+      "put": {
+        "description": "冪等。新しく保存したら201、すでに保存済みなら200(どちらも本文なし。保存日時は変えない)。保存は1人500件まで(保存済みの記事は上限でも200)。利用者ごとに1分に30回まで(保存と解除を合わせて数える)。超えると429と `Retry-After`(秒)を返す。",
+        "operationId": "saved-articles-save",
+        "parameters": [
+          {
+            "description": "記事ID(1以上の整数)",
+            "in": "path",
+            "name": "article_id",
+            "required": true,
+            "schema": {
+              "description": "記事ID(1以上の整数)",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "summary": "記事を保存",
+        "tags": [
+          "saved-articles"
         ]
       }
     },
