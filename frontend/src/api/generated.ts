@@ -1574,6 +1574,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Unauthorized */
             401: {
                 headers: {

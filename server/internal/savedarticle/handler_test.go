@@ -217,3 +217,36 @@ func TestWriteRateLimitIsPerUserAndShared(t *testing.T) {
 		t.Fatalf("list after limit = %d", got.Code)
 	}
 }
+
+// 保存の契約に、新規の201と保存済みの200の両方が載っていること。
+func TestOpenAPIContractListsSaveStatuses(t *testing.T) {
+	h, _ := newHandler()
+	rec := do(h, http.MethodGet, "/openapi.json", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openapi.json = %d", rec.Code)
+	}
+	var spec struct {
+		Paths map[string]map[string]struct {
+			Responses map[string]struct {
+				Content map[string]json.RawMessage `json:"content"`
+			} `json:"responses"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &spec); err != nil {
+		t.Fatal(err)
+	}
+	op, ok := spec.Paths["/api/v1/saved-articles/{article_id}"]["put"]
+	if !ok {
+		t.Fatal("put /api/v1/saved-articles/{article_id} missing")
+	}
+	for _, s := range []string{"200", "201"} {
+		res, ok := op.Responses[s]
+		if !ok {
+			t.Errorf("put lacks response %s", s)
+			continue
+		}
+		if len(res.Content) != 0 {
+			t.Errorf("response %s must have no body: %v", s, res.Content)
+		}
+	}
+}
