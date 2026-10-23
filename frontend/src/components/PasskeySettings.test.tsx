@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ApiError } from '@/api/client'
 import {
@@ -120,6 +120,130 @@ describe('PasskeySettings', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('取り消されたか')
     expect(finishPasskeyRegistration).not.toHaveBeenCalled()
+  })
+
+  describe('別のアプリへの切り替えで中断されたとき', () => {
+    let visibility: 'hidden' | 'visible' = 'visible'
+
+    function setVisibility(state: 'hidden' | 'visible') {
+      visibility = state
+      document.dispatchEvent(new Event('visibilitychange'))
+    }
+
+    beforeEach(() => {
+      visibility = 'visible'
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
+    })
+    afterEach(() => {
+      visibility = 'visible'
+      Reflect.deleteProperty(document, 'visibilityState')
+    })
+
+    const registrationOptions = {
+      challengeToken: 'reg-token-1',
+      publicKey: { challenge: 'AQID', user: { id: 'BAUG', name: 'a', displayName: 'a' } },
+    }
+
+    const credential = {
+      id: 'Y3JlZA',
+      rawId: new Uint8Array([1]).buffer,
+      type: 'public-key',
+      response: {
+        clientDataJSON: new Uint8Array([2]).buffer,
+        attestationObject: new Uint8Array([3]).buffer,
+      },
+      getClientExtensionResults: () => ({}),
+    }
+
+    test('中断の説明と「もう一度試す」を出し、追加ボタンは使える。押すとやり直して追加できる', async () => {
+      const create = stubSupported(
+        vi
+          .fn()
+          .mockImplementationOnce(async () => {
+            setVisibility('hidden')
+            throw new DOMException('x', 'NotAllowedError')
+          })
+          .mockResolvedValueOnce(credential),
+      )
+      vi.mocked(beginPasskeyRegistration).mockResolvedValue(registrationOptions)
+      vi.mocked(finishPasskeyRegistration).mockResolvedValue(item(1, 'iPhone'))
+      renderSettings()
+      await screen.findByText('登録されたパスキーはまだありません。')
+
+      fireEvent.change(screen.getByLabelText('名前（任意）'), { target: { value: 'iPhone' } })
+      fireEvent.click(screen.getByRole('button', { name: 'パスキーを追加' }))
+
+      const alert = await screen.findByRole('alert')
+      setVisibility('visible')
+      expect(alert).toHaveTextContent('ほかのアプリに切り替えたため')
+      expect(alert).toHaveTextContent('パスキーの追加ができませんでした')
+      expect(within(alert).getByRole('button', { name: 'もう一度試す' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'パスキーを追加' })).toBeEnabled()
+      expect(finishPasskeyRegistration).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'もう一度試す' }))
+
+      expect(await screen.findByText('パスキーを追加しました。')).toBeInTheDocument()
+      expect(beginPasskeyRegistration).toHaveBeenCalledTimes(2)
+      expect(create).toHaveBeenCalledTimes(2)
+      expect(finishPasskeyRegistration).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(finishPasskeyRegistration).mock.calls[0][0].name).toBe('iPhone')
+      expect(screen.queryByRole('button', { name: 'もう一度試す' })).not.toBeInTheDocument()
+    })
+
+    test('非表示にならない取り消しでは、「もう一度試す」を出さない', async () => {
+      stubSupported(vi.fn().mockRejectedValue(new DOMException('x', 'NotAllowedError')))
+      vi.mocked(beginPasskeyRegistration).mockResolvedValue(registrationOptions)
+      renderSettings()
+      await screen.findByText('登録されたパスキーはまだありません。')
+
+      fireEvent.click(screen.getByRole('button', { name: 'パスキーを追加' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('取り消されたか')
+      expect(screen.queryByRole('button', { name: 'もう一度試す' })).not.toBeInTheDocument()
+    })
+
+    test('やり直しが別のエラーになると、中断の表示と「もう一度試す」は消える', async () => {
+      stubSupported(
+        vi
+          .fn()
+          .mockImplementationOnce(async () => {
+            setVisibility('hidden')
+            throw new DOMException('x', 'NotAllowedError')
+          })
+          .mockRejectedValueOnce(new DOMException('x', 'NotAllowedError')),
+      )
+      vi.mocked(beginPasskeyRegistration).mockResolvedValue(registrationOptions)
+      renderSettings()
+      await screen.findByText('登録されたパスキーはまだありません。')
+
+      fireEvent.click(screen.getByRole('button', { name: 'パスキーを追加' }))
+      await screen.findByRole('button', { name: 'もう一度試す' })
+      setVisibility('visible')
+      fireEvent.click(screen.getByRole('button', { name: 'もう一度試す' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('取り消されたか')
+      expect(screen.queryByRole('button', { name: 'もう一度試す' })).not.toBeInTheDocument()
+    })
+
+    test('保存先（sessionStorage・localStorage）へ challengeToken を書かない', async () => {
+      stubSupported(
+        vi.fn().mockImplementationOnce(async () => {
+          setVisibility('hidden')
+          throw new DOMException('x', 'NotAllowedError')
+        }),
+      )
+      vi.mocked(beginPasskeyRegistration).mockResolvedValue(registrationOptions)
+      renderSettings()
+      await screen.findByText('登録されたパスキーはまだありません。')
+
+      fireEvent.click(screen.getByRole('button', { name: 'パスキーを追加' }))
+      await screen.findByRole('button', { name: 'もう一度試す' })
+      setVisibility('visible')
+
+      expect(JSON.stringify({ ...window.sessionStorage })).not.toContain('reg-token-1')
+      expect(JSON.stringify({ ...window.localStorage })).not.toContain('reg-token-1')
+    })
   })
 
   test('サーバーの失敗は本文のメッセージを出す', async () => {

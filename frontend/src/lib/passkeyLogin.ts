@@ -15,8 +15,10 @@ import type { AuthResponse } from '@/api/types'
 import {
   getPasskeyAssertion,
   isConditionalPasskeyLoginAvailable,
+  PASSKEY_LOGIN_INTERRUPTED,
   PasskeyLoginAbortedError,
   PasskeyLoginCancelledError,
+  PasskeyLoginInterruptedError,
 } from './passkey'
 
 export const PASSKEY_LOGIN_FAILED = 'パスキーでログインできませんでした。もう一度お試しください。'
@@ -43,8 +45,9 @@ export interface PasskeyLoginHandlers {
   onError: (message: string) => void
 }
 
-/** 利用者に見せる文言を決める。取り消しと中止は null（何も表示しない） */
+/** 利用者に見せる文言を決める。取り消しと中止は null（何も表示しない）。切り替えによる中断だけは案内する */
 export function classifyPasskeyLoginError(error: unknown): string | null {
+  if (error instanceof PasskeyLoginInterruptedError) return PASSKEY_LOGIN_INTERRUPTED
   if (error instanceof PasskeyLoginCancelledError) return null
   // 利用者の有無や失敗の理由は区別せず、固定の文言にする
   if (error instanceof UnauthorizedError) return PASSKEY_LOGIN_FAILED
@@ -312,6 +315,11 @@ export class PasskeyLoginController {
       this.handlers.onError(message)
     }
     if (error instanceof PasskeyLoginAbortedError) return
+    if (error instanceof PasskeyLoginInterruptedError) {
+      // 別のアプリへ切り替えて中断された。cancelRetried は使わず、非表示なら表示に戻ったとき（wantStart）に作り直す
+      this.requestConditional()
+      return
+    }
     if (error instanceof PasskeyLoginCancelledError) {
       if (run.kind === 'explicit') {
         this.requestConditional()
