@@ -27,6 +27,32 @@ export class PasskeyLoginAbortedError extends PasskeyLoginCancelledError {
   }
 }
 
+export const PASSKEY_LOGIN_INTERRUPTED =
+  'ほかのアプリに切り替えたため、パスワードマネージャーの本人確認が中断されました。もう一度お試しください。確認コードが必要な場合は、先にブラウザの設定（Chrome では Google パスワード マネージャー）で本人確認を済ませてから、もう一度お試しください。'
+export const PASSKEY_REGISTRATION_INTERRUPTED =
+  'ほかのアプリに切り替えたため、パスワードマネージャーの本人確認が中断され、パスキーの追加ができませんでした。もう一度お試しください。確認コードが必要な場合は、先にブラウザの設定（Chrome では Google パスワード マネージャー）で本人確認を済ませてから、もう一度お試しください。'
+
+/**
+ * ログインの本人確認が、別のアプリへ切り替えている間に中断された。
+ * 確認コードを見に行く間に OS がシートを閉じる。取り消しとは区別して案内するための派生クラス
+ */
+export class PasskeyLoginInterruptedError extends PasskeyLoginCancelledError {
+  constructor() {
+    super()
+    this.message = PASSKEY_LOGIN_INTERRUPTED
+    this.name = 'PasskeyLoginInterruptedError'
+  }
+}
+
+/** パスキーの追加が、別のアプリへ切り替えている間に中断された */
+export class PasskeyInterruptedError extends PasskeyCancelledError {
+  constructor() {
+    super()
+    this.message = PASSKEY_REGISTRATION_INTERRUPTED
+    this.name = 'PasskeyInterruptedError'
+  }
+}
+
 /** この端末のパスキーがすでに登録されている */
 export class PasskeyAlreadyRegisteredError extends Error {
   constructor() {
@@ -156,6 +182,19 @@ export async function isConditionalPasskeyLoginAvailable(): Promise<boolean> {
   }
 }
 
+/** 呼び出しの間に、ページが非表示になったかを記録する。終わったら必ず stop() でリスナーを外す */
+function watchPageHidden(): { wasHidden: () => boolean; stop: () => void } {
+  let hidden = false
+  const onChange = () => {
+    if (document.visibilityState === 'hidden') hidden = true
+  }
+  document.addEventListener('visibilitychange', onChange)
+  return {
+    wasHidden: () => hidden,
+    stop: () => document.removeEventListener('visibilitychange', onChange),
+  }
+}
+
 export interface PasskeyAssertionOptions {
   signal?: AbortSignal
   /** 省略時は端末の確認画面を直接出す（modal） */
@@ -169,6 +208,7 @@ export async function getPasskeyAssertion(
 ): Promise<Record<string, unknown>> {
   const { signal, mediation } = options
   let credential: Credential | null
+  const watcher = watchPageHidden()
   try {
     credential = await navigator.credentials.get({
       publicKey: toRequestOptions(publicKey),
@@ -182,9 +222,11 @@ export async function getPasskeyAssertion(
       error instanceof DOMException &&
       (error.name === 'NotAllowedError' || error.name === 'AbortError')
     ) {
-      throw new PasskeyLoginCancelledError()
+      throw watcher.wasHidden() ? new PasskeyLoginInterruptedError() : new PasskeyLoginCancelledError()
     }
     throw error
+  } finally {
+    watcher.stop()
   }
   // 解決と中止が競合した場合も、中止を優先して結果を使わせない
   if (signal?.aborted) throw new PasskeyLoginAbortedError()
@@ -197,16 +239,19 @@ export async function createPasskeyCredential(
   publicKey: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   let credential: Credential | null
+  const watcher = watchPageHidden()
   try {
     credential = await navigator.credentials.create({ publicKey: toCreationOptions(publicKey) })
   } catch (error) {
     if (error instanceof DOMException) {
       if (error.name === 'InvalidStateError') throw new PasskeyAlreadyRegisteredError()
       if (error.name === 'NotAllowedError' || error.name === 'AbortError') {
-        throw new PasskeyCancelledError()
+        throw watcher.wasHidden() ? new PasskeyInterruptedError() : new PasskeyCancelledError()
       }
     }
     throw error
+  } finally {
+    watcher.stop()
   }
   if (!credential) throw new PasskeyCancelledError()
   return credentialToJSON(credential as PublicKeyCredential)

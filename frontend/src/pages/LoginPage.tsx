@@ -10,7 +10,7 @@ import type { AuthResponse } from '@/api/types'
 import { AppLayout } from '@/components/AppLayout'
 import { authQueryKey } from '@/lib/auth'
 import { clearFeedbackState } from '@/lib/feedbackTracker'
-import { isPasskeyLoginSupported } from '@/lib/passkey'
+import { isPasskeyLoginSupported, PASSKEY_LOGIN_INTERRUPTED } from '@/lib/passkey'
 import { LOGIN_LOCKED } from '@/lib/passkeyLogin'
 import { usePasskeyLogin } from '@/lib/usePasskeyLogin'
 
@@ -127,9 +127,19 @@ export function LoginPage() {
           </div>
 
           {formError && (
-            <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-              {formError}
-            </p>
+            <div role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p>{formError}</p>
+              {formError === PASSKEY_LOGIN_INTERRUPTED && (
+                <button
+                  type="button"
+                  onClick={onPasskeyLogin}
+                  disabled={busy}
+                  className="mt-2 rounded-lg border border-red-300 bg-white px-3 py-1.5 font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  もう一度試す
+                </button>
+              )}
+            </div>
           )}
 
           <button
