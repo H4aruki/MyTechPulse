@@ -477,10 +477,12 @@ func TestSavedArticlesUnsaveWithinTheDelayDoesNotLearn(t *testing.T) {
 	}
 	backdateSaves(t, pool, user)
 	mustList(t, in, user)
+	assertWeights(t, pool, user, map[string]int{"go": 5000})
+	// クリックは知らないタグでも全タグを ×0.8 にする。保存の +3000 が入っていれば 6400 になる
 	if _, err := in.UpdateForClick(ctx, user, []string{"zzz-no-such-tag"}); err != nil {
 		t.Fatal(err)
 	}
-	assertWeights(t, pool, user, map[string]int{"go": 5000})
+	assertWeights(t, pool, user, map[string]int{"go": 4000})
 }
 
 func TestSavedArticlesLearningSurvivesRestart(t *testing.T) {
