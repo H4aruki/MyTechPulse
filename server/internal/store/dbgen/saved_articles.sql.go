@@ -68,6 +68,38 @@ func (q *Queries) InsertSavedArticle(ctx context.Context, arg InsertSavedArticle
 	return result.RowsAffected(), nil
 }
 
+const listArticleTags = `-- name: ListArticleTags :many
+SELECT at."tag_ID", t.tag_name
+FROM article_tags at JOIN tag t ON t."tag_ID" = at."tag_ID"
+WHERE at.article_id = $1 ORDER BY at."tag_ID"
+`
+
+type ListArticleTagsRow struct {
+	TagID   int32
+	TagName string
+}
+
+// 記事のタグ。保存したときの興味度の学習に使う。
+func (q *Queries) ListArticleTags(ctx context.Context, articleID int64) ([]ListArticleTagsRow, error) {
+	rows, err := q.db.Query(ctx, listArticleTags, articleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListArticleTagsRow{}
+	for rows.Next() {
+		var i ListArticleTagsRow
+		if err := rows.Scan(&i.TagID, &i.TagName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSavedArticles = `-- name: ListSavedArticles :many
 SELECT a.id, a.source, a.url, a.title, a.author_name, a.likes, a.published_at, s.created_at AS saved_at
 FROM saved_articles s
