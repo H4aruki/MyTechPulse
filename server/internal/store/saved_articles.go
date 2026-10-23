@@ -55,7 +55,8 @@ func savedUserID32(id int64) (int32, bool) {
 	return int32(id), true
 }
 
-// Save は記事を保存する。新しく保存したときだけ created を true にする。
+// Save は記事を保存する（保存するだけで、興味度は変えない。学習は SaveLearnDelay 後に applyDueSaveLearning が行う）。
+// 新しく保存したときだけ created を true にする。
 // 保存済みなら何もせず（保存日時も変えず）、上限でも成功する。
 // 未保存の記事は、すでに SavedArticlesLimit 件なら ErrSavedLimitReached、記事が無ければ ErrArticleNotFound。
 // 利用者の行を鍵にして数え直すため、同時に保存しても上限を超えない。
@@ -105,60 +106,72 @@ func (s *SavedArticles) Save(ctx context.Context, userID, articleID int64) (crea
 	if err != nil {
 		return false, errors.New("store: 記事を保存できません")
 	}
-	// 新しい保存だけ学習する。再PUT（保存済み）は学習しない（連打で点を上げられないように）。
-	// 学習は保存と同じトランザクションで行い、失敗したら保存ごと取り消す。
-	if rows == 1 {
-		if err := learnFromSave(ctx, q, uid, articleID); err != nil {
-			return false, err
-		}
-	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, errors.New("store: 記事を保存できません")
 	}
 	return rows == 1, nil
 }
 
-// learnFromSave は、保存した記事の各タグの興味度に interest.SaveBoost を足す。
-// 他のタグは減衰しない。tag 表に新しい行は作らず、記事に付いているタグだけを使う。
-func learnFromSave(ctx context.Context, q *dbgen.Queries, uid int32, articleID int64) error {
+// SaveLearnDelay は、保存してから興味度へ反映するまでの時間。この間に解除すれば、学習に影響しない（#236 決めごと5）。
+const SaveLearnDelay = 10 * time.Second
+
+// applyDueSaveLearning は、保存から SaveLearnDelay を過ぎた未反映の保存を、まとめて興味度へ反映する。
+// 各記事のタグへ interest.SaveBoost を足す（他のタグは減衰しない）。tag 表に新しい行は作らず、記事に付いているタグだけを使う。
+// 呼び出し側は、利用者の行をロック（LockUserForRecommendation）したトランザクションの中で呼ぶこと。
+// 同じ記事が二重に入らないのは、反映済みの印（learned_at）を、興味度の更新と同じトランザクションで付けるため。
+// 解除された保存は行が無いので反映されない。読み込みと書き込みは、何件あっても1回ずつ。
+func applyDueSaveLearning(ctx context.Context, q *dbgen.Queries, uid int32) error {
 	fail := errors.New("store: 興味度を更新できません")
-	tags, err := q.ListArticleTags(ctx, articleID)
+	articleIDs, err := q.MarkDueSavedLearned(ctx, dbgen.MarkDueSavedLearnedParams{UserID: uid, DelaySeconds: SaveLearnDelay.Seconds()})
 	if err != nil {
 		return fail
 	}
-	if len(tags) == 0 {
+	if len(articleIDs) == 0 {
 		return nil
+	}
+	tagRows, err := q.ListArticleTagsByArticles(ctx, articleIDs)
+	if err != nil {
+		return fail
 	}
 	rows, err := q.ListRecommendations(ctx, uid)
 	if err != nil {
 		return fail
 	}
+	original := make(map[int64]int64, len(rows))
 	current := make([]interest.Weight, 0, len(rows))
 	for _, row := range rows {
 		current = append(current, interest.Weight{TagID: int64(row.TagID), Tag: row.TagName, Value: int64(row.MatchInt)})
+		original[int64(row.TagID)] = int64(row.MatchInt)
 	}
-	names := make([]string, 0, len(tags))
-	tagIDs := make(map[string]int32, len(tags))
-	for _, tag := range tags {
-		names = append(names, tag.TagName)
-		tagIDs[interest.NormalizeTag(tag.TagName)] = tag.TagID
+	tagIDs := make(map[string]int64, len(tagRows))
+	namesByArticle := make(map[int64][]string, len(articleIDs))
+	for _, tag := range tagRows {
+		namesByArticle[tag.ArticleID] = append(namesByArticle[tag.ArticleID], tag.TagName)
+		tagIDs[interest.NormalizeTag(tag.TagName)] = int64(tag.TagID)
 	}
-	updated, err := interest.UpdateOnSave(current, names)
-	if err != nil {
-		return err
-	}
-	for i, weight := range updated {
-		if i < len(current) {
-			if weight.Value == current[i].Value {
-				continue
-			}
-		} else {
-			// まだ行の無かったタグ。名前から、記事のタグのIDを引く。
-			id, ok := tagIDs[weight.Tag]
+	for _, id := range articleIDs {
+		names := namesByArticle[id]
+		if len(names) == 0 {
+			continue
+		}
+		before := len(current)
+		updated, err := interest.UpdateOnSave(current, names)
+		if err != nil {
+			return err
+		}
+		// まだ行の無かったタグは、名前から記事のタグのIDを引く。次の記事の計算でも同じタグとして扱うため、ここで確定する。
+		for i := before; i < len(updated); i++ {
+			tagID, ok := tagIDs[updated[i].Tag]
 			if !ok {
 				return fail
 			}
-			weight.TagID = int64(id)
+			updated[i].TagID = tagID
+		}
+		current = updated
+	}
+	for _, weight := range current {
+		if was, ok := original[weight.TagID]; ok && was == weight.Value {
+			continue
 		}
 		if weight.Value > math.MaxInt32 || weight.Value < math.MinInt32 || weight.TagID > math.MaxInt32 || weight.TagID < 1 {
 			return fail

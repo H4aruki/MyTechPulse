@@ -390,53 +390,210 @@ func assertWeights(t *testing.T, pool *pgxpool.Pool, userID int64, want map[stri
 	}
 }
 
-func TestSavedArticlesSaveLearnsInterest(t *testing.T) {
+// backdateSaves は、利用者の保存を、反映の期限（SaveLearnDelay）を過ぎた時刻にずらす（10秒待たないため）。
+func backdateSaves(t *testing.T, pool *pgxpool.Pool, userID int64) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE saved_articles SET created_at = now() - interval '11 seconds' WHERE "user_ID" = $1`, userID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustList(t *testing.T, in *store.Interest, userID int64) {
+	t.Helper()
+	if _, err := in.List(context.Background(), userID); err != nil {
+		t.Fatalf("Interest.List: %v", err)
+	}
+}
+
+func TestSavedArticlesLearnsOnlyAfterTheDelay(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
 	s := store.NewSavedArticles(pool)
+	in := store.NewInterest(pool)
 	user := newPasskeyUser(t, pool, "alice")
 	ids := newSavableArticles(t, pool, "learn", 1)
 	tagArticle(t, pool, ids[0], "Go", "Rust")
 	setWeight(t, pool, user, "go", 5000)
 	setWeight(t, pool, user, "python", 7000) // 記事に無いタグ
 	tagsBefore := queryInt(t, pool, `SELECT count(*) FROM tag`)
+	before := map[string]int{"go": 5000, "python": 7000}
 
-	// (a)(d) 既存のタグは +3000、行の無かったタグは 3000 で行ができる。記事に無いタグは減衰しない
+	// (a) 保存した直後は、保存も一覧も、点を変えない
 	mustSave(t, s, user, ids[0])
-	assertWeights(t, pool, user, map[string]int{"go": 8000, "rust": 3000, "python": 7000})
-	if n := queryInt(t, pool, `SELECT count(*) FROM tag`); n != tagsBefore {
-		t.Fatalf("tag 表の行が増えた: %d -> %d", tagsBefore, n)
-	}
+	assertWeights(t, pool, user, before)
+	mustList(t, in, user)
+	assertWeights(t, pool, user, before)
 
-	// (b) 同じ記事をもう一度保存しても、点は変わらない
+	// (e) 期限前の再PUT（200）は、行も未反映の数も増やさず、点も変えない
 	if created, err := s.Save(ctx, user, ids[0]); err != nil || created {
 		t.Fatalf("再保存: created = %v, err = %v", created, err)
 	}
-	assertWeights(t, pool, user, map[string]int{"go": 8000, "rust": 3000, "python": 7000})
+	if n := queryInt(t, pool, `SELECT count(*) FROM saved_articles WHERE learned_at IS NULL`); n != 1 {
+		t.Fatalf("未反映の保存 = %d, want 1", n)
+	}
+	assertWeights(t, pool, user, before)
 
-	// (e) 解除しても点は変わらない
+	// (c) 期限を過ぎて読むと、既存のタグは +3000、行の無かったタグは 3000 で行ができる。記事に無いタグは減衰しない
+	backdateSaves(t, pool, user)
+	mustList(t, in, user)
+	after := map[string]int{"go": 8000, "rust": 3000, "python": 7000}
+	assertWeights(t, pool, user, after)
+	if n := queryInt(t, pool, `SELECT count(*) FROM tag`); n != tagsBefore {
+		t.Fatalf("tag 表の行が増えた: %d -> %d", tagsBefore, n)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM saved_articles WHERE learned_at IS NOT NULL`); n != 1 {
+		t.Fatalf("反映済みの保存 = %d, want 1", n)
+	}
+
+	// (c) 何度読んでも、再PUTしても、解除しても、二重に足さない
+	mustList(t, in, user)
+	if created, err := s.Save(ctx, user, ids[0]); err != nil || created {
+		t.Fatalf("再保存: created = %v, err = %v", created, err)
+	}
+	mustList(t, in, user)
+	assertWeights(t, pool, user, after)
 	if err := s.Unsave(ctx, user, ids[0]); err != nil {
 		t.Fatal(err)
 	}
-	assertWeights(t, pool, user, map[string]int{"go": 8000, "rust": 3000, "python": 7000})
+	mustList(t, in, user)
+	assertWeights(t, pool, user, after)
 }
 
-func TestSavedArticlesSaveAfterClickStillLearns(t *testing.T) {
+func TestSavedArticlesUnsaveWithinTheDelayDoesNotLearn(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
 	s := store.NewSavedArticles(pool)
+	in := store.NewInterest(pool)
 	user := newPasskeyUser(t, pool, "alice")
-	ids := newSavableArticles(t, pool, "clk", 1)
+	ids := newSavableArticles(t, pool, "undo", 1)
 	tagArticle(t, pool, ids[0], "Go")
 	setWeight(t, pool, user, "go", 5000)
 
-	// (c) クリックは 5000×0.8+2000 = 6000。そのあとの保存でも +3000
-	if _, err := store.NewInterest(pool).UpdateForClick(ctx, user, []string{"Go"}); err != nil {
+	// (b) 期限内に解除すれば、行が無いので、時刻が過ぎても反映されない
+	mustSave(t, s, user, ids[0])
+	if err := s.Unsave(ctx, user, ids[0]); err != nil {
 		t.Fatal(err)
 	}
-	assertWeights(t, pool, user, map[string]int{"go": 6000})
+	backdateSaves(t, pool, user)
+	mustList(t, in, user)
+	assertWeights(t, pool, user, map[string]int{"go": 5000})
+	// クリックは知らないタグでも全タグを ×0.8 にする。保存の +3000 が入っていれば 6400 になる
+	if _, err := in.UpdateForClick(ctx, user, []string{"zzz-no-such-tag"}); err != nil {
+		t.Fatal(err)
+	}
+	assertWeights(t, pool, user, map[string]int{"go": 4000})
+}
+
+func TestSavedArticlesLearningSurvivesRestart(t *testing.T) {
+	pool := newTestPool(t)
+	user := newPasskeyUser(t, pool, "alice")
+	ids := newSavableArticles(t, pool, "restart", 1)
+	tagArticle(t, pool, ids[0], "Go")
+	setWeight(t, pool, user, "go", 5000)
+
+	// (d) 保存した側のインスタンスを捨てて作り直しても、DBの記録から反映される。1回だけ
+	mustSave(t, store.NewSavedArticles(pool), user, ids[0])
+	backdateSaves(t, pool, user)
+	mustList(t, store.NewInterest(pool), user)
+	assertWeights(t, pool, user, map[string]int{"go": 8000})
+	mustList(t, store.NewInterest(pool), user)
+	assertWeights(t, pool, user, map[string]int{"go": 8000})
+}
+
+func TestSavedArticlesLearnsForSeveralArticlesAndAfterClick(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	s := store.NewSavedArticles(pool)
+	in := store.NewInterest(pool)
+	user := newPasskeyUser(t, pool, "alice")
+	ids := newSavableArticles(t, pool, "multi", 2)
+	tagArticle(t, pool, ids[0], "Go")
+	tagArticle(t, pool, ids[1], "Go", "Rust")
+	setWeight(t, pool, user, "go", 5000)
+	setWeight(t, pool, user, "python", 7000)
+
+	// 複数の記事は、まとめて反映する（Go は2回分で上限の10000、Rust は新しい行）
 	mustSave(t, s, user, ids[0])
-	assertWeights(t, pool, user, map[string]int{"go": 9000})
+	mustSave(t, s, user, ids[1])
+	backdateSaves(t, pool, user)
+	mustList(t, in, user)
+	assertWeights(t, pool, user, map[string]int{"go": 10000, "rust": 3000, "python": 7000})
+
+	// (f) クリック済みの記事を保存しても +3000。ほかのタグは減衰しない
+	ids = newSavableArticles(t, pool, "clk", 1)
+	tagArticle(t, pool, ids[0], "Java")
+	setWeight(t, pool, user, "java", 5000)
+	if _, err := in.UpdateForClick(ctx, user, []string{"Java"}); err != nil { // 5000×0.8+2000 = 6000。ほかは ×0.8
+		t.Fatal(err)
+	}
+	assertWeights(t, pool, user, map[string]int{"go": 8000, "rust": 2400, "python": 5600, "java": 6000})
+	mustSave(t, s, user, ids[0])
+	backdateSaves(t, pool, user)
+	mustList(t, in, user)
+	assertWeights(t, pool, user, map[string]int{"go": 8000, "rust": 2400, "python": 5600, "java": 9000})
+}
+
+func TestSavedArticlesClickAppliesDueSaveFirstAndSkipsPendingOne(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	s := store.NewSavedArticles(pool)
+	in := store.NewInterest(pool)
+	user := newPasskeyUser(t, pool, "alice")
+	ids := newSavableArticles(t, pool, "order", 1)
+	tagArticle(t, pool, ids[0], "Go")
+	setWeight(t, pool, user, "go", 5000)
+	setWeight(t, pool, user, "python", 5000)
+
+	// (g) 期限前のクリックは、保存の分をまだ入れない: go は 5000×0.8 = 4000、python は 4000
+	mustSave(t, s, user, ids[0])
+	if _, err := in.UpdateForClick(ctx, user, []string{"zzz-no-such-tag"}); err != nil {
+		t.Fatal(err)
+	}
+	assertWeights(t, pool, user, map[string]int{"go": 4000, "python": 4000})
+	// そのあと期限が来たら入る
+	backdateSaves(t, pool, user)
+	mustList(t, in, user)
+	assertWeights(t, pool, user, map[string]int{"go": 7000, "python": 4000})
+
+	// 期限後の保存は、次のクリックが減衰より先に反映する: 7000 + 3000 = 10000 → ×0.8 = 8000
+	ids = newSavableArticles(t, pool, "order2", 1)
+	tagArticle(t, pool, ids[0], "Go")
+	mustSave(t, s, user, ids[0])
+	backdateSaves(t, pool, user)
+	if _, err := in.UpdateForClick(ctx, user, []string{"zzz-no-such-tag"}); err != nil {
+		t.Fatal(err)
+	}
+	assertWeights(t, pool, user, map[string]int{"go": 8000, "python": 3200})
+}
+
+func TestSavedArticlesConcurrentReadsLearnOnce(t *testing.T) {
+	pool := newTestPool(t)
+	s := store.NewSavedArticles(pool)
+	user := newPasskeyUser(t, pool, "alice")
+	ids := newSavableArticles(t, pool, "race", 1)
+	tagArticle(t, pool, ids[0], "Go")
+	setWeight(t, pool, user, "go", 5000)
+	mustSave(t, s, user, ids[0])
+	backdateSaves(t, pool, user)
+
+	// (h) 同時に読んでも、1回だけ足す
+	var wg sync.WaitGroup
+	errs := make([]error, 4)
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, errs[i] = store.NewInterest(pool).List(context.Background(), user)
+		}()
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	assertWeights(t, pool, user, map[string]int{"go": 8000})
 }
 
 func TestSavedArticlesFailedSaveDoesNotLearn(t *testing.T) {
@@ -458,19 +615,25 @@ func TestSavedArticlesFailedSaveDoesNotLearn(t *testing.T) {
 	if _, err := s.Save(ctx, user, 999999); !errors.Is(err, store.ErrArticleNotFound) {
 		t.Fatalf("存在しない記事: err = %v", err)
 	}
+	backdateSaves(t, pool, user)
+	mustList(t, store.NewInterest(pool), user)
 	assertWeights(t, pool, user, map[string]int{"go": 5000})
 }
 
 func TestSavedArticlesSaveDoesNotChangeOtherUsersInterest(t *testing.T) {
 	pool := newTestPool(t)
 	s := store.NewSavedArticles(pool)
+	in := store.NewInterest(pool)
 	alice, bob := newPasskeyUser(t, pool, "alice"), newPasskeyUser(t, pool, "bob")
 	ids := newSavableArticles(t, pool, "other", 1)
 	tagArticle(t, pool, ids[0], "Go")
 	setWeight(t, pool, bob, "go", 4000)
 
-	// (g)
+	// (f) alice の保存の反映は、bob を変えない
 	mustSave(t, s, alice, ids[0])
+	backdateSaves(t, pool, alice)
+	mustList(t, in, alice)
+	mustList(t, in, bob)
 	assertWeights(t, pool, alice, map[string]int{"go": 3000})
 	assertWeights(t, pool, bob, map[string]int{"go": 4000})
 }

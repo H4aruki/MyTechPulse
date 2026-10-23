@@ -48,6 +48,27 @@ func (q *Queries) DeleteSavedArticle(ctx context.Context, arg DeleteSavedArticle
 	return err
 }
 
+const hasDueSavedLearning = `-- name: HasDueSavedLearning :one
+SELECT EXISTS (
+    SELECT 1 FROM saved_articles
+    WHERE "user_ID" = $1 AND learned_at IS NULL
+      AND created_at <= now() - make_interval(secs => $2::float8)
+)
+`
+
+type HasDueSavedLearningParams struct {
+	UserID       int32
+	DelaySeconds float64
+}
+
+// 期限（delay_seconds 秒）が来た未反映の保存があるか。ロックは取らない（先に軽く見るための問い合わせ）。
+func (q *Queries) HasDueSavedLearning(ctx context.Context, arg HasDueSavedLearningParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasDueSavedLearning, arg.UserID, arg.DelaySeconds)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const insertSavedArticle = `-- name: InsertSavedArticle :execrows
 INSERT INTO saved_articles ("user_ID", article_id)
 VALUES ($1, $2)
@@ -68,28 +89,29 @@ func (q *Queries) InsertSavedArticle(ctx context.Context, arg InsertSavedArticle
 	return result.RowsAffected(), nil
 }
 
-const listArticleTags = `-- name: ListArticleTags :many
-SELECT at."tag_ID", t.tag_name
+const listArticleTagsByArticles = `-- name: ListArticleTagsByArticles :many
+SELECT at.article_id, at."tag_ID", t.tag_name
 FROM article_tags at JOIN tag t ON t."tag_ID" = at."tag_ID"
-WHERE at.article_id = $1 ORDER BY at."tag_ID"
+WHERE at.article_id = ANY($1::bigint[]) ORDER BY at.article_id, at."tag_ID"
 `
 
-type ListArticleTagsRow struct {
-	TagID   int32
-	TagName string
+type ListArticleTagsByArticlesRow struct {
+	ArticleID int64
+	TagID     int32
+	TagName   string
 }
 
-// 記事のタグ。保存したときの興味度の学習に使う。
-func (q *Queries) ListArticleTags(ctx context.Context, articleID int64) ([]ListArticleTagsRow, error) {
-	rows, err := q.db.Query(ctx, listArticleTags, articleID)
+// 記事のタグ。保存の学習（反映）に使う。
+func (q *Queries) ListArticleTagsByArticles(ctx context.Context, articleIds []int64) ([]ListArticleTagsByArticlesRow, error) {
+	rows, err := q.db.Query(ctx, listArticleTagsByArticles, articleIds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListArticleTagsRow{}
+	items := []ListArticleTagsByArticlesRow{}
 	for rows.Next() {
-		var i ListArticleTagsRow
-		if err := rows.Scan(&i.TagID, &i.TagName); err != nil {
+		var i ListArticleTagsByArticlesRow
+		if err := rows.Scan(&i.ArticleID, &i.TagID, &i.TagName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -167,6 +189,39 @@ func (q *Queries) LockUserForSavedArticles(ctx context.Context, userID int32) (i
 	var user_ID int32
 	err := row.Scan(&user_ID)
 	return user_ID, err
+}
+
+const markDueSavedLearned = `-- name: MarkDueSavedLearned :many
+UPDATE saved_articles SET learned_at = now()
+WHERE "user_ID" = $1 AND learned_at IS NULL
+  AND created_at <= now() - make_interval(secs => $2::float8)
+RETURNING article_id
+`
+
+type MarkDueSavedLearnedParams struct {
+	UserID       int32
+	DelaySeconds float64
+}
+
+// 期限が来た未反映の保存に反映済みの印を付け、その記事を返す。利用者の行をロックした中で呼ぶ。
+func (q *Queries) MarkDueSavedLearned(ctx context.Context, arg MarkDueSavedLearnedParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, markDueSavedLearned, arg.UserID, arg.DelaySeconds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var article_id int64
+		if err := rows.Scan(&article_id); err != nil {
+			return nil, err
+		}
+		items = append(items, article_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const savedArticleExists = `-- name: SavedArticleExists :one
