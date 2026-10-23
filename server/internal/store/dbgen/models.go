@@ -156,6 +156,12 @@ type SavedArticle struct {
 	LearnedAt pgtype.Timestamptz
 }
 
+type SavedArticleLearning struct {
+	UserID    int32
+	ArticleID int64
+	LearnedAt pgtype.Timestamptz
+}
+
 type Tag struct {
 	TagID   int32
 	TagName string

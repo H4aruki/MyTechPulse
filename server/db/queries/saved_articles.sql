@@ -39,6 +39,14 @@ WHERE "user_ID" = sqlc.arg(user_id) AND learned_at IS NULL
   AND created_at <= now() - make_interval(secs => sqlc.arg(delay_seconds)::float8)
 RETURNING article_id;
 
+-- name: RecordSaveLearnings :many
+-- 保存による学習を、1人1記事に1回だけにするための記録（#236 の決定）。新しく記録できた記事だけを返す。
+-- すでに記録のある記事（過去に学習済み）は返らない。利用者の行をロックした中で呼ぶ。
+INSERT INTO saved_article_learnings ("user_ID", article_id)
+SELECT sqlc.arg(user_id), unnest(sqlc.arg(article_ids)::bigint[])
+ON CONFLICT DO NOTHING
+RETURNING article_id;
+
 -- name: DeleteSavedArticle :exec
 -- 保存されていなくてもエラーにしない。
 DELETE FROM saved_articles WHERE "user_ID" = $1 AND article_id = $2;

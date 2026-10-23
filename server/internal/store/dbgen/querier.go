@@ -90,6 +90,9 @@ type Querier interface {
 	MarkFeedbackPromptDismissed(ctx context.Context, arg MarkFeedbackPromptDismissedParams) error
 	MarkFeedbackPromptFollowup(ctx context.Context, id pgtype.UUID) error
 	MarkFeedbackPromptSubmitted(ctx context.Context, arg MarkFeedbackPromptSubmittedParams) error
+	// 保存による学習を、1人1記事に1回だけにするための記録（#236 の決定）。新しく記録できた記事だけを返す。
+	// すでに記録のある記事（過去に学習済み）は返らない。利用者の行をロックした中で呼ぶ。
+	RecordSaveLearnings(ctx context.Context, arg RecordSaveLearningsParams) ([]int64, error)
 	RenamePasskey(ctx context.Context, arg RenamePasskeyParams) (int64, error)
 	SavedArticleExists(ctx context.Context, arg SavedArticleExistsParams) (bool, error)
 	// 認証回数が増えたときだけ更新する(巻き戻りと同時ログインの競合を、DBの側で止める)。0のまま変わらない認証器(同期パスキー)だけは許す。

@@ -129,6 +129,15 @@ func applyDueSaveLearning(ctx context.Context, q *dbgen.Queries, uid int32) erro
 	if len(articleIDs) == 0 {
 		return nil
 	}
+	// 1人1記事につき一生に1回だけ学習する（#236 の決定。解除と再保存で水増しさせない）。
+	// 新しく記録できた記事だけを足す。過去に学習済みの記事は、saved_articles の印だけ付いて、何も足さない。
+	articleIDs, err = q.RecordSaveLearnings(ctx, dbgen.RecordSaveLearningsParams{UserID: uid, ArticleIds: articleIDs})
+	if err != nil {
+		return fail
+	}
+	if len(articleIDs) == 0 {
+		return nil
+	}
 	tagRows, err := q.ListArticleTagsByArticles(ctx, articleIDs)
 	if err != nil {
 		return fail
