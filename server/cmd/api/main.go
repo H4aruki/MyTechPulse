@@ -29,6 +29,7 @@ import (
 	"github.com/H4aruki/MyTechPulse/server/internal/provider/qiita"
 	"github.com/H4aruki/MyTechPulse/server/internal/provider/zenn"
 	"github.com/H4aruki/MyTechPulse/server/internal/recommendation"
+	"github.com/H4aruki/MyTechPulse/server/internal/savedarticle"
 	"github.com/H4aruki/MyTechPulse/server/internal/store"
 	"github.com/H4aruki/MyTechPulse/server/internal/userfeedback"
 )
@@ -76,12 +77,13 @@ func run(ctx context.Context, lookup func(string) (string, bool), stdout, stderr
 		recommendService.Articles = store.NewFeedArticles(pool)
 	}
 	feedbackService := &userfeedback.Service{Repo: store.NewFeedback(pool), Clock: auth.SystemClock{}, Logger: logger}
+	savedArticleService := &savedarticle.Service{Repo: store.NewSavedArticles(pool)}
 	// パスワードとパスキーで、同じ制限器を共有する(失敗を合算して数える)
 	passkeyService, err := newPasskeyService(cfg, pool, logger, authService.Limiter)
 	if err != nil {
 		return err
 	}
-	handler, _ := app.New(cfg, app.Dependencies{Logger: logger, Ready: pool, Auth: authService, Recommendation: recommendService, UserFeedback: feedbackService, Passkey: passkeyService})
+	handler, _ := app.New(cfg, app.Dependencies{Logger: logger, Ready: pool, Auth: authService, Recommendation: recommendService, UserFeedback: feedbackService, Passkey: passkeyService, SavedArticle: savedArticleService})
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)
 	if err != nil {
 		return fmt.Errorf("%sで待ち受けできません", cfg.HTTPAddr)

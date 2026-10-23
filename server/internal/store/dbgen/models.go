@@ -149,6 +149,12 @@ type Recommend struct {
 	MatchInt int32
 }
 
+type SavedArticle struct {
+	UserID    int32
+	ArticleID int64
+	CreatedAt pgtype.Timestamptz
+}
+
 type Tag struct {
 	TagID   int32
 	TagName string

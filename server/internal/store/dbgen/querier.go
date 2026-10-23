@@ -14,22 +14,27 @@ type Querier interface {
 	// 'running' のまま残った行（実行中に止まったもの）を失敗にする。アドバイザリロックを持っているときだけ呼ぶ。
 	AbandonStaleFetchRuns(ctx context.Context, finishedAt pgtype.Timestamptz) error
 	AddArticleTag(ctx context.Context, arg AddArticleTagParams) error
+	ArticleExists(ctx context.Context, id int64) (bool, error)
 	CompleteFeedbackSubmission(ctx context.Context, arg CompleteFeedbackSubmissionParams) error
 	// 未使用かつ期限内のときだけ、使用済みにして返す(1回限り。同時に呼ばれても1回しか成功しない)。
 	ConsumeWebAuthnChallenge(ctx context.Context, arg ConsumeWebAuthnChallengeParams) (ConsumeWebAuthnChallengeRow, error)
 	CountPasskeysByUser(ctx context.Context, userID int32) (int64, error)
+	CountSavedArticles(ctx context.Context, userID int32) (int64, error)
 	CreateInitialRecommendation(ctx context.Context, arg CreateInitialRecommendationParams) error
 	CreatePasskey(ctx context.Context, arg CreatePasskeyParams) (AuthPasskey, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	CreateWebAuthnChallenge(ctx context.Context, arg CreateWebAuthnChallengeParams) error
 	// 保持期間を過ぎた記事を消す。article_tags は連動して消える。
+	// 利用者が保存した記事（saved_articles）は、保持期間を過ぎても消さない。
 	DeleteExpiredArticles(ctx context.Context, arg DeleteExpiredArticlesParams) (int64, error)
 	// 保持期限（終了日時、未終了なら表示日時）の古い順に、上限件数まで消す。回答などは連鎖して消える
 	DeleteExpiredFeedbackPrompts(ctx context.Context, arg DeleteExpiredFeedbackPromptsParams) (int64, error)
 	DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error
 	DeleteExpiredWebAuthnChallenges(ctx context.Context, expiresAt pgtype.Timestamptz) error
 	DeletePasskey(ctx context.Context, arg DeletePasskeyParams) (int64, error)
+	// 保存されていなくてもエラーにしない。
+	DeleteSavedArticle(ctx context.Context, arg DeleteSavedArticleParams) error
 	DeleteSession(ctx context.Context, tokenHash []byte) error
 	FindPasskeyByCredentialID(ctx context.Context, credentialID []byte) (AuthPasskey, error)
 	FindSessionUser(ctx context.Context, arg FindSessionUserParams) (FindSessionUserRow, error)
@@ -49,6 +54,8 @@ type Querier interface {
 	InsertFeedbackSnapshot(ctx context.Context, arg InsertFeedbackSnapshotParams) error
 	InsertFeedbackSubmission(ctx context.Context, arg InsertFeedbackSubmissionParams) (pgtype.UUID, error)
 	InsertFetchRun(ctx context.Context, arg InsertFetchRunParams) (int64, error)
+	// 保存済みなら何もしない（created_at も変えない）。
+	InsertSavedArticle(ctx context.Context, arg InsertSavedArticleParams) (int64, error)
 	// 版をまたいで、同じフォームの直近の表示を返す
 	LastFeedbackPrompt(ctx context.Context, arg LastFeedbackPromptParams) (LastFeedbackPromptRow, error)
 	ListEnabledFetchTags(ctx context.Context) ([]ListEnabledFetchTagsRow, error)
@@ -58,6 +65,8 @@ type Querier interface {
 	// フィードの空き枠の候補。タグを問わず、提供元の記事をいいね数の多い順に返す。
 	ListPopularArticles(ctx context.Context, arg ListPopularArticlesParams) ([]ListPopularArticlesRow, error)
 	ListRecommendations(ctx context.Context, userID int32) ([]ListRecommendationsRow, error)
+	// 自分の保存だけを、保存の新しい順に返す。
+	ListSavedArticles(ctx context.Context, arg ListSavedArticlesParams) ([]ListSavedArticlesRow, error)
 	// フィードの候補（Issue #66 段取り2）。指定したタグ（前後の空白を除いた小文字で比べる）のどれかが付いた、
 	// 提供元の記事を新しい順に返す。tags には記事に付いた全タグの表示名をまとめる。
 	// タグを先に tag 表で引き、article_tags は ("tag_ID", published_at) の索引で絞る。
@@ -69,10 +78,14 @@ type Querier interface {
 	LockUserFeedbackForm(ctx context.Context, lockKey string) error
 	LockUserForPasskey(ctx context.Context, userID int32) (int32, error)
 	LockUserForRecommendation(ctx context.Context, userID int32) (int32, error)
+	// 保存の上限（500件）を、同時に保存しても超えないようにするための鍵。
+	// 数えてから入れるまでの間に別の保存が割り込むと上限を超えるので、利用者の行を先にロックして、同じ利用者の保存を1つずつにする。
+	LockUserForSavedArticles(ctx context.Context, userID int32) (int32, error)
 	MarkFeedbackPromptDismissed(ctx context.Context, arg MarkFeedbackPromptDismissedParams) error
 	MarkFeedbackPromptFollowup(ctx context.Context, id pgtype.UUID) error
 	MarkFeedbackPromptSubmitted(ctx context.Context, arg MarkFeedbackPromptSubmittedParams) error
 	RenamePasskey(ctx context.Context, arg RenamePasskeyParams) (int64, error)
+	SavedArticleExists(ctx context.Context, arg SavedArticleExistsParams) (bool, error)
 	// 認証回数が増えたときだけ更新する(巻き戻りと同時ログインの競合を、DBの側で止める)。0のまま変わらない認証器(同期パスキー)だけは許す。
 	UpdatePasskeyUsage(ctx context.Context, arg UpdatePasskeyUsageParams) (int64, error)
 	// 同じ (source, external_id) は上書きする。fetched_at（最初に取得した日時）は変えない。
