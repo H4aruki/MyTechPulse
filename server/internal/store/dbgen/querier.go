@@ -49,6 +49,8 @@ type Querier interface {
 	GetFeedbackFormByID(ctx context.Context, id int64) (GetFeedbackFormByIDRow, error)
 	GetFeedbackSubmissionByPrompt(ctx context.Context, promptID pgtype.UUID) (GetFeedbackSubmissionByPromptRow, error)
 	GetFeedbackSubmissionOwner(ctx context.Context, id pgtype.UUID) (GetFeedbackSubmissionOwnerRow, error)
+	// 期限（delay_seconds 秒）が来た未反映の保存があるか。ロックは取らない（先に軽く見るための問い合わせ）。
+	HasDueSavedLearning(ctx context.Context, arg HasDueSavedLearningParams) (bool, error)
 	InsertFeedbackAnswer(ctx context.Context, arg InsertFeedbackAnswerParams) error
 	InsertFeedbackPrompt(ctx context.Context, arg InsertFeedbackPromptParams) (int64, error)
 	InsertFeedbackSnapshot(ctx context.Context, arg InsertFeedbackSnapshotParams) error
@@ -58,8 +60,8 @@ type Querier interface {
 	InsertSavedArticle(ctx context.Context, arg InsertSavedArticleParams) (int64, error)
 	// 版をまたいで、同じフォームの直近の表示を返す
 	LastFeedbackPrompt(ctx context.Context, arg LastFeedbackPromptParams) (LastFeedbackPromptRow, error)
-	// 記事のタグ。保存したときの興味度の学習に使う。
-	ListArticleTags(ctx context.Context, articleID int64) ([]ListArticleTagsRow, error)
+	// 記事のタグ。保存の学習（反映）に使う。
+	ListArticleTagsByArticles(ctx context.Context, articleIds []int64) ([]ListArticleTagsByArticlesRow, error)
 	ListEnabledFetchTags(ctx context.Context) ([]ListEnabledFetchTagsRow, error)
 	ListFeedbackQuestions(ctx context.Context, formID int64) ([]ListFeedbackQuestionsRow, error)
 	ListFetchRunsForSlot(ctx context.Context, slotAt pgtype.Timestamptz) ([]ListFetchRunsForSlotRow, error)
@@ -83,6 +85,8 @@ type Querier interface {
 	// 保存の上限（500件）を、同時に保存しても超えないようにするための鍵。
 	// 数えてから入れるまでの間に別の保存が割り込むと上限を超えるので、利用者の行を先にロックして、同じ利用者の保存を1つずつにする。
 	LockUserForSavedArticles(ctx context.Context, userID int32) (int32, error)
+	// 期限が来た未反映の保存に反映済みの印を付け、その記事を返す。利用者の行をロックした中で呼ぶ。
+	MarkDueSavedLearned(ctx context.Context, arg MarkDueSavedLearnedParams) ([]int64, error)
 	MarkFeedbackPromptDismissed(ctx context.Context, arg MarkFeedbackPromptDismissedParams) error
 	MarkFeedbackPromptFollowup(ctx context.Context, id pgtype.UUID) error
 	MarkFeedbackPromptSubmitted(ctx context.Context, arg MarkFeedbackPromptSubmittedParams) error
