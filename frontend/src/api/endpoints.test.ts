@@ -102,4 +102,14 @@ describe('endpoints', () => {
     expect(init.headers['X-MTP-CSRF']).toBe('1')
     expect(init.credentials).toBe('include')
   })
+
+  test('保存した記事は、保存がPUT・解除がDELETE・一覧がGET（limitとoffset付き）', async () => {
+    const e = await loadEndpoints()
+    await e.saveArticle(7)
+    expect(lastCall()).toEqual({ url: `${BASE}/api/v1/saved-articles/7`, method: 'PUT', body: undefined })
+    await e.unsaveArticle(7)
+    expect(lastCall()).toEqual({ url: `${BASE}/api/v1/saved-articles/7`, method: 'DELETE', body: undefined })
+    await e.fetchSavedArticles({ limit: 20, offset: 40 })
+    expect(lastCall()).toEqual({ url: `${BASE}/api/v1/saved-articles?limit=20&offset=40`, method: 'GET', body: undefined })
+  })
 })

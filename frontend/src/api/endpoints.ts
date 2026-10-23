@@ -15,6 +15,7 @@ import type {
   PasskeyLoginFinishRequest,
   RegisterBeginResponse,
   RegisterFinishRequest,
+  SavedArticlesResponse,
   SignupRequest,
   User,
 } from './types'
@@ -105,4 +106,18 @@ export function renamePasskey(id: number, name: string) {
 
 export function deletePasskey(id: number) {
   return request<void>('DELETE', `/api/v1/auth/passkeys/${id}`)
+}
+
+/** 記事を保存する（articles.id を使う。すでに保存済みでもよい） */
+export function saveArticle(id: number) {
+  return request<void>('PUT', `/api/v1/saved-articles/${id}`)
+}
+
+export function unsaveArticle(id: number) {
+  return request<void>('DELETE', `/api/v1/saved-articles/${id}`)
+}
+
+/** 保存した記事を、保存の新しい順に取得する */
+export function fetchSavedArticles({ limit, offset }: { limit: number; offset: number }) {
+  return request<SavedArticlesResponse>('GET', `/api/v1/saved-articles?limit=${limit}&offset=${offset}`)
 }

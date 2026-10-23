@@ -1,8 +1,13 @@
 import type { Article } from '@/api/types'
+import { SaveButton } from './SaveButton'
 
 interface ArticleCardProps {
   article: Article
   onOpen: (article: Article) => void
+  /** 保存済みか。省略すると保存していない扱い */
+  saved?: boolean
+  /** 保存の切り替え。省略するか、記事にidが無いときは保存ボタンを出さない */
+  onToggleSave?: (id: number, save: boolean) => Promise<unknown>
 }
 
 function formatPublishedAt(value: string): string {
@@ -15,18 +20,26 @@ function formatPublishedAt(value: string): string {
  * 旧実装は innerHTML + テンプレート文字列で組み立てていたため escapeHtml による
  * 手動のXSS対策が必要だったが、Reactが既定でエスケープするため不要になった。
  */
-export function ArticleCard({ article, onOpen }: ArticleCardProps) {
+export function ArticleCard({ article, onOpen, saved = false, onToggleSave }: ArticleCardProps) {
   // Go版APIはタグの無い記事を null で返すことがある
   const tags = article.tags ?? []
+  const articleId = article.id
+  const toggle =
+    articleId !== undefined && onToggleSave
+      ? (save: boolean) => onToggleSave(articleId, save)
+      : undefined
+  const canSave = toggle !== undefined
 
   return (
-    <li>
+    <li className="relative">
       <button
         type="button"
         onClick={() => onOpen(article)}
         className="flex h-full w-full cursor-pointer flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
       >
-        <h3 className="text-base leading-snug font-bold text-ink">{article.title}</h3>
+        <h3 className={`text-base leading-snug font-bold text-ink${canSave ? ' pr-10' : ''}`}>
+          {article.title}
+        </h3>
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
           <span className="font-bold">{article.source}</span>
@@ -47,6 +60,7 @@ export function ArticleCard({ article, onOpen }: ArticleCardProps) {
           </ul>
         )}
       </button>
+      {toggle && <SaveButton saved={saved} onToggle={toggle} />}
     </li>
   )
 }

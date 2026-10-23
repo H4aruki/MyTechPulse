@@ -14,6 +14,7 @@ type Warning struct {
 }
 
 type FeedArticle struct {
+	ID          *int64   `json:"id,omitempty" doc:"記事ID（保存APIで使う）。DBから読むときだけ入る"`
 	Title       string   `json:"title" doc:"記事タイトル"`
 	URL         string   `json:"url" doc:"記事URL"`
 	Source      string   `json:"source" enum:"Qiita,Zenn" doc:"記事提供元"`
@@ -31,7 +32,12 @@ type Result struct {
 func feedArticles(items []article.Article) []FeedArticle {
 	out := make([]FeedArticle, 0, len(items))
 	for _, item := range items {
-		out = append(out, FeedArticle{Title: item.Title, URL: item.URL, Source: item.Source, Tags: item.Tags, Likes: item.Likes, PublishedAt: item.PublishedAt.UTC().Format("2006-01-02T15:04:05Z07:00")})
+		fa := FeedArticle{Title: item.Title, URL: item.URL, Source: item.Source, Tags: item.Tags, Likes: item.Likes, PublishedAt: item.PublishedAt.UTC().Format("2006-01-02T15:04:05Z07:00")}
+		if item.ID > 0 {
+			id := item.ID
+			fa.ID = &id
+		}
+		out = append(out, fa)
 	}
 	return out
 }

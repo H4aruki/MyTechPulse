@@ -8,6 +8,7 @@ import { PasskeySettings } from '@/components/PasskeySettings'
 import { authQueryKey, useCurrentUser } from '@/lib/auth'
 import { clearFeedbackState } from '@/lib/feedbackTracker'
 import { passkeysQueryKey } from '@/lib/passkey'
+import { SAVED_ARTICLE_IDS_QUERY_KEY, SAVED_ARTICLES_QUERY_KEY } from '@/lib/savedArticles'
 
 export function SettingsPage() {
   const navigate = useNavigate()
@@ -19,6 +20,8 @@ export function SettingsPage() {
     queryClient.removeQueries({ queryKey: authQueryKey })
     queryClient.removeQueries({ queryKey: passkeysQueryKey })
     queryClient.removeQueries({ queryKey: ['feed'] })
+    queryClient.removeQueries({ queryKey: SAVED_ARTICLES_QUERY_KEY })
+    queryClient.removeQueries({ queryKey: SAVED_ARTICLE_IDS_QUERY_KEY })
     clearFeedbackState()
     navigate('/login', { replace: true })
   }, [queryClient, navigate])
