@@ -6,6 +6,7 @@ import { ApiError, rateLimitMessage, UnauthorizedError } from '@/api/client'
 import {
   fetchFeed,
   fetchFeedbackStatus,
+  fetchSavedArticles,
   logout,
   recordArticleClick,
   requestFeedbackPresentation,
@@ -24,6 +25,9 @@ vi.mock('@/api/endpoints', () => ({
   submitFeedbackOverall: vi.fn(),
   completeFeedbackFollowup: vi.fn(),
   dismissFeedback: vi.fn(),
+  fetchSavedArticles: vi.fn(),
+  saveArticle: vi.fn(),
+  unsaveArticle: vi.fn(),
 }))
 
 function article(source: 'Qiita' | 'Zenn', title: string, tags: string[] | null): Article {
@@ -70,6 +74,9 @@ describe('ArticlesPage', () => {
       .mockReset()
       .mockResolvedValue({ eligible: false, next_eligible_at: '2099-01-01T00:00:00Z' })
     vi.mocked(recordArticleClick).mockResolvedValue(undefined)
+    vi.mocked(fetchSavedArticles)
+      .mockReset()
+      .mockResolvedValue({ items: [], total: 0, limit: 100, offset: 0 })
   })
   afterEach(() => {
     cleanup()
@@ -89,6 +96,44 @@ describe('ArticlesPage', () => {
     expect(screen.getByText('Z記事')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Qiita Articles' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Zenn Articles' })).toBeInTheDocument()
+  })
+
+  test('保存済みの記事のカードは、最初から保存済みの状態で出る', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue(
+      feed({
+        qiita_articles: [
+          { ...article('Qiita', '保存済み記事', ['Go']), id: 7 },
+          { ...article('Qiita', '未保存記事', ['Go']), id: 8 },
+        ],
+      }),
+    )
+    vi.mocked(fetchSavedArticles).mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          title: '保存済み記事',
+          url: 'https://example.com/保存済み記事',
+          source: 'qiita',
+          author_name: 'alice',
+          likes: 3,
+          published_at: '2026-09-01T00:00:00Z',
+          saved_at: '2026-09-02T00:00:00Z',
+        },
+      ],
+      total: 1,
+      limit: 100,
+      offset: 0,
+    })
+    renderArticles()
+
+    expect(await screen.findByRole('button', { name: '保存を外す' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: '保存する' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
   })
 
   test('記事一覧がnullでも空として扱い、案内文を出す', async () => {

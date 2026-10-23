@@ -9,6 +9,12 @@ import { ArticleCard } from '@/components/ArticleCard'
 import { FeedbackDialog } from '@/components/FeedbackDialog'
 import { authQueryKey } from '@/lib/auth'
 import { clearFeedbackState } from '@/lib/feedbackTracker'
+import {
+  SAVED_ARTICLE_IDS_QUERY_KEY,
+  SAVED_ARTICLES_QUERY_KEY,
+  useSavedArticleIds,
+  useToggleSavedArticle,
+} from '@/lib/savedArticles'
 import { useUserFeedback } from '@/lib/useUserFeedback'
 
 const FEED_QUERY_KEY = ['feed'] as const
@@ -17,16 +23,24 @@ interface ArticleSectionProps {
   title: string
   articles: Article[] | null | undefined
   onOpen: (article: Article) => void
+  savedIds: ReadonlySet<number>
+  onToggleSave: (id: number, save: boolean) => Promise<unknown>
 }
 
-function ArticleSection({ title, articles, onOpen }: ArticleSectionProps) {
+function ArticleSection({ title, articles, onOpen, savedIds, onToggleSave }: ArticleSectionProps) {
   return (
     <section>
       <h2 className="mb-4 font-display text-xl font-bold text-ink">{title}</h2>
       {articles && articles.length > 0 ? (
         <ul className="grid gap-4 sm:grid-cols-2">
           {articles.map((article) => (
-            <ArticleCard key={article.url} article={article} onOpen={onOpen} />
+            <ArticleCard
+              key={article.url}
+              article={article}
+              onOpen={onOpen}
+              saved={article.id !== undefined && savedIds.has(article.id)}
+              onToggleSave={onToggleSave}
+            />
           ))}
         </ul>
       ) : (
@@ -58,6 +72,8 @@ export function ArticlesPage() {
   const leaveSession = useCallback(() => {
     queryClient.removeQueries({ queryKey: authQueryKey })
     queryClient.removeQueries({ queryKey: FEED_QUERY_KEY })
+    queryClient.removeQueries({ queryKey: SAVED_ARTICLE_IDS_QUERY_KEY })
+    queryClient.removeQueries({ queryKey: SAVED_ARTICLES_QUERY_KEY })
     clearFeedbackState()
     navigate('/login', { replace: true })
   }, [queryClient, navigate])
@@ -67,6 +83,11 @@ export function ArticlesPage() {
   }, [sessionExpired, leaveSession])
 
   const feedback = useUserFeedback(leaveSession)
+
+  // 保存済みIDの取得に失敗しても記事は出す（空の集合 = 全部「保存していない」）
+  const savedIds = useSavedArticleIds()
+  const toggleSaved = useToggleSavedArticle()
+  const handleToggleSave = (id: number, save: boolean) => toggleSaved.mutateAsync({ id, save })
 
   // クリック学習の送信。失敗しても閲覧体験を妨げないため、UIには出さない。
   // 二重に学習させないよう再送しない
@@ -156,11 +177,15 @@ export function ArticlesPage() {
               title="Qiita Articles"
               articles={data.qiita_articles}
               onOpen={handleOpen}
+              savedIds={savedIds}
+              onToggleSave={handleToggleSave}
             />
             <ArticleSection
               title="Zenn Articles"
               articles={data.zenn_articles}
               onOpen={handleOpen}
+              savedIds={savedIds}
+              onToggleSave={handleToggleSave}
             />
           </div>
         )}
