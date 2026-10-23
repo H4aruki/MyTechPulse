@@ -149,6 +149,11 @@
       "FeedArticle": {
         "additionalProperties": false,
         "properties": {
+          "id": {
+            "description": "記事ID（保存APIで使う）。DBから読むときだけ入る",
+            "format": "int64",
+            "type": "integer"
+          },
           "likes": {
             "description": "いいね数",
             "format": "int64",

@@ -16,6 +16,8 @@ const (
 
 // Article は提供元ごとの応答型を隠した、推薦計算と画面表示用の記事。
 type Article struct {
+	// ID は articles.id。0 は「DBの記事ではない」（即時検索で外部APIから直接取った記事）という意味。
+	ID          int64
 	Source      string
 	Title       string
 	URL         string

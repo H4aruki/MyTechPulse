@@ -494,6 +494,11 @@ export interface components {
         FeedArticle: {
             /**
              * Format: int64
+             * @description 記事ID（保存APIで使う）。DBから読むときだけ入る
+             */
+            id?: number;
+            /**
+             * Format: int64
              * @description いいね数
              */
             likes: number;
