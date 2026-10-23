@@ -58,6 +58,8 @@ type Querier interface {
 	InsertSavedArticle(ctx context.Context, arg InsertSavedArticleParams) (int64, error)
 	// 版をまたいで、同じフォームの直近の表示を返す
 	LastFeedbackPrompt(ctx context.Context, arg LastFeedbackPromptParams) (LastFeedbackPromptRow, error)
+	// 記事のタグ。保存したときの興味度の学習に使う。
+	ListArticleTags(ctx context.Context, articleID int64) ([]ListArticleTagsRow, error)
 	ListEnabledFetchTags(ctx context.Context) ([]ListEnabledFetchTagsRow, error)
 	ListFeedbackQuestions(ctx context.Context, formID int64) ([]ListFeedbackQuestionsRow, error)
 	ListFetchRunsForSlot(ctx context.Context, slotAt pgtype.Timestamptz) ([]ListFetchRunsForSlotRow, error)
