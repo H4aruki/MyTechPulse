@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ApiError, rateLimitMessage, UnauthorizedError } from '@/api/client'
@@ -175,5 +175,92 @@ describe('ArticleCard の保存ボタン', () => {
     expect(await screen.findByRole('button', { name: /Q記事/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '保存する' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '保存を外す' })).not.toBeInTheDocument()
+  })
+
+  describe('保存の直後の「取り消す」', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    test('保存に成功すると出て、5秒たつと消える', async () => {
+      renderCard()
+      fireEvent.click(await screen.findByRole('button', { name: '保存する' }))
+
+      expect(await screen.findByRole('button', { name: '取り消す' })).toBeInTheDocument()
+      expect(screen.getByRole('status')).toHaveTextContent('保存しました')
+
+      act(() => {
+        vi.advanceTimersByTime(4900)
+      })
+      expect(screen.getByRole('button', { name: '取り消す' })).toBeInTheDocument()
+
+      act(() => {
+        vi.advanceTimersByTime(300)
+      })
+      expect(screen.queryByRole('button', { name: '取り消す' })).not.toBeInTheDocument()
+    })
+
+    test('押すと保存を外すAPIを呼び、「保存」の表示に戻る', async () => {
+      renderCard()
+      fireEvent.click(await screen.findByRole('button', { name: '保存する' }))
+      const undo = await screen.findByRole('button', { name: '取り消す' })
+
+      fireEvent.click(undo)
+
+      const unpressed = await screen.findByRole('button', { name: '保存する' })
+      expect(unpressed).toHaveAttribute('aria-pressed', 'false')
+      expect(unsaveArticle).toHaveBeenCalledWith(7)
+      expect(screen.queryByRole('button', { name: '取り消す' })).not.toBeInTheDocument()
+    })
+
+    test('取り消しに失敗したら、保存を外せなかった旨を出す', async () => {
+      vi.mocked(unsaveArticle).mockRejectedValue(new ApiError({ status: 500 }))
+      renderCard()
+      fireEvent.click(await screen.findByRole('button', { name: '保存する' }))
+
+      fireEvent.click(await screen.findByRole('button', { name: '取り消す' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        '保存を外せませんでした。時間をおいて再度お試しください。',
+      )
+    })
+
+    test('保存に失敗したときは出ない', async () => {
+      vi.mocked(saveArticle).mockRejectedValue(new ApiError({ status: 409 }))
+      renderCard()
+      fireEvent.click(await screen.findByRole('button', { name: '保存する' }))
+
+      await screen.findByRole('alert')
+      expect(screen.queryByRole('button', { name: '取り消す' })).not.toBeInTheDocument()
+    })
+
+    test('保存を外したあとには出ない', async () => {
+      vi.mocked(fetchSavedArticles).mockResolvedValue({
+        items: [
+          {
+            id: 7,
+            title: 'Q記事',
+            url: 'https://example.com/q',
+            source: 'qiita',
+            author_name: 'alice',
+            likes: 3,
+            published_at: '2026-09-01T00:00:00Z',
+            saved_at: '2026-09-02T00:00:00Z',
+          },
+        ],
+        total: 1,
+        limit: 100,
+        offset: 0,
+      })
+      renderCard()
+      fireEvent.click(await screen.findByRole('button', { name: '保存を外す' }))
+
+      await screen.findByRole('button', { name: '保存する' })
+      expect(unsaveArticle).toHaveBeenCalledWith(7)
+      expect(screen.queryByRole('button', { name: '取り消す' })).not.toBeInTheDocument()
+    })
   })
 })
