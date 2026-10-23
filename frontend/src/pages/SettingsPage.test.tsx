@@ -6,6 +6,7 @@ import { ApiError, UnauthorizedError } from '@/api/client'
 import { currentUser, logout } from '@/api/endpoints'
 import { authQueryKey } from '@/lib/auth'
 import { passkeysQueryKey } from '@/lib/passkey'
+import { SAVED_ARTICLE_IDS_QUERY_KEY, SAVED_ARTICLES_QUERY_KEY } from '@/lib/savedArticles'
 import { SettingsPage } from './SettingsPage'
 
 vi.mock('@/api/endpoints', () => ({ currentUser: vi.fn(), logout: vi.fn() }))
@@ -113,5 +114,45 @@ describe('SettingsPage', () => {
     expect(await screen.findByRole('heading', { name: 'ログイン画面' })).toBeInTheDocument()
     await waitFor(() => expectSessionDiscarded(client))
     expect(logout).not.toHaveBeenCalled()
+  })
+
+  test('ログアウトに成功すると、保存した記事の情報も捨てる', async () => {
+    vi.mocked(logout).mockResolvedValue(undefined)
+    const client = renderSettings()
+    client.setQueryData(SAVED_ARTICLES_QUERY_KEY, [{ id: 1 }])
+    client.setQueryData(SAVED_ARTICLE_IDS_QUERY_KEY, [1])
+
+    fireEvent.click(screen.getByRole('button', { name: 'ログアウト' }))
+
+    expect(await screen.findByRole('heading', { name: 'ログイン画面' })).toBeInTheDocument()
+    expect(client.getQueryData(SAVED_ARTICLES_QUERY_KEY)).toBeUndefined()
+    expect(client.getQueryData(SAVED_ARTICLE_IDS_QUERY_KEY)).toBeUndefined()
+  })
+
+  test('ログアウトが401でも、保存した記事の情報を捨てる', async () => {
+    vi.mocked(logout).mockRejectedValue(new UnauthorizedError())
+    const client = renderSettings()
+    client.setQueryData(SAVED_ARTICLES_QUERY_KEY, [{ id: 1 }])
+    client.setQueryData(SAVED_ARTICLE_IDS_QUERY_KEY, [1])
+
+    fireEvent.click(screen.getByRole('button', { name: 'ログアウト' }))
+
+    expect(await screen.findByRole('heading', { name: 'ログイン画面' })).toBeInTheDocument()
+    expect(client.getQueryData(SAVED_ARTICLES_QUERY_KEY)).toBeUndefined()
+    expect(client.getQueryData(SAVED_ARTICLE_IDS_QUERY_KEY)).toBeUndefined()
+  })
+
+  test('パスキー設定が認証切れを知らせても、保存した記事の情報を捨てる', async () => {
+    const client = renderSettings()
+    client.setQueryData(SAVED_ARTICLES_QUERY_KEY, [{ id: 1 }])
+    client.setQueryData(SAVED_ARTICLE_IDS_QUERY_KEY, [1])
+
+    fireEvent.click(screen.getByRole('button', { name: 'パスキー認証切れ' }))
+
+    expect(await screen.findByRole('heading', { name: 'ログイン画面' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(client.getQueryData(SAVED_ARTICLES_QUERY_KEY)).toBeUndefined()
+      expect(client.getQueryData(SAVED_ARTICLE_IDS_QUERY_KEY)).toBeUndefined()
+    })
   })
 })
