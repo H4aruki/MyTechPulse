@@ -202,7 +202,7 @@ func TestSavedArticlesLimitHoldsUnderConcurrentSaves(t *testing.T) {
 
 	var wg sync.WaitGroup
 	results := make([]error, 10)
-	for i, id := range ids[store.SavedArticlesLimit-3:] {
+	for i, id := range ids[store.SavedArticlesLimit-3 : store.SavedArticlesLimit+7] {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

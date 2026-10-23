@@ -245,6 +245,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/saved-articles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 保存した記事の一覧
+         * @description 自分が保存した記事だけを、保存の新しい順に返す。個別の回数制限はない(`/api/v1/` 全体の接続元IP制限だけ)。
+         */
+        get: operations["saved-articles-list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-articles/{article_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 記事を保存
+         * @description 冪等。新しく保存したら201、すでに保存済みなら200(どちらも本文なし。保存日時は変えない)。保存は1人500件まで(保存済みの記事は上限でも200)。利用者ごとに1分に30回まで(保存と解除を合わせて数える)。超えると429と `Retry-After`(秒)を返す。
+         */
+        put: operations["saved-articles-save"];
+        post?: never;
+        /**
+         * 記事の保存を解除
+         * @description 冪等。保存していない記事でも、存在しない記事IDでも204を返す(存在を探られないよう、404にしない)。利用者ごとに1分に30回まで(保存と解除を合わせて数える)。超えると429と `Retry-After`(秒)を返す。
+         */
+        delete: operations["saved-articles-unsave"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/user-feedback/dismissals": {
         parameters: {
             query?: never;
@@ -380,6 +424,36 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ArticleItem: {
+            /** @description 著者名 */
+            author_name: string;
+            /**
+             * Format: int64
+             * @description 記事ID
+             */
+            id: number;
+            /**
+             * Format: int64
+             * @description いいね数
+             */
+            likes: number;
+            /**
+             * Format: date-time
+             * @description 記事の公開日時
+             */
+            published_at: string;
+            /**
+             * Format: date-time
+             * @description 保存した日時
+             */
+            saved_at: string;
+            /** @description 提供元(qiita または zenn) */
+            source: string;
+            /** @description 記事のタイトル */
+            title: string;
+            /** @description 記事のURL */
+            url: string;
+        };
         AuthResponse: {
             /** @description ログインした利用者 */
             user: components["schemas"]["User"];
@@ -543,6 +617,25 @@ export interface components {
         FieldError: {
             field: string;
             message: string;
+        };
+        ListResponse: {
+            /** @description 保存の新しい順の記事 */
+            items: components["schemas"]["ArticleItem"][] | null;
+            /**
+             * Format: int64
+             * @description このページの最大件数
+             */
+            limit: number;
+            /**
+             * Format: int64
+             * @description このページの先頭の位置(0始まり)
+             */
+            offset: number;
+            /**
+             * Format: int64
+             * @description 保存している記事の総件数(ページングする前)
+             */
+            total: number;
         };
         LiveOutputBody: {
             /**
@@ -1364,6 +1457,190 @@ export interface operations {
                 "application/json": components["schemas"]["ClickRequest"];
             };
         };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "saved-articles-list": {
+        parameters: {
+            query?: {
+                /** @description 1ページの件数。1〜100、既定20 */
+                limit?: number;
+                /** @description 先頭から読み飛ばす件数。0以上 */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "saved-articles-save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 記事ID(1以上の整数) */
+                article_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "saved-articles-unsave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 記事ID(1以上の整数) */
+                article_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description No Content */
             204: {
