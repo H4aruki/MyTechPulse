@@ -26,7 +26,10 @@ function item(id: number): SavedArticleItem {
 }
 
 describe('useSavedArticleIds', () => {
-  beforeEach(() => vi.mocked(fetchSavedArticles).mockReset())
+  beforeEach(() => {
+    // モック関数を返さない。beforeEach の戻り値の関数は、後始末として引数なしで呼ばれる
+    vi.mocked(fetchSavedArticles).mockReset()
+  })
   afterEach(() => cleanup())
 
   test('複数ページをたどって、保存済みの記事IDを全件集める', async () => {
