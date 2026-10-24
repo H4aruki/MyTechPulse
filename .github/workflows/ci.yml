@@ -121,7 +121,7 @@ jobs:
       # 反映後に入口が落ちて初めて分かるため。イメージはダイジェストで固定する
       - name: Caddyfileの検証
         env:
-          CADDY_IMAGE: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+          CADDY_IMAGE: caddy:2.11.7-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
           API_DOMAIN: example.com
         run: |
           docker run --rm -e API_DOMAIN \
