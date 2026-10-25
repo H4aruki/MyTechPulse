@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ApiError, UnauthorizedError } from '@/api/client'
 import { currentUser } from '@/api/endpoints'
@@ -15,6 +15,33 @@ function renderProtectedPage() {
       <MemoryRouter initialEntries={['/private']}>
         <Routes>
           <Route path="/login" element={<h1>ログイン</h1>} />
+          <Route
+            path="/private"
+            element={
+              <ProtectedRoute>
+                <h1>記事一覧</h1>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+/** ログイン画面側で、渡された state をそのまま表示する */
+function LoginStateProbe() {
+  const location = useLocation()
+  return <p data-testid="login-state">{JSON.stringify(location.state)}</p>
+}
+
+function renderProtectedPageAt(entry: string) {
+  const client = new QueryClient()
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route path="/login" element={<LoginStateProbe />} />
           <Route
             path="/private"
             element={
@@ -55,6 +82,13 @@ describe('ProtectedRoute', () => {
     renderProtectedPage()
     expect(await screen.findByRole('heading', { name: 'ログイン' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '記事一覧' })).not.toBeInTheDocument()
+  })
+
+  test('401なら、元の場所（クエリ付き）をログイン画面へ渡す', async () => {
+    vi.mocked(currentUser).mockRejectedValue(new UnauthorizedError())
+    renderProtectedPageAt('/private?x=1')
+    const probe = await screen.findByTestId('login-state')
+    expect(JSON.parse(probe.textContent ?? '')).toEqual({ from: '/private?x=1' })
   })
 
   test('通信障害・5xxはログイン画面へ送らず再試行を出す', async () => {
