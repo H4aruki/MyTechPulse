@@ -1,5 +1,6 @@
 import type { QueryCache, QueryKey } from '@tanstack/react-query'
 import type { PostHog } from 'posthog-js'
+import { UnauthorizedError } from '@/api/client'
 
 /** 分析（PostHog）の設定。どちらも環境変数で渡し、画面側には値を書かない */
 export type AnalyticsEnv = {
@@ -68,12 +69,19 @@ export function resetAnalytics(): void {
 }
 
 /**
- * ログイン状態のキャッシュが消えたとき（ログアウト・認証切れ。各画面の leaveSession が消す）に
- * 識別を外す。戻り値は購読の解除関数。
+ * セッションの終わりで識別を外す。戻り値は購読の解除関数。
+ * - ログイン状態のキャッシュが消えたとき（ログアウト。各画面の leaveSession が消す）
+ * - ログイン状態の確認（/auth/me）が401になったとき（セッション切れ。ProtectedRoute はキャッシュを消さずにログイン画面へ移す）
  */
 export function resetOnSessionEnd(cache: QueryCache, authKey: QueryKey): () => void {
   return cache.subscribe((event) => {
-    if (event.type === 'removed' && event.query.queryKey[0] === authKey[0]) {
+    if (event.query.queryKey[0] !== authKey[0]) return
+    if (
+      event.type === 'removed' ||
+      (event.type === 'updated' &&
+        event.action.type === 'error' &&
+        event.action.error instanceof UnauthorizedError)
+    ) {
       resetAnalytics()
     }
   })

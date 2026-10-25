@@ -1,5 +1,6 @@
 import { QueryCache, QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { UnauthorizedError } from '@/api/client'
 import {
   identifyUser,
   initAnalytics,
@@ -111,6 +112,28 @@ describe('ログアウト', () => {
     expect(posthog.reset).not.toHaveBeenCalled()
 
     queryClient.removeQueries({ queryKey: authKey })
+    expect(posthog.reset).toHaveBeenCalledOnce()
+
+    unsubscribe()
+  })
+
+  test('/auth/meが401になったときもresetを呼ぶ。通信障害などでは呼ばない', async () => {
+    await initAnalytics({ VITE_POSTHOG_KEY: KEY, VITE_POSTHOG_HOST: HOST })
+    const authKey = ['auth', 'me'] as const
+    const queryClient = new QueryClient({ queryCache: new QueryCache() })
+    const unsubscribe = resetOnSessionEnd(queryClient.getQueryCache(), authKey)
+
+    await queryClient
+      .fetchQuery({ queryKey: authKey, queryFn: () => Promise.reject(new Error('network')), retry: false })
+      .catch(() => undefined)
+    await queryClient
+      .fetchQuery({ queryKey: ['feed'], queryFn: () => Promise.reject(new UnauthorizedError()), retry: false })
+      .catch(() => undefined)
+    expect(posthog.reset).not.toHaveBeenCalled()
+
+    await queryClient
+      .fetchQuery({ queryKey: authKey, queryFn: () => Promise.reject(new UnauthorizedError()), retry: false })
+      .catch(() => undefined)
     expect(posthog.reset).toHaveBeenCalledOnce()
 
     unsubscribe()
