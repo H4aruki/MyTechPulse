@@ -102,6 +102,7 @@ describe('ログアウト', () => {
 
   test('ログイン状態のキャッシュが消えるとresetを呼ぶ。別のキャッシュでは呼ばない', async () => {
     await initAnalytics({ VITE_POSTHOG_KEY: KEY, VITE_POSTHOG_HOST: HOST })
+    identifyUser(1)
     const authKey = ['auth', 'me'] as const
     const queryClient = new QueryClient({ queryCache: new QueryCache() })
     const unsubscribe = resetOnSessionEnd(queryClient.getQueryCache(), authKey)
@@ -117,8 +118,25 @@ describe('ログアウト', () => {
     unsubscribe()
   })
 
+  test('未ログインの訪問者の401では、匿名IDを作り直さない', async () => {
+    await initAnalytics({ VITE_POSTHOG_KEY: KEY, VITE_POSTHOG_HOST: HOST })
+    const authKey = ['auth', 'me'] as const
+    const queryClient = new QueryClient({ queryCache: new QueryCache() })
+    const unsubscribe = resetOnSessionEnd(queryClient.getQueryCache(), authKey)
+
+    await queryClient
+      .fetchQuery({ queryKey: authKey, queryFn: () => Promise.reject(new UnauthorizedError()), retry: false })
+      .catch(() => undefined)
+    queryClient.removeQueries({ queryKey: authKey })
+
+    expect(posthog.reset).not.toHaveBeenCalled()
+
+    unsubscribe()
+  })
+
   test('/auth/meが401になったときもresetを呼ぶ。通信障害などでは呼ばない', async () => {
     await initAnalytics({ VITE_POSTHOG_KEY: KEY, VITE_POSTHOG_HOST: HOST })
+    identifyUser(1)
     const authKey = ['auth', 'me'] as const
     const queryClient = new QueryClient({ queryCache: new QueryCache() })
     const unsubscribe = resetOnSessionEnd(queryClient.getQueryCache(), authKey)

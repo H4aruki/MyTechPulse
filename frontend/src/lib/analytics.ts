@@ -62,8 +62,13 @@ export function identifyUser(id: number): void {
   client?.identify(distinctId)
 }
 
-/** ログアウト・認証切れのとき、識別を外して次の利用者と混ざらないようにする */
+/**
+ * ログアウト・認証切れのとき、識別を外して次の利用者と混ざらないようにする。
+ * 識別済みのときだけ行う。未ログインの訪問者は /auth/me が毎回401になるが、
+ * そのたびに reset すると匿名IDとセッションが作り直されてしまうため。
+ */
 export function resetAnalytics(): void {
+  if (pendingUserId === null) return
   pendingUserId = null
   client?.reset()
 }
