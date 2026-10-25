@@ -32,6 +32,20 @@ APIのベースURLは環境変数で切り替える。`.env.example` を参照�
 VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
+利用状況の分析（PostHog）も環境変数で切り替える。`.env.example` を参照。
+
+```
+VITE_POSTHOG_KEY=      # プロジェクトキー。実際の値はリポジトリに書かない
+VITE_POSTHOG_HOST=     # 米国リージョンなら https://us.i.posthog.com
+```
+
+- `VITE_POSTHOG_KEY` が未設定なら、`posthog-js` を読み込まず、通信もしない（ローカルと試験は既定でこの状態）
+- キーがあっても `VITE_POSTHOG_HOST` が未設定なら、地域を勝手に決めず、分析を無効にする（コンソールに警告を出す）
+- 集めるのはページ閲覧・クリック・操作の記録（セッションリプレイ）。入力欄はすべて伏せ、`ph-no-capture` クラスの要素（利用者名の表示など）はクリックの記録と画面の記録の文字から外す
+- 利用者の識別は内部の利用者ID（`/auth/me` の `id`）だけ。名前・メール・利用者名は送らない。ログアウトと認証切れで識別を外す（`src/lib/analytics.ts`）
+- 利用者名など個人データになりうる表示を足すときは、その要素に `ph-no-capture` を付ける
+- プライバシーポリシーに入れる文面の案は `docs/privacy/analytics.md`
+
 バックエンドを起動していないと、ログイン以降の画面は動作しない（リポジトリルートの `CONTRIBUTING.md` と `README.md` を参照）。
 
 ## ディレクトリ
