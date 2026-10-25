@@ -15,6 +15,7 @@ test("Go版・画面・運用スクリプト・composeの変更は、反映が�
     ".github/workflows/ci.yml",
     ".github/workflows/release.yml",
     "scripts/cutover-frontend.mjs",
+    "scripts/check-ca-bundle.sh",
   ]) {
     assert.equal(needsDeploy([file]), true, file);
   }
