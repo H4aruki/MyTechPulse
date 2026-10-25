@@ -1,0 +1,32 @@
+-- name: LockUserForSavedArticles :one
+-- 保存の上限（500件）を、同時に保存しても超えないようにするための鍵。
+-- 数えてから入れるまでの間に別の保存が割り込むと上限を超えるので、利用者の行を先にロックして、同じ利用者の保存を1つずつにする。
+SELECT "user_ID" FROM "user" WHERE "user_ID" = $1 FOR UPDATE;
+
+-- name: SavedArticleExists :one
+SELECT EXISTS (SELECT 1 FROM saved_articles WHERE "user_ID" = $1 AND article_id = $2);
+
+-- name: ArticleExists :one
+SELECT EXISTS (SELECT 1 FROM articles WHERE id = $1);
+
+-- name: CountSavedArticles :one
+SELECT count(*) FROM saved_articles WHERE "user_ID" = $1;
+
+-- name: InsertSavedArticle :execrows
+-- 保存済みなら何もしない（created_at も変えない）。
+INSERT INTO saved_articles ("user_ID", article_id)
+VALUES ($1, $2)
+ON CONFLICT ("user_ID", article_id) DO NOTHING;
+
+-- name: DeleteSavedArticle :exec
+-- 保存されていなくてもエラーにしない。
+DELETE FROM saved_articles WHERE "user_ID" = $1 AND article_id = $2;
+
+-- name: ListSavedArticles :many
+-- 自分の保存だけを、保存の新しい順に返す。
+SELECT a.id, a.source, a.url, a.title, a.author_name, a.likes, a.published_at, s.created_at AS saved_at
+FROM saved_articles s
+JOIN articles a ON a.id = s.article_id
+WHERE s."user_ID" = sqlc.arg(user_id)
+ORDER BY s.created_at DESC, s.article_id DESC
+LIMIT sqlc.arg(max_rows) OFFSET sqlc.arg(skip_rows);

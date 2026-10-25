@@ -34,6 +34,8 @@ const (
 	feedbackPerMinute = 10
 	// パスキーの登録・名前変更・削除: 利用者ごとに1分に10回。
 	passkeyManagePerMinute = 10
+	// 記事の保存・解除(PUT・DELETEを合わせて1つの枠): 利用者ごとに1分に30回。
+	savedPerMinute = 30
 
 	// リクエスト本文の上限。Huma の既定(1MB)より小さくする。WebAuthn の登録・認証の本文も数KBに収まる。
 	maxBodyBytes = 64 << 10
@@ -45,6 +47,7 @@ const (
 type limits struct {
 	signupIP, signupFail, globalIP      *ratelimit.Limiter
 	feed, click, userFeedback, passkeys *ratelimit.Limiter
+	saved                               *ratelimit.Limiter
 }
 
 func newLimits(clock ratelimit.Clock) limits {
@@ -56,6 +59,7 @@ func newLimits(clock ratelimit.Clock) limits {
 		click:        ratelimit.New(clicksBurst, time.Minute/clicksPerMinute, clock),
 		userFeedback: ratelimit.PerWindow(feedbackPerMinute, time.Minute, clock),
 		passkeys:     ratelimit.PerWindow(passkeyManagePerMinute, time.Minute, clock),
+		saved:        ratelimit.PerWindow(savedPerMinute, time.Minute, clock),
 	}
 }
 
