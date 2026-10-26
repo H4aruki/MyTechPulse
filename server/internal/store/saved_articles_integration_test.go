@@ -3,6 +3,8 @@ package store_test
 import (
 	"context"
 	"errors"
+	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -330,4 +332,145 @@ func TestArticleRetentionKeepsSavedArticles(t *testing.T) {
 	if n, err := fetch.DeleteExpired(ctx, "qiita", cutoff); err != nil || n != 1 {
 		t.Fatalf("解除後: deleted = %d, err = %v", n, err)
 	}
+}
+
+// tagArticle は、記事にタグを付ける（tag 表に無ければ作る）。
+func tagArticle(t *testing.T, pool *pgxpool.Pool, articleID int64, tags ...string) {
+	t.Helper()
+	ensureTags(t, pool, tags...)
+	lowered := make([]string, len(tags))
+	for i, tag := range tags {
+		lowered[i] = strings.ToLower(strings.TrimSpace(tag))
+	}
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO article_tags (article_id, "tag_ID", published_at)
+		 SELECT $1, "tag_ID", now() FROM tag WHERE lower(btrim(tag_name)) = ANY($2::text[])`, articleID, lowered); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// weightsOf は、利用者の興味度を、小文字のタグ名 → match_int で返す。
+func weightsOf(t *testing.T, pool *pgxpool.Pool, userID int64) map[string]int {
+	t.Helper()
+	rows, err := pool.Query(context.Background(),
+		`SELECT lower(btrim(t.tag_name)), r.match_int FROM recommend r JOIN tag t ON t."tag_ID" = r."tag_ID" WHERE r."user_ID" = $1`, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var name string
+		var v int
+		if err := rows.Scan(&name, &v); err != nil {
+			t.Fatal(err)
+		}
+		out[name] = v
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func setWeight(t *testing.T, pool *pgxpool.Pool, userID int64, tag string, v int) {
+	t.Helper()
+	ensureTags(t, pool, tag)
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO recommend ("user_ID", "tag_ID", match_int) SELECT $1, "tag_ID", $3 FROM tag WHERE lower(btrim(tag_name)) = lower($2)
+		 ON CONFLICT ("user_ID", "tag_ID") DO UPDATE SET match_int = EXCLUDED.match_int`, userID, tag, v); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertWeights(t *testing.T, pool *pgxpool.Pool, userID int64, want map[string]int) {
+	t.Helper()
+	if got := weightsOf(t, pool, userID); !reflect.DeepEqual(got, want) {
+		t.Fatalf("興味度 = %v, want %v", got, want)
+	}
+}
+
+func TestSavedArticlesSaveLearnsInterest(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	s := store.NewSavedArticles(pool)
+	user := newPasskeyUser(t, pool, "alice")
+	ids := newSavableArticles(t, pool, "learn", 1)
+	tagArticle(t, pool, ids[0], "Go", "Rust")
+	setWeight(t, pool, user, "go", 5000)
+	setWeight(t, pool, user, "python", 7000) // 記事に無いタグ
+	tagsBefore := queryInt(t, pool, `SELECT count(*) FROM tag`)
+
+	// (a)(d) 既存のタグは +3000、行の無かったタグは 3000 で行ができる。記事に無いタグは減衰しない
+	mustSave(t, s, user, ids[0])
+	assertWeights(t, pool, user, map[string]int{"go": 8000, "rust": 3000, "python": 7000})
+	if n := queryInt(t, pool, `SELECT count(*) FROM tag`); n != tagsBefore {
+		t.Fatalf("tag 表の行が増えた: %d -> %d", tagsBefore, n)
+	}
+
+	// (b) 同じ記事をもう一度保存しても、点は変わらない
+	if created, err := s.Save(ctx, user, ids[0]); err != nil || created {
+		t.Fatalf("再保存: created = %v, err = %v", created, err)
+	}
+	assertWeights(t, pool, user, map[string]int{"go": 8000, "rust": 3000, "python": 7000})
+
+	// (e) 解除しても点は変わらない
+	if err := s.Unsave(ctx, user, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	assertWeights(t, pool, user, map[string]int{"go": 8000, "rust": 3000, "python": 7000})
+}
+
+func TestSavedArticlesSaveAfterClickStillLearns(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	s := store.NewSavedArticles(pool)
+	user := newPasskeyUser(t, pool, "alice")
+	ids := newSavableArticles(t, pool, "clk", 1)
+	tagArticle(t, pool, ids[0], "Go")
+	setWeight(t, pool, user, "go", 5000)
+
+	// (c) クリックは 5000×0.8+2000 = 6000。そのあとの保存でも +3000
+	if _, err := store.NewInterest(pool).UpdateForClick(ctx, user, []string{"Go"}); err != nil {
+		t.Fatal(err)
+	}
+	assertWeights(t, pool, user, map[string]int{"go": 6000})
+	mustSave(t, s, user, ids[0])
+	assertWeights(t, pool, user, map[string]int{"go": 9000})
+}
+
+func TestSavedArticlesFailedSaveDoesNotLearn(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	s := store.NewSavedArticles(pool)
+	user := newPasskeyUser(t, pool, "alice")
+	ids := newSavableArticles(t, pool, "fail", store.SavedArticlesLimit+1)
+	tagArticle(t, pool, ids[store.SavedArticlesLimit], "Go")
+	setWeight(t, pool, user, "go", 5000)
+	for _, id := range ids[:store.SavedArticlesLimit] {
+		mustSave(t, s, user, id) // タグの無い記事。学習しない
+	}
+
+	// (f) 上限の409と、知らない記事の404
+	if _, err := s.Save(ctx, user, ids[store.SavedArticlesLimit]); !errors.Is(err, store.ErrSavedLimitReached) {
+		t.Fatalf("501件目: err = %v", err)
+	}
+	if _, err := s.Save(ctx, user, 999999); !errors.Is(err, store.ErrArticleNotFound) {
+		t.Fatalf("存在しない記事: err = %v", err)
+	}
+	assertWeights(t, pool, user, map[string]int{"go": 5000})
+}
+
+func TestSavedArticlesSaveDoesNotChangeOtherUsersInterest(t *testing.T) {
+	pool := newTestPool(t)
+	s := store.NewSavedArticles(pool)
+	alice, bob := newPasskeyUser(t, pool, "alice"), newPasskeyUser(t, pool, "bob")
+	ids := newSavableArticles(t, pool, "other", 1)
+	tagArticle(t, pool, ids[0], "Go")
+	setWeight(t, pool, bob, "go", 4000)
+
+	// (g)
+	mustSave(t, s, alice, ids[0])
+	assertWeights(t, pool, alice, map[string]int{"go": 3000})
+	assertWeights(t, pool, bob, map[string]int{"go": 4000})
 }

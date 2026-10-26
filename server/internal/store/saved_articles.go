@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/H4aruki/MyTechPulse/server/internal/interest"
 	"github.com/H4aruki/MyTechPulse/server/internal/store/dbgen"
 )
 
@@ -104,10 +105,69 @@ func (s *SavedArticles) Save(ctx context.Context, userID, articleID int64) (crea
 	if err != nil {
 		return false, errors.New("store: 記事を保存できません")
 	}
+	// 新しい保存だけ学習する。再PUT（保存済み）は学習しない（連打で点を上げられないように）。
+	// 学習は保存と同じトランザクションで行い、失敗したら保存ごと取り消す。
+	if rows == 1 {
+		if err := learnFromSave(ctx, q, uid, articleID); err != nil {
+			return false, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, errors.New("store: 記事を保存できません")
 	}
 	return rows == 1, nil
+}
+
+// learnFromSave は、保存した記事の各タグの興味度に interest.SaveBoost を足す。
+// 他のタグは減衰しない。tag 表に新しい行は作らず、記事に付いているタグだけを使う。
+func learnFromSave(ctx context.Context, q *dbgen.Queries, uid int32, articleID int64) error {
+	fail := errors.New("store: 興味度を更新できません")
+	tags, err := q.ListArticleTags(ctx, articleID)
+	if err != nil {
+		return fail
+	}
+	if len(tags) == 0 {
+		return nil
+	}
+	rows, err := q.ListRecommendations(ctx, uid)
+	if err != nil {
+		return fail
+	}
+	current := make([]interest.Weight, 0, len(rows))
+	for _, row := range rows {
+		current = append(current, interest.Weight{TagID: int64(row.TagID), Tag: row.TagName, Value: int64(row.MatchInt)})
+	}
+	names := make([]string, 0, len(tags))
+	tagIDs := make(map[string]int32, len(tags))
+	for _, tag := range tags {
+		names = append(names, tag.TagName)
+		tagIDs[interest.NormalizeTag(tag.TagName)] = tag.TagID
+	}
+	updated, err := interest.UpdateOnSave(current, names)
+	if err != nil {
+		return err
+	}
+	for i, weight := range updated {
+		if i < len(current) {
+			if weight.Value == current[i].Value {
+				continue
+			}
+		} else {
+			// まだ行の無かったタグ。名前から、記事のタグのIDを引く。
+			id, ok := tagIDs[weight.Tag]
+			if !ok {
+				return fail
+			}
+			weight.TagID = int64(id)
+		}
+		if weight.Value > math.MaxInt32 || weight.Value < math.MinInt32 || weight.TagID > math.MaxInt32 || weight.TagID < 1 {
+			return fail
+		}
+		if err := q.UpsertRecommendation(ctx, dbgen.UpsertRecommendationParams{UserID: uid, TagID: int32(weight.TagID), MatchInt: int32(weight.Value)}); err != nil {
+			return fail
+		}
+	}
+	return nil
 }
 
 // Unsave は保存を解除する（行を消す）。保存されていなくてもエラーにしない。
