@@ -103,6 +103,29 @@ describe('endpoints', () => {
     expect(init.credentials).toBe('include')
   })
 
+  test('パスキー管理の窓口を正しい方式とパスで呼ぶ', async () => {
+    const e = await loadEndpoints()
+    await e.fetchPasskeys()
+    expect(lastCall()).toEqual({ url: `${BASE}/api/v1/auth/passkeys`, method: 'GET', body: undefined })
+    await e.beginPasskeyRegistration()
+    expect(lastCall()).toEqual({ url: `${BASE}/api/v1/auth/passkeys/register/begin`, method: 'POST', body: undefined })
+    await e.finishPasskeyRegistration({ challengeToken: 'tok', credential: { id: 'abc' }, name: 'iPhone' })
+    expect(lastCall()).toEqual({
+      url: `${BASE}/api/v1/auth/passkeys/register/finish`,
+      method: 'POST',
+      body: '{"challengeToken":"tok","credential":{"id":"abc"},"name":"iPhone"}',
+    })
+  })
+
+  test('パスキーの名前変更はPATCH、削除はDELETEで、idをパスに入れる', async () => {
+    const e = await loadEndpoints()
+    fetchMock.mockImplementation(async () => new Response(null, { status: 204 }))
+    await e.renamePasskey(7, '仕事用')
+    expect(lastCall()).toEqual({ url: `${BASE}/api/v1/auth/passkeys/7`, method: 'PATCH', body: '{"name":"仕事用"}' })
+    await e.deletePasskey(7)
+    expect(lastCall()).toEqual({ url: `${BASE}/api/v1/auth/passkeys/7`, method: 'DELETE', body: undefined })
+  })
+
   test('保存した記事は、保存がPUT・解除がDELETE・一覧がGET（limitとoffset付き）', async () => {
     const e = await loadEndpoints()
     await e.saveArticle(7)

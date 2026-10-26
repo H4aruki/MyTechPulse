@@ -74,7 +74,9 @@ func (h Handler) Register(api huma.API) {
 		Summary:     "記事を保存",
 		Description: "冪等。新しく保存したら201、すでに保存済みなら200(どちらも本文なし。保存日時は変えない)。保存は1人500件まで(保存済みの記事は上限でも200)。" + writeLimitDoc,
 		Tags:        tags, Security: security, Middlewares: mw, DefaultStatus: http.StatusOK,
-		Errors: []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusTooManyRequests, http.StatusInternalServerError},
+		// 新規保存の201(本文なし)。既定の200はHumaが足す。
+		Responses: map[string]*huma.Response{"201": {Description: "Created"}},
+		Errors:    []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusTooManyRequests, http.StatusInternalServerError},
 	}, h.save)
 	huma.Register(api, huma.Operation{
 		OperationID: "saved-articles-unsave", Method: http.MethodDelete, Path: "/api/v1/saved-articles/{article_id}",

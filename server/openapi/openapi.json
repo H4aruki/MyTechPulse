@@ -2029,6 +2029,9 @@
           "200": {
             "description": "OK"
           },
+          "201": {
+            "description": "Created"
+          },
           "401": {
             "content": {
               "application/problem+json": {

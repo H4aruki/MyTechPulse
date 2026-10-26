@@ -1,6 +1,8 @@
 services:
   db:
-    image: postgres:17-alpine
+    # 本番で動いている版にダイジェストで固定している。更新するときは、本番の docker inspect の
+    # RepoDigests と Docker Hub の index ダイジェストを照合してから変える
+    image: postgres:17.11-alpine@sha256:eee6c6e1b0894fa4fe0075eb054af9fd1cf39a35321c2d4110626cfe506411fb
     # サーバー再起動後に自動で復帰させる（本番はこれが無いと落ちたまま気付けない）
     restart: unless-stopped
     environment:
@@ -75,7 +77,9 @@ services:
   # ---- HTTPS終端（本番のみ）。ローカル開発では起動しない ----
   # 起動: docker compose --profile prod up -d
   caddy:
-    image: caddy:2-alpine
+    # 本番で動いている版にダイジェストで固定している。更新するときは、本番の docker inspect の
+    # RepoDigests と Docker Hub の index ダイジェストを照合してから変える
+    image: caddy:2.11.7-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     profiles: ["prod"]
     restart: unless-stopped
     environment:

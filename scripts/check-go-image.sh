@@ -4,6 +4,7 @@
 #   2. 既定のentrypoint(/api)が、使い捨てのPostgreSQLと合成設定で起動し、
 #      /health/live と /health/ready が200を返す
 #   3. 起動したプロセスがroot(uid 0)ではない
+#   4. CA bundle に不信任の root（emSign ECC Root CA - G3）が含まれていない
 # 本番の値やsecretは使わない。作るのはこのscriptが名前を付けた一時containerとnetworkだけで、
 # 終了時にそれらだけを片付ける。
 set -euo pipefail
@@ -20,16 +21,26 @@ API="mtp-imgcheck-api-$SUFFIX"
 HOST_PORT="${MTP_IMGCHECK_PORT:-18001}"
 SYNTH_PASSWORD="synthetic-$SUFFIX"
 
+CA_CID="mtp-imgcheck-ca-$SUFFIX"
+CA_FILE="$(mktemp)"
+
 cleanup() {
-  docker rm -f "$API" "$DB" >/dev/null 2>&1 || true
+  docker rm -f "$API" "$DB" "$CA_CID" >/dev/null 2>&1 || true
+  rm -f "$CA_FILE"
   docker network rm "$NET" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
-echo "1/3 /migrate --help（DB設定なし）"
+echo "1/4 /migrate --help（DB設定なし）"
 docker run --rm --entrypoint /migrate "$IMAGE" --help >/dev/null
 
-echo "2/3 既定entrypointの起動確認（合成DB・合成設定）"
+echo "2/4 CA bundleに不信任のrootが無いこと"
+# scratch imageには、シェルもcatも無い。作るだけ（起動しない）の一時containerから取り出す。
+docker create --name "$CA_CID" "$IMAGE" >/dev/null
+docker cp "$CA_CID:/etc/ssl/certs/ca-certificates.crt" "$CA_FILE"
+bash "$(dirname "${BASH_SOURCE[0]}")/check-ca-bundle.sh" "$CA_FILE"
+
+echo "3/4 既定entrypointの起動確認（合成DB・合成設定）"
 docker network create "$NET" >/dev/null
 docker run -d --name "$DB" --network "$NET" \
   -e POSTGRES_PASSWORD="$SYNTH_PASSWORD" -e POSTGRES_DB=mtp_imgcheck \
@@ -68,7 +79,7 @@ check_endpoint() {
 check_endpoint /health/live
 check_endpoint /health/ready
 
-echo "3/3 非root実行の確認"
+echo "4/4 非root実行の確認"
 configured_user="$(docker inspect --format '{{.Config.User}}' "$API")"
 case "$configured_user" in
   "" | 0 | 0:* | root | root:*)

@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { StrictMode } from 'react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { type ComponentProps, StrictMode } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ApiError, UnauthorizedError } from '@/api/client'
@@ -24,14 +24,21 @@ vi.mock('@/api/endpoints', () => ({
 
 const user = { id: 1, username: 'alice', role: 'member' as const }
 
-function renderLogin({ strict = false }: { strict?: boolean } = {}) {
+function renderLogin({
+  strict = false,
+  initialEntries = ['/login'],
+}: {
+  strict?: boolean
+  initialEntries?: ComponentProps<typeof MemoryRouter>['initialEntries']
+} = {}) {
   const client = new QueryClient()
   const page = (
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={['/login']}>
+      <MemoryRouter initialEntries={initialEntries}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/articles" element={<h1>記事一覧</h1>} />
+          <Route path="/mypage" element={<h1>マイページ</h1>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -163,6 +170,27 @@ describe('LoginPage', () => {
     // useMutation は第2引数に実行情報も渡すため、送信内容だけを確認する
     expect(vi.mocked(login).mock.calls[0][0]).toEqual({ username: 'alice', password: 'secret' })
     expect(client.getQueryData(authQueryKey)).toEqual(user)
+  })
+
+  test('ログイン画面へ渡された元の場所があれば、成功後はそこへ戻る', async () => {
+    vi.mocked(login).mockResolvedValue({ user })
+    renderLogin({ initialEntries: [{ pathname: '/login', state: { from: '/mypage' } }] })
+
+    submit('alice', 'secret')
+
+    expect(await screen.findByRole('heading', { name: 'マイページ' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '記事一覧' })).not.toBeInTheDocument()
+  })
+
+  test('元の場所が外部URLなら使わず、記事一覧へ移動する', async () => {
+    vi.mocked(login).mockResolvedValue({ user })
+    renderLogin({
+      initialEntries: [{ pathname: '/login', state: { from: 'https://evil.example' } }],
+    })
+
+    submit('alice', 'secret')
+
+    expect(await screen.findByRole('heading', { name: '記事一覧' })).toBeInTheDocument()
   })
 
   test('成功すると、前の利用者のアンケート判定の記録を消す', async () => {
@@ -959,6 +987,122 @@ describe('LoginPage', () => {
         'パスキーでログインできませんでした。もう一度お試しください。',
       )
       expect(finishPasskeyLogin).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: 'パスキーでログイン' })).toBeEnabled()
+    })
+  })
+
+  // 確認コードを見に別のアプリへ切り替えると、OS が確認のシートを閉じて get が reject される
+  describe('別のアプリへの切り替えによる中断', () => {
+    let visibility: 'hidden' | 'visible' = 'visible'
+
+    function setPageVisibility(state: 'hidden' | 'visible') {
+      visibility = state
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+    }
+
+    beforeEach(() => {
+      visibility = 'visible'
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
+    })
+
+    /** 非表示にしてから NotAllowedError で reject する get */
+    const interruptedGet = async () => {
+      setPageVisibility('hidden')
+      throw new DOMException('x', 'NotAllowedError')
+    }
+
+    test('明示のボタン: 中断の説明と「もう一度試す」を出し、ボタンは押せる。押すと新しいトークンでやり直す', async () => {
+      const get = vi.fn().mockImplementationOnce(interruptedGet).mockResolvedValueOnce(fakeAssertion())
+      supportPasskey(get)
+      vi.mocked(beginPasskeyLogin)
+        .mockResolvedValueOnce({ challengeToken: 'token-1', publicKey: assertionOptions })
+        .mockResolvedValueOnce({ challengeToken: 'token-2', publicKey: assertionOptions })
+      vi.mocked(finishPasskeyLogin).mockResolvedValue({ user })
+      renderLogin()
+
+      fireEvent.click(screen.getByRole('button', { name: 'パスキーでログイン' }))
+      const alert = await screen.findByRole('alert')
+      setPageVisibility('visible')
+
+      expect(alert).toHaveTextContent('ほかのアプリに切り替えたため')
+      expect(alert).toHaveTextContent('Google パスワード マネージャー')
+      expect(within(alert).getByRole('button', { name: 'もう一度試す' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'パスキーでログイン' })).toBeEnabled()
+      expect(finishPasskeyLogin).not.toHaveBeenCalled()
+      // 何も保存しない
+      expect(JSON.stringify({ ...window.sessionStorage })).not.toContain('token-1')
+      expect(JSON.stringify({ ...window.localStorage })).not.toContain('token-1')
+
+      fireEvent.click(screen.getByRole('button', { name: 'もう一度試す' }))
+
+      expect(await screen.findByRole('heading', { name: '記事一覧' })).toBeInTheDocument()
+      expect(beginPasskeyLogin).toHaveBeenCalledTimes(2)
+      expect(get).toHaveBeenCalledTimes(2)
+      expect(finishPasskeyLogin).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(finishPasskeyLogin).mock.calls[0][0].challengeToken).toBe('token-2')
+      expect(JSON.stringify({ ...window.sessionStorage })).not.toContain('token-2')
+      expect(JSON.stringify({ ...window.localStorage })).not.toContain('token-2')
+    })
+
+    test('非表示を伴わない取り消しでは、中断の説明も「もう一度試す」も出さない', async () => {
+      const get = vi.fn().mockRejectedValue(new DOMException('x', 'NotAllowedError'))
+      supportPasskey(get)
+      vi.mocked(beginPasskeyLogin).mockResolvedValue({ challengeToken: 'token-1', publicKey: assertionOptions })
+      renderLogin()
+
+      fireEvent.click(screen.getByRole('button', { name: 'パスキーでログイン' }))
+
+      await waitFor(() => expect(get).toHaveBeenCalledTimes(1))
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'パスキーでログイン' })).toBeEnabled(),
+      )
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'もう一度試す' })).not.toBeInTheDocument()
+    })
+
+    test('中断以外のエラーでは、「もう一度試す」を出さない', async () => {
+      supportPasskey(vi.fn().mockResolvedValue(fakeAssertion()))
+      vi.mocked(beginPasskeyLogin).mockResolvedValue({ challengeToken: 'token-1', publicKey: assertionOptions })
+      vi.mocked(finishPasskeyLogin).mockRejectedValue(new UnauthorizedError())
+      renderLogin()
+
+      fireEvent.click(screen.getByRole('button', { name: 'パスキーでログイン' }))
+
+      expect(await screen.findByRole('alert')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'もう一度試す' })).not.toBeInTheDocument()
+    })
+
+    test('conditional の中断は表示せず、2回続いても、表示に戻るたびに begin を呼び直す', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      vi.mocked(beginPasskeyLogin).mockResolvedValue({ challengeToken: 'token-1', publicKey: assertionOptions })
+      const { get, pending } = conditionalBrowser()
+      renderLogin()
+      await waitFor(() => expect(get).toHaveBeenCalledTimes(1))
+
+      // 1回目: 切り替えで中断。非表示の間は作り直さない
+      setPageVisibility('hidden')
+      pending[0].reject(new DOMException('x', 'NotAllowedError'))
+      await settle()
+      expect(beginPasskeyLogin).toHaveBeenCalledTimes(1)
+      setPageVisibility('visible')
+      await advance(CONDITIONAL_MIN_INTERVAL_MS)
+      await waitFor(() => expect(get).toHaveBeenCalledTimes(2))
+      expect(beginPasskeyLogin).toHaveBeenCalledTimes(2)
+
+      // 2回目: もう一度中断されても、表示に戻れば作り直す
+      setPageVisibility('hidden')
+      pending[1].reject(new DOMException('x', 'NotAllowedError'))
+      await settle()
+      expect(beginPasskeyLogin).toHaveBeenCalledTimes(2)
+      setPageVisibility('visible')
+      await advance(CONDITIONAL_MIN_INTERVAL_MS)
+      await waitFor(() => expect(get).toHaveBeenCalledTimes(3))
+      expect(beginPasskeyLogin).toHaveBeenCalledTimes(3)
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'もう一度試す' })).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'パスキーでログイン' })).toBeEnabled()
     })
   })
