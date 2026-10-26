@@ -3,11 +3,17 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ApiError, UnauthorizedError } from '@/api/client'
-import { currentUser, logout } from '@/api/endpoints'
+import { currentUser, fetchSavedArticles, logout } from '@/api/endpoints'
 import { authQueryKey } from '@/lib/auth'
 import { MyPage } from './MyPage'
 
-vi.mock('@/api/endpoints', () => ({ currentUser: vi.fn(), logout: vi.fn() }))
+vi.mock('@/api/endpoints', () => ({
+  currentUser: vi.fn(),
+  logout: vi.fn(),
+  fetchSavedArticles: vi.fn(),
+  saveArticle: vi.fn(),
+  unsaveArticle: vi.fn(),
+}))
 
 const user = { id: 1, username: 'alice', role: 'member' as const }
 
@@ -33,6 +39,9 @@ describe('MyPage', () => {
   beforeEach(() => {
     vi.mocked(currentUser).mockReset().mockResolvedValue(user)
     vi.mocked(logout).mockReset()
+    vi.mocked(fetchSavedArticles)
+      .mockReset()
+      .mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0 })
     window.sessionStorage.clear()
   })
   afterEach(() => {
@@ -69,11 +78,11 @@ describe('MyPage', () => {
     expect(await screen.findByRole('heading', { name: '記事一覧画面' })).toBeInTheDocument()
   })
 
-  test('保存した記事の場所取りを表示する', () => {
+  test('保存した記事の欄を表示する', async () => {
     renderMyPage()
 
     expect(screen.getByRole('heading', { name: '保存した記事' })).toBeInTheDocument()
-    expect(screen.getByText(/準備中/)).toBeInTheDocument()
+    expect(await screen.findByText(/まだ保存した記事はありません/)).toBeInTheDocument()
   })
 
   test('ログアウトに成功すると、情報を捨ててログイン画面へ移る', async () => {

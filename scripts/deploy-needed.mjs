@@ -16,7 +16,7 @@ const DEPLOY_PATHS = [
   /^docker-compose\.yml$/,
   /^Caddyfile$/,
   /^scripts\/(release-manifest|cutover-frontend|check-go-image)\.m?js$/,
-  /^scripts\/check-go-image\.sh$/,
+  /^scripts\/(check-go-image|check-ca-bundle)\.sh$/,
   /^\.github\/workflows\/(ci|release)\.yml$/,
 ];
 

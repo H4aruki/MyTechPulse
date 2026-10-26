@@ -4,9 +4,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import { UnauthorizedError } from '@/api/client'
 import { logout } from '@/api/endpoints'
 import { AppLayout } from '@/components/AppLayout'
+import { SavedArticlesList } from '@/components/SavedArticlesList'
 import { authQueryKey, useCurrentUser } from '@/lib/auth'
 import { clearFeedbackState } from '@/lib/feedbackTracker'
 import { passkeysQueryKey } from '@/lib/passkey'
+import { SAVED_ARTICLE_IDS_QUERY_KEY, SAVED_ARTICLES_QUERY_KEY } from '@/lib/savedArticles'
 
 /**
  * マイページは概要だけを置く。パスキーなどの設定は /settings に分けている。
@@ -21,6 +23,8 @@ export function MyPage() {
     queryClient.removeQueries({ queryKey: authQueryKey })
     queryClient.removeQueries({ queryKey: passkeysQueryKey })
     queryClient.removeQueries({ queryKey: ['feed'] })
+    queryClient.removeQueries({ queryKey: SAVED_ARTICLES_QUERY_KEY })
+    queryClient.removeQueries({ queryKey: SAVED_ARTICLE_IDS_QUERY_KEY })
     clearFeedbackState()
     navigate('/login', { replace: true })
   }, [queryClient, navigate])
@@ -75,14 +79,11 @@ export function MyPage() {
           </p>
         </section>
 
-        {/* 記事の保存機能（#236）で、保存した記事の一覧をここに載せる */}
         <section aria-labelledby="mypage-saved" className="space-y-2">
           <h2 id="mypage-saved" className="text-lg font-bold text-ink">
             保存した記事
           </h2>
-          <p className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-sm text-ink-muted">
-            記事の保存機能は準備中です。保存した記事は、ここに表示される予定です。
-          </p>
+          <SavedArticlesList />
         </section>
       </div>
     </AppLayout>

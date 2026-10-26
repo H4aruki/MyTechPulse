@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   assertionToJSON,
   base64urlToBuffer,
@@ -8,10 +8,14 @@ import {
   isConditionalPasskeyLoginAvailable,
   isPasskeyLoginSupported,
   isPasskeySupported,
+  PASSKEY_LOGIN_INTERRUPTED,
+  PASSKEY_REGISTRATION_INTERRUPTED,
   PasskeyAlreadyRegisteredError,
   PasskeyCancelledError,
+  PasskeyInterruptedError,
   PasskeyLoginAbortedError,
   PasskeyLoginCancelledError,
+  PasskeyLoginInterruptedError,
   toCreationOptions,
   toRequestOptions,
 } from './passkey'
@@ -309,6 +313,163 @@ describe('getPasskeyAssertion', () => {
     const result = getPasskeyAssertion(requestKey, { signal: new AbortController().signal })
     await expect(result).rejects.toBeInstanceOf(PasskeyLoginCancelledError)
     await expect(result).rejects.not.toBeInstanceOf(PasskeyLoginAbortedError)
+  })
+})
+
+// ほかのアプリへ切り替えると、OS が確認のシートを閉じて get/create が reject される
+describe('別のアプリへの切り替えによる中断', () => {
+  let visibility: 'hidden' | 'visible' = 'visible'
+
+  function setVisibility(state: 'hidden' | 'visible') {
+    visibility = state
+    document.dispatchEvent(new Event('visibilitychange'))
+  }
+
+  beforeEach(() => {
+    visibility = 'visible'
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
+  })
+
+  afterEach(() => {
+    visibility = 'visible'
+    vi.restoreAllMocks()
+    Reflect.deleteProperty(document, 'visibilityState')
+  })
+
+  test.each(['NotAllowedError', 'AbortError'])(
+    'ログイン: 呼び出し中に非表示になって %s なら PasskeyLoginInterruptedError（取り消しとしても扱える）',
+    async (name) => {
+      const get = vi.fn().mockImplementation(async () => {
+        setVisibility('hidden')
+        throw new DOMException('x', name)
+      })
+      vi.stubGlobal('navigator', { credentials: { get } })
+
+      const result = getPasskeyAssertion(requestKey)
+
+      await expect(result).rejects.toBeInstanceOf(PasskeyLoginInterruptedError)
+      await expect(result).rejects.toBeInstanceOf(PasskeyLoginCancelledError)
+      await expect(result).rejects.toHaveProperty('message', PASSKEY_LOGIN_INTERRUPTED)
+    },
+  )
+
+  test('ログイン: 非表示になっても表示に戻っていれば、呼び出し中に非表示になったものとして扱う', async () => {
+    const get = vi.fn().mockImplementation(async () => {
+      setVisibility('hidden')
+      setVisibility('visible')
+      throw new DOMException('x', 'NotAllowedError')
+    })
+    vi.stubGlobal('navigator', { credentials: { get } })
+    await expect(getPasskeyAssertion(requestKey)).rejects.toBeInstanceOf(PasskeyLoginInterruptedError)
+  })
+
+  test('ログイン: 非表示にならない NotAllowedError は今まで通りの取り消し（Interrupted ではない）', async () => {
+    const get = vi.fn().mockRejectedValue(new DOMException('x', 'NotAllowedError'))
+    vi.stubGlobal('navigator', { credentials: { get } })
+    const result = getPasskeyAssertion(requestKey)
+    await expect(result).rejects.toBeInstanceOf(PasskeyLoginCancelledError)
+    await expect(result).rejects.not.toBeInstanceOf(PasskeyLoginInterruptedError)
+  })
+
+  test('ログイン: 前の呼び出しで非表示になった記録は、次の呼び出しへ持ち越さない', async () => {
+    const get = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        setVisibility('hidden')
+        throw new DOMException('x', 'NotAllowedError')
+      })
+      .mockRejectedValueOnce(new DOMException('x', 'NotAllowedError'))
+    vi.stubGlobal('navigator', { credentials: { get } })
+    await expect(getPasskeyAssertion(requestKey)).rejects.toBeInstanceOf(PasskeyLoginInterruptedError)
+    setVisibility('visible')
+
+    await expect(getPasskeyAssertion(requestKey)).rejects.not.toBeInstanceOf(PasskeyLoginInterruptedError)
+  })
+
+  test('ログイン: signal での中止は、非表示になっていても PasskeyLoginAbortedError を優先する', async () => {
+    const controller = new AbortController()
+    const get = vi.fn().mockImplementation(async () => {
+      setVisibility('hidden')
+      controller.abort()
+      throw new DOMException('x', 'AbortError')
+    })
+    vi.stubGlobal('navigator', { credentials: { get } })
+
+    const result = getPasskeyAssertion(requestKey, { signal: controller.signal })
+
+    await expect(result).rejects.toBeInstanceOf(PasskeyLoginAbortedError)
+    await expect(result).rejects.not.toBeInstanceOf(PasskeyLoginInterruptedError)
+  })
+
+  test('ログイン: 成功・失敗のどちらでも visibilitychange のリスナーを外す', async () => {
+    const add = vi.spyOn(document, 'addEventListener')
+    const remove = vi.spyOn(document, 'removeEventListener')
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce(fakeAssertion(null))
+      .mockRejectedValueOnce(new DOMException('x', 'NotAllowedError'))
+      .mockRejectedValueOnce(new DOMException('x', 'SecurityError'))
+    vi.stubGlobal('navigator', { credentials: { get } })
+
+    await getPasskeyAssertion(requestKey)
+    await expect(getPasskeyAssertion(requestKey)).rejects.toBeInstanceOf(PasskeyLoginCancelledError)
+    await expect(getPasskeyAssertion(requestKey)).rejects.toBeInstanceOf(DOMException)
+
+    const added = add.mock.calls.filter(([type]) => type === 'visibilitychange')
+    const removed = remove.mock.calls.filter(([type]) => type === 'visibilitychange')
+    expect(added).toHaveLength(3)
+    expect(removed).toHaveLength(3)
+    for (const [, listener] of added) {
+      expect(removed.some(([, l]) => l === listener)).toBe(true)
+    }
+  })
+
+  test.each(['NotAllowedError', 'AbortError'])(
+    '登録: 呼び出し中に非表示になって %s なら PasskeyInterruptedError（取り消しとしても扱える）',
+    async (name) => {
+      const create = vi.fn().mockImplementation(async () => {
+        setVisibility('hidden')
+        throw new DOMException('x', name)
+      })
+      vi.stubGlobal('navigator', { credentials: { create } })
+
+      const result = createPasskeyCredential(publicKey)
+
+      await expect(result).rejects.toBeInstanceOf(PasskeyInterruptedError)
+      await expect(result).rejects.toBeInstanceOf(PasskeyCancelledError)
+      await expect(result).rejects.toHaveProperty('message', PASSKEY_REGISTRATION_INTERRUPTED)
+    },
+  )
+
+  test('登録: 非表示にならない NotAllowedError は今まで通りの取り消し（Interrupted ではない）', async () => {
+    const create = vi.fn().mockRejectedValue(new DOMException('x', 'NotAllowedError'))
+    vi.stubGlobal('navigator', { credentials: { create } })
+    const result = createPasskeyCredential(publicKey)
+    await expect(result).rejects.toBeInstanceOf(PasskeyCancelledError)
+    await expect(result).rejects.not.toBeInstanceOf(PasskeyInterruptedError)
+  })
+
+  test('登録: 非表示になっていても、登録済み(InvalidStateError)は PasskeyAlreadyRegisteredError', async () => {
+    const create = vi.fn().mockImplementation(async () => {
+      setVisibility('hidden')
+      throw new DOMException('x', 'InvalidStateError')
+    })
+    vi.stubGlobal('navigator', { credentials: { create } })
+    await expect(createPasskeyCredential(publicKey)).rejects.toBeInstanceOf(PasskeyAlreadyRegisteredError)
+  })
+
+  test('登録: 失敗しても visibilitychange のリスナーを外す', async () => {
+    const add = vi.spyOn(document, 'addEventListener')
+    const remove = vi.spyOn(document, 'removeEventListener')
+    const create = vi.fn().mockRejectedValue(new DOMException('x', 'NotAllowedError'))
+    vi.stubGlobal('navigator', { credentials: { create } })
+
+    await expect(createPasskeyCredential(publicKey)).rejects.toBeInstanceOf(PasskeyCancelledError)
+
+    const added = add.mock.calls.filter(([type]) => type === 'visibilitychange')
+    const removed = remove.mock.calls.filter(([type]) => type === 'visibilitychange')
+    expect(added).toHaveLength(1)
+    expect(removed.map(([, l]) => l)).toEqual(added.map(([, l]) => l))
   })
 })
 
