@@ -494,6 +494,11 @@ export interface components {
         FeedArticle: {
             /**
              * Format: int64
+             * @description 記事ID（保存APIで使う）。DBから読むときだけ入る
+             */
+            id?: number;
+            /**
+             * Format: int64
              * @description いいね数
              */
             likes: number;
@@ -1569,6 +1574,13 @@ export interface operations {
         responses: {
             /** @description OK */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Created */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

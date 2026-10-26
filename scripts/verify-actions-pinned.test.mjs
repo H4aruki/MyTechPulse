@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -77,6 +77,20 @@ test("services の image はsha256ダイジェスト固定のときだけ成功�
 test("コメント内のusesや文章中のusesは対象外", () => {
   const text = "# uses: actions/checkout@v4\nname: uses: は説明\nrun: echo 'uses: a/b@v1'\n";
   assert.deepEqual(findUnpinnedActions(text, "a.yml"), []);
+});
+
+test("docker-compose.ymlの外部イメージ（db・caddy）はすべてダイジェストで固定されている", () => {
+  const composePath = fileURLToPath(new URL("../docker-compose.yml", import.meta.url));
+  const lines = readFileSync(composePath, "utf8").split(/\r?\n/);
+  // ${GO_API_IMAGE:-...} のような変数指定は自前のイメージなので対象外
+  const external = lines.filter((line) => {
+    const m = /^\s*image:\s*(.+?)\s*$/.exec(line);
+    return m && !m[1].startsWith("${");
+  });
+  assert.equal(external.length, 2, external.join("\n"));
+  assert.ok(external.some((line) => line.includes("postgres:")));
+  assert.ok(external.some((line) => line.includes("caddy:")));
+  assert.deepEqual(findUnpinnedActions(external.join("\n"), "docker-compose.yml"), []);
 });
 
 function runScanner(files) {
