@@ -18,6 +18,12 @@ INSERT INTO saved_articles ("user_ID", article_id)
 VALUES ($1, $2)
 ON CONFLICT ("user_ID", article_id) DO NOTHING;
 
+-- name: ListArticleTags :many
+-- 記事のタグ。保存したときの興味度の学習に使う。
+SELECT at."tag_ID", t.tag_name
+FROM article_tags at JOIN tag t ON t."tag_ID" = at."tag_ID"
+WHERE at.article_id = $1 ORDER BY at."tag_ID";
+
 -- name: DeleteSavedArticle :exec
 -- 保存されていなくてもエラーにしない。
 DELETE FROM saved_articles WHERE "user_ID" = $1 AND article_id = $2;
