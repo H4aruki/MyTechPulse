@@ -13,6 +13,7 @@ import type { PasskeyItem } from '@/api/types'
 import {
   createPasskeyCredential,
   isPasskeySupported,
+  PASSKEY_REGISTRATION_INTERRUPTED,
   PasskeyCancelledError,
   passkeysQueryKey,
 } from '@/lib/passkey'
@@ -115,12 +116,16 @@ function PasskeySection({ onUnauthorized }: Props) {
   const full = passkeys.length >= MAX_PASSKEYS
   const busy = addMutation.isPending
 
-  const onAdd = (e: FormEvent) => {
-    e.preventDefault()
+  const startAdd = () => {
     if (busy || full) return
     setNotice(null)
     setError(null)
     addMutation.mutate(newName)
+  }
+
+  const onAdd = (e: FormEvent) => {
+    e.preventDefault()
+    startAdd()
   }
 
   const onRename = (e: FormEvent, id: number) => {
@@ -150,9 +155,19 @@ function PasskeySection({ onUnauthorized }: Props) {
       </p>
 
       {error && (
-        <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
+        <div role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p>{error}</p>
+          {error === PASSKEY_REGISTRATION_INTERRUPTED && (
+            <button
+              type="button"
+              onClick={startAdd}
+              disabled={busy || full}
+              className="mt-2 rounded-lg border border-red-300 bg-white px-3 py-1.5 font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              もう一度試す
+            </button>
+          )}
+        </div>
       )}
       {notice && (
         <p role="status" className="mb-4 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
