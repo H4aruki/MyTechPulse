@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 import { ApiError, UnauthorizedError } from '@/api/client'
 import { login } from '@/api/endpoints'
@@ -12,6 +12,7 @@ import { authQueryKey } from '@/lib/auth'
 import { clearFeedbackState } from '@/lib/feedbackTracker'
 import { isPasskeyLoginSupported, PASSKEY_LOGIN_INTERRUPTED } from '@/lib/passkey'
 import { LOGIN_LOCKED } from '@/lib/passkeyLogin'
+import { returnPathFrom } from '@/lib/returnTo'
 import { usePasskeyLogin } from '@/lib/usePasskeyLogin'
 
 const loginSchema = z.object({
@@ -23,6 +24,7 @@ type LoginFormValues = z.infer<typeof loginSchema>
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
   const [formError, setFormError] = useState('')
 
@@ -40,7 +42,7 @@ export function LoginPage() {
     // 同じブラウザで前に使っていた利用者のアンケート判定の記録を残さない
     clearFeedbackState()
     queryClient.setQueryData(authQueryKey, data.user)
-    navigate('/articles', { replace: true })
+    navigate(returnPathFrom(location.state), { replace: true })
   }
 
   // パスキー（ボタンと、利用者名欄の autofill）の進行。失敗の文言は固定で、取り消しは静か

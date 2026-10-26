@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { StrictMode } from 'react'
+import { type ComponentProps, StrictMode } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ApiError, UnauthorizedError } from '@/api/client'
@@ -24,14 +24,21 @@ vi.mock('@/api/endpoints', () => ({
 
 const user = { id: 1, username: 'alice', role: 'member' as const }
 
-function renderLogin({ strict = false }: { strict?: boolean } = {}) {
+function renderLogin({
+  strict = false,
+  initialEntries = ['/login'],
+}: {
+  strict?: boolean
+  initialEntries?: ComponentProps<typeof MemoryRouter>['initialEntries']
+} = {}) {
   const client = new QueryClient()
   const page = (
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={['/login']}>
+      <MemoryRouter initialEntries={initialEntries}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/articles" element={<h1>記事一覧</h1>} />
+          <Route path="/mypage" element={<h1>マイページ</h1>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -163,6 +170,27 @@ describe('LoginPage', () => {
     // useMutation は第2引数に実行情報も渡すため、送信内容だけを確認する
     expect(vi.mocked(login).mock.calls[0][0]).toEqual({ username: 'alice', password: 'secret' })
     expect(client.getQueryData(authQueryKey)).toEqual(user)
+  })
+
+  test('ログイン画面へ渡された元の場所があれば、成功後はそこへ戻る', async () => {
+    vi.mocked(login).mockResolvedValue({ user })
+    renderLogin({ initialEntries: [{ pathname: '/login', state: { from: '/mypage' } }] })
+
+    submit('alice', 'secret')
+
+    expect(await screen.findByRole('heading', { name: 'マイページ' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '記事一覧' })).not.toBeInTheDocument()
+  })
+
+  test('元の場所が外部URLなら使わず、記事一覧へ移動する', async () => {
+    vi.mocked(login).mockResolvedValue({ user })
+    renderLogin({
+      initialEntries: [{ pathname: '/login', state: { from: 'https://evil.example' } }],
+    })
+
+    submit('alice', 'secret')
+
+    expect(await screen.findByRole('heading', { name: '記事一覧' })).toBeInTheDocument()
   })
 
   test('成功すると、前の利用者のアンケート判定の記録を消す', async () => {

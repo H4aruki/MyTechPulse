@@ -41,7 +41,9 @@ func (q *Queries) AddArticleTag(ctx context.Context, arg AddArticleTagParams) er
 }
 
 const deleteExpiredArticles = `-- name: DeleteExpiredArticles :execrows
-DELETE FROM articles WHERE source = $1 AND published_at < $2
+DELETE FROM articles
+WHERE source = $1 AND published_at < $2
+  AND NOT EXISTS (SELECT 1 FROM saved_articles s WHERE s.article_id = articles.id)
 `
 
 type DeleteExpiredArticlesParams struct {
@@ -50,6 +52,7 @@ type DeleteExpiredArticlesParams struct {
 }
 
 // 保持期間を過ぎた記事を消す。article_tags は連動して消える。
+// 利用者が保存した記事（saved_articles）は、保持期間を過ぎても消さない。
 func (q *Queries) DeleteExpiredArticles(ctx context.Context, arg DeleteExpiredArticlesParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteExpiredArticles, arg.Source, arg.PublishedAt)
 	if err != nil {

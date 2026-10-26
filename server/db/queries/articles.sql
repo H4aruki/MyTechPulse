@@ -29,7 +29,10 @@ LIMIT 500;
 
 -- name: DeleteExpiredArticles :execrows
 -- 保持期間を過ぎた記事を消す。article_tags は連動して消える。
-DELETE FROM articles WHERE source = $1 AND published_at < $2;
+-- 利用者が保存した記事（saved_articles）は、保持期間を過ぎても消さない。
+DELETE FROM articles
+WHERE source = $1 AND published_at < $2
+  AND NOT EXISTS (SELECT 1 FROM saved_articles s WHERE s.article_id = articles.id);
 
 -- name: InsertFetchRun :one
 INSERT INTO fetch_runs (slot_at, trigger, attempt, started_at)

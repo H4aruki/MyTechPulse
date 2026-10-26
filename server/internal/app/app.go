@@ -15,6 +15,7 @@ import (
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/httpx"
 	"github.com/H4aruki/MyTechPulse/server/internal/platform/ratelimit"
 	"github.com/H4aruki/MyTechPulse/server/internal/recommendation"
+	"github.com/H4aruki/MyTechPulse/server/internal/savedarticle"
 	"github.com/H4aruki/MyTechPulse/server/internal/userfeedback"
 )
 
@@ -28,6 +29,8 @@ type Dependencies struct {
 	UserFeedback   *userfeedback.Service
 	// Passkey が nil のときはパスキーAPIを登録しない。
 	Passkey *passkey.Service
+	// SavedArticle が nil のときは保存した記事のAPIを登録しない。
+	SavedArticle *savedarticle.Service
 	// Clock は回数制限の時刻。nilなら実際の時刻(テストで進めるために差し替える)。
 	Clock ratelimit.Clock
 }
@@ -52,6 +55,9 @@ func New(cfg config.Config, deps Dependencies) (http.Handler, *huma.OpenAPI) {
 	}
 	if deps.Auth != nil && deps.Recommendation != nil {
 		recommendation.Handler{Service: *deps.Recommendation, Auth: *deps.Auth, CookieName: cfg.CookieName, FeedLimit: lim.feed, ClickLimit: lim.click}.Register(api)
+	}
+	if deps.Auth != nil && deps.SavedArticle != nil {
+		savedarticle.Handler{Service: deps.SavedArticle, Auth: *deps.Auth, CookieName: cfg.CookieName, WriteLimit: lim.saved}.Register(api)
 	}
 	if deps.Auth != nil && deps.Passkey != nil {
 		passkey.Handler{Service: *deps.Passkey, Auth: *deps.Auth, CookieName: cfg.CookieName, CookieSecure: cfg.CookieSecure, ClientIPHeader: cfg.ClientIPHeader, ManageLimit: lim.passkeys}.Register(api)
