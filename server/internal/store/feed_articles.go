@@ -45,7 +45,7 @@ func (s *FeedArticles) ListTagged(ctx context.Context, source string, tags []str
 	}
 	out := make([]article.Article, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, feedArticle(r.Source, r.Title, r.Url, r.AuthorName, r.Likes, r.PublishedAt, r.Tags))
+		out = append(out, feedArticle(r.ID, r.Source, r.Title, r.Url, r.AuthorName, r.Likes, r.PublishedAt, r.Tags))
 	}
 	return out, nil
 }
@@ -63,14 +63,14 @@ func (s *FeedArticles) ListPopular(ctx context.Context, source string, since tim
 	}
 	out := make([]article.Article, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, feedArticle(r.Source, r.Title, r.Url, r.AuthorName, r.Likes, r.PublishedAt, r.Tags))
+		out = append(out, feedArticle(r.ID, r.Source, r.Title, r.Url, r.AuthorName, r.Likes, r.PublishedAt, r.Tags))
 	}
 	return out, nil
 }
 
 // feedArticle は、DBの行を記事にする。DBの提供元（'qiita'・'zenn'）を、画面と推薦で使う表記に戻す。
-func feedArticle(source, title, url, author string, likes int32, published pgtype.Timestamptz, tags []string) article.Article {
-	a := article.Article{Title: title, URL: url, Author: author, Likes: int(likes), PublishedAt: published.Time, Tags: tags}
+func feedArticle(id int64, source, title, url, author string, likes int32, published pgtype.Timestamptz, tags []string) article.Article {
+	a := article.Article{ID: id, Title: title, URL: url, Author: author, Likes: int(likes), PublishedAt: published.Time, Tags: tags}
 	switch source {
 	case "qiita":
 		a.Source = article.SourceQiita

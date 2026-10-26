@@ -61,6 +61,9 @@ func TestFeedArticlesListTaggedMatchesNormalizedTagsWithinWindow(t *testing.T) {
 	if _, err := article.Validate(first); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
+	if first.ID <= 0 {
+		t.Fatalf("ID = %d, DBの記事のIDが入っていない", first.ID)
+	}
 
 	// 複数のタグに当たっても、記事は1件だけ返す
 	got, err = feed.ListTagged(ctx, article.SourceQiita, []string{"go", "rust", "kotlin"}, since, 100)
