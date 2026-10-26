@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, type Location } from 'react-router-dom'
 import { ApiError, rateLimitMessage, UnauthorizedError } from '@/api/client'
+import { loginRedirectState } from '@/lib/returnTo'
 
 interface SaveButtonProps {
   saved: boolean
@@ -16,12 +17,16 @@ interface Failure {
   error: unknown
 }
 
-function failureMessage({ save, error }: Failure): ReactNode {
+function failureMessage({ save, error }: Failure, location: Location): ReactNode {
   if (error instanceof UnauthorizedError) {
     return (
       <>
         保存するにはログインが必要です。
-        <Link to="/login" className="font-bold underline">
+        <Link
+          to="/login"
+          state={loginRedirectState(location)}
+          className="font-bold underline"
+        >
           ログインする
         </Link>
       </>
@@ -40,6 +45,7 @@ function failureMessage({ save, error }: Failure): ReactNode {
 
 /** 記事カードの右上に置く、保存の切り替えボタン。カードの「開く」ボタンの兄弟として置く */
 export function SaveButton({ saved, onToggle }: SaveButtonProps) {
+  const location = useLocation()
   const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
 
@@ -120,7 +126,7 @@ export function SaveButton({ saved, onToggle }: SaveButtonProps) {
       </div>
       {failure && (
         <p role="alert" className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
-          {failureMessage(failure)}
+          {failureMessage(failure, location)}
         </p>
       )}
     </>

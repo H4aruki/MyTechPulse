@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ApiError, rateLimitMessage, UnauthorizedError } from '@/api/client'
 import { fetchSavedArticles, saveArticle, unsaveArticle } from '@/api/endpoints'
@@ -47,13 +47,28 @@ function Harness({ article }: { article: Article }) {
   )
 }
 
-function renderCard(article: Article = makeArticle()) {
+/** ログイン画面側で、渡された state をそのまま表示する */
+function LoginStateProbe() {
+  const location = useLocation()
+  return <p data-testid="login-state">{JSON.stringify(location.state)}</p>
+}
+
+function renderCard(article: Article = makeArticle(), entry?: string) {
   const client = new QueryClient()
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <Harness article={article} />
-      </MemoryRouter>
+      {entry === undefined ? (
+        <MemoryRouter>
+          <Harness article={article} />
+        </MemoryRouter>
+      ) : (
+        <MemoryRouter initialEntries={[entry]}>
+          <Routes>
+            <Route path="/articles" element={<Harness article={article} />} />
+            <Route path="/login" element={<LoginStateProbe />} />
+          </Routes>
+        </MemoryRouter>
+      )}
     </QueryClientProvider>,
   )
   return client
@@ -167,6 +182,18 @@ describe('ArticleCard の保存ボタン', () => {
     expect(alert).toHaveTextContent('保存するにはログインが必要です。')
     const link = screen.getByRole('link', { name: 'ログインする' })
     expect(link.getAttribute('href')).toMatch(/\/login$/)
+  })
+
+  test('401のログインリンクは、元の場所をstateで渡す', async () => {
+    vi.mocked(saveArticle).mockRejectedValue(new UnauthorizedError())
+    renderCard(makeArticle(), '/articles?page=2#x')
+    fireEvent.click(await screen.findByRole('button', { name: '保存する' }))
+
+    fireEvent.click(await screen.findByRole('link', { name: 'ログインする' }))
+
+    expect(await screen.findByTestId('login-state')).toHaveTextContent(
+      JSON.stringify({ from: '/articles?page=2#x' }),
+    )
   })
 
   test('idの無い記事には保存ボタンを出さない', async () => {
