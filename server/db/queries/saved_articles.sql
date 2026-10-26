@@ -18,11 +18,26 @@ INSERT INTO saved_articles ("user_ID", article_id)
 VALUES ($1, $2)
 ON CONFLICT ("user_ID", article_id) DO NOTHING;
 
--- name: ListArticleTags :many
--- 記事のタグ。保存したときの興味度の学習に使う。
-SELECT at."tag_ID", t.tag_name
+-- name: ListArticleTagsByArticles :many
+-- 記事のタグ。保存の学習（反映）に使う。
+SELECT at.article_id, at."tag_ID", t.tag_name
 FROM article_tags at JOIN tag t ON t."tag_ID" = at."tag_ID"
-WHERE at.article_id = $1 ORDER BY at."tag_ID";
+WHERE at.article_id = ANY(sqlc.arg(article_ids)::bigint[]) ORDER BY at.article_id, at."tag_ID";
+
+-- name: HasDueSavedLearning :one
+-- 期限（delay_seconds 秒）が来た未反映の保存があるか。ロックは取らない（先に軽く見るための問い合わせ）。
+SELECT EXISTS (
+    SELECT 1 FROM saved_articles
+    WHERE "user_ID" = sqlc.arg(user_id) AND learned_at IS NULL
+      AND created_at <= now() - make_interval(secs => sqlc.arg(delay_seconds)::float8)
+);
+
+-- name: MarkDueSavedLearned :many
+-- 期限が来た未反映の保存に反映済みの印を付け、その記事を返す。利用者の行をロックした中で呼ぶ。
+UPDATE saved_articles SET learned_at = now()
+WHERE "user_ID" = sqlc.arg(user_id) AND learned_at IS NULL
+  AND created_at <= now() - make_interval(secs => sqlc.arg(delay_seconds)::float8)
+RETURNING article_id;
 
 -- name: DeleteSavedArticle :exec
 -- 保存されていなくてもエラーにしない。
