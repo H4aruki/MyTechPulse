@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, rateLimitMessage, UnauthorizedError } from '@/api/client'
 
@@ -7,6 +7,9 @@ interface SaveButtonProps {
   /** 保存するなら true、外すなら false。失敗したら reject する */
   onToggle: (save: boolean) => Promise<unknown>
 }
+
+/** 保存の直後に「取り消す」を出しておく時間 */
+const UNDO_VISIBLE_MS = 5000
 
 interface Failure {
   save: boolean
@@ -40,19 +43,43 @@ export function SaveButton({ saved, onToggle }: SaveButtonProps) {
   const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
 
-  const handleClick = async () => {
+  const [undoVisible, setUndoVisible] = useState(false)
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearUndoTimer = () => {
+    if (undoTimer.current !== null) {
+      clearTimeout(undoTimer.current)
+      undoTimer.current = null
+    }
+  }
+
+  useEffect(() => clearUndoTimer, [])
+
+  const run = async (save: boolean) => {
     if (pending) return
-    const save = !saved
+    clearUndoTimer()
+    setUndoVisible(false)
     setPending(true)
     setFailure(null)
     try {
       await onToggle(save)
+      if (save) {
+        // 成功が分かってから出す。もう一度保存したら5秒を数え直す
+        setUndoVisible(true)
+        undoTimer.current = setTimeout(() => {
+          undoTimer.current = null
+          setUndoVisible(false)
+        }, UNDO_VISIBLE_MS)
+      }
     } catch (error) {
       setFailure({ save, error })
     } finally {
       setPending(false)
     }
   }
+
+  const handleClick = () => run(!saved)
+  const handleUndo = () => run(false)
 
   return (
     <>
@@ -76,6 +103,21 @@ export function SaveButton({ saved, onToggle }: SaveButtonProps) {
           <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
         </svg>
       </button>
+      <div role="status">
+        {undoVisible && (
+          <p className="mt-2 flex items-center gap-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
+            保存しました
+            <button
+              type="button"
+              disabled={pending}
+              onClick={handleUndo}
+              className="cursor-pointer font-bold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              取り消す
+            </button>
+          </p>
+        )}
+      </div>
       {failure && (
         <p role="alert" className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           {failureMessage(failure)}
