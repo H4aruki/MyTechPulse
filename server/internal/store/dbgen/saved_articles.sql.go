@@ -224,6 +224,40 @@ func (q *Queries) MarkDueSavedLearned(ctx context.Context, arg MarkDueSavedLearn
 	return items, nil
 }
 
+const recordSaveLearnings = `-- name: RecordSaveLearnings :many
+INSERT INTO saved_article_learnings ("user_ID", article_id)
+SELECT $1, unnest($2::bigint[])
+ON CONFLICT DO NOTHING
+RETURNING article_id
+`
+
+type RecordSaveLearningsParams struct {
+	UserID     int32
+	ArticleIds []int64
+}
+
+// 保存による学習を、1人1記事に1回だけにするための記録（#236 の決定）。新しく記録できた記事だけを返す。
+// すでに記録のある記事（過去に学習済み）は返らない。利用者の行をロックした中で呼ぶ。
+func (q *Queries) RecordSaveLearnings(ctx context.Context, arg RecordSaveLearningsParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, recordSaveLearnings, arg.UserID, arg.ArticleIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var article_id int64
+		if err := rows.Scan(&article_id); err != nil {
+			return nil, err
+		}
+		items = append(items, article_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const savedArticleExists = `-- name: SavedArticleExists :one
 SELECT EXISTS (SELECT 1 FROM saved_articles WHERE "user_ID" = $1 AND article_id = $2)
 `

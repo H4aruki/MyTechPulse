@@ -637,3 +637,142 @@ func TestSavedArticlesSaveDoesNotChangeOtherUsersInterest(t *testing.T) {
 	assertWeights(t, pool, alice, map[string]int{"go": 3000})
 	assertWeights(t, pool, bob, map[string]int{"go": 4000})
 }
+
+// resave は、保存を解除してもう一度保存し、反映の期限を過ぎた状態にする。
+func resave(t *testing.T, pool *pgxpool.Pool, s *store.SavedArticles, userID, articleID int64) {
+	t.Helper()
+	if err := s.Unsave(context.Background(), userID, articleID); err != nil {
+		t.Fatal(err)
+	}
+	mustSave(t, s, userID, articleID)
+	backdateSaves(t, pool, userID)
+}
+
+func TestSavedArticlesLearnOncePerUserAndArticle(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	s := store.NewSavedArticles(pool)
+	in := store.NewInterest(pool)
+	user := newPasskeyUser(t, pool, "alice")
+	ids := newSavableArticles(t, pool, "once", 1)
+	tagArticle(t, pool, ids[0], "Go")
+	setWeight(t, pool, user, "go", 5000)
+
+	// (a) 最初の保存は +3000
+	mustSave(t, s, user, ids[0])
+	backdateSaves(t, pool, user)
+	mustList(t, in, user)
+	assertWeights(t, pool, user, map[string]int{"go": 8000})
+
+	// 解除して再保存し、期限を過ぎて読んでも、足さない。saved_articles の印は付く
+	resave(t, pool, s, user, ids[0])
+	mustList(t, in, user)
+	assertWeights(t, pool, user, map[string]int{"go": 8000})
+	if n := queryInt(t, pool, `SELECT count(*) FROM saved_articles WHERE learned_at IS NULL`); n != 0 {
+		t.Fatalf("未反映の保存 = %d, want 0", n)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM saved_article_learnings`); n != 1 {
+		t.Fatalf("saved_article_learnings = %d, want 1", n)
+	}
+
+	// クリックで読んでも足さない（全タグ ×0.8 だけ）。8000 × 0.8 = 6400
+	resave(t, pool, s, user, ids[0])
+	if _, err := in.UpdateForClick(ctx, user, []string{"zzz-no-such-tag"}); err != nil {
+		t.Fatal(err)
+	}
+	assertWeights(t, pool, user, map[string]int{"go": 6400})
+}
+
+func TestSavedArticlesLearnOnceDoesNotBlockOtherArticles(t *testing.T) {
+	pool := newTestPool(t)
+	s := store.NewSavedArticles(pool)
+	in := store.NewInterest(pool)
+	user := newPasskeyUser(t, pool, "alice")
+	ids := newSavableArticles(t, pool, "other-art", 2)
+	tagArticle(t, pool, ids[0], "Go")
+	tagArticle(t, pool, ids[1], "Rust")
+	setWeight(t, pool, user, "go", 5000)
+
+	// (b) 同じ利用者の別の記事は、学習する
+	mustSave(t, s, user, ids[0])
+	backdateSaves(t, pool, user)
+	mustList(t, in, user)
+	mustSave(t, s, user, ids[1])
+	backdateSaves(t, pool, user)
+	mustList(t, in, user)
+	assertWeights(t, pool, user, map[string]int{"go": 8000, "rust": 3000})
+}
+
+func TestSavedArticlesLearnOnceIsPerUser(t *testing.T) {
+	pool := newTestPool(t)
+	s := store.NewSavedArticles(pool)
+	in := store.NewInterest(pool)
+	alice, bob := newPasskeyUser(t, pool, "alice"), newPasskeyUser(t, pool, "bob")
+	ids := newSavableArticles(t, pool, "per-user", 1)
+	tagArticle(t, pool, ids[0], "Go")
+	setWeight(t, pool, alice, "go", 5000)
+	setWeight(t, pool, bob, "go", 4000)
+
+	// (c) alice が学習済みでも、別の利用者の bob は、同じ記事で学習する
+	mustSave(t, s, alice, ids[0])
+	backdateSaves(t, pool, alice)
+	mustList(t, in, alice)
+	mustSave(t, s, bob, ids[0])
+	backdateSaves(t, pool, bob)
+	mustList(t, in, bob)
+	assertWeights(t, pool, alice, map[string]int{"go": 8000})
+	assertWeights(t, pool, bob, map[string]int{"go": 7000})
+}
+
+func TestSavedArticleLearningsAreDeletedWithTheUser(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	s := store.NewSavedArticles(pool)
+	in := store.NewInterest(pool)
+	alice, bob := newPasskeyUser(t, pool, "alice"), newPasskeyUser(t, pool, "bob")
+	ids := newSavableArticles(t, pool, "learn-del", 1)
+	tagArticle(t, pool, ids[0], "Go")
+	for _, u := range []int64{alice, bob} {
+		mustSave(t, s, u, ids[0])
+		backdateSaves(t, pool, u)
+		mustList(t, in, u)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM saved_article_learnings`); n != 2 {
+		t.Fatalf("saved_article_learnings = %d, want 2", n)
+	}
+
+	// (d) 退会すると、その利用者の記録も消える。ほかの利用者の記録は残る
+	if _, err := pool.Exec(ctx, `DELETE FROM "user" WHERE "user_ID" = $1`, alice); err != nil {
+		t.Fatal(err)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM saved_article_learnings WHERE "user_ID" = $1`, alice); n != 0 {
+		t.Fatalf("退会した利用者の記録が残っている: %d", n)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM saved_article_learnings WHERE "user_ID" = $1`, bob); n != 1 {
+		t.Fatalf("bob の記録 = %d, want 1", n)
+	}
+}
+
+func TestSavedArticlesUnsaveBeforeLearningThenResaveLearnsOnce(t *testing.T) {
+	pool := newTestPool(t)
+	s := store.NewSavedArticles(pool)
+	in := store.NewInterest(pool)
+	user := newPasskeyUser(t, pool, "alice")
+	ids := newSavableArticles(t, pool, "early-undo", 1)
+	tagArticle(t, pool, ids[0], "Go")
+	setWeight(t, pool, user, "go", 5000)
+
+	// (e) 学習する前（期限内）に解除したので、まだ一度も学習していない。あとで再保存して期限を過ぎたら、1回だけ学習する
+	mustSave(t, s, user, ids[0])
+	if err := s.Unsave(context.Background(), user, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	backdateSaves(t, pool, user)
+	mustList(t, in, user)
+	assertWeights(t, pool, user, map[string]int{"go": 5000})
+	resave(t, pool, s, user, ids[0])
+	mustList(t, in, user)
+	assertWeights(t, pool, user, map[string]int{"go": 8000})
+	mustList(t, in, user)
+	assertWeights(t, pool, user, map[string]int{"go": 8000})
+}
