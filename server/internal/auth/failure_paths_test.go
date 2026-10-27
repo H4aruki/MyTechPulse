@@ -41,11 +41,11 @@ func (f *faultyStore) FindByID(ctx context.Context, id int64) (User, error) {
 }
 
 func (f *faultyStore) CreateWithInterestsAndSession(ctx context.Context, name, hash string, role Role,
-	tags []string, token [32]byte, exp time.Time) (User, error) {
+	tags []string, token [32]byte, exp time.Time, termsVersion string) (User, error) {
 	if f.createUserErr != nil {
 		return User{}, f.createUserErr
 	}
-	return f.fakeStore.CreateWithInterestsAndSession(ctx, name, hash, role, tags, token, exp)
+	return f.fakeStore.CreateWithInterestsAndSession(ctx, name, hash, role, tags, token, exp, termsVersion)
 }
 
 func (f *faultyStore) Create(ctx context.Context, token [32]byte, userID int64, exp time.Time) error {

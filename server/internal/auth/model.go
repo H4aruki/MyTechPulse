@@ -43,7 +43,13 @@ type SignupInput struct {
 	Username     string
 	Password     string
 	FavoriteTags []string
+	// AgreedTermsVersion は利用者が同意した規約・プライバシーポリシーの版。CurrentTermsVersion と一致する必要がある。
+	AgreedTermsVersion string
 }
+
+// CurrentTermsVersion は現行の利用規約・プライバシーポリシーの版（2つで1つの版）。
+// frontend/src/lib/legal.ts の LEGAL_VERSION と同じ値にする（terms_version_test.go が確かめる）。
+const CurrentTermsVersion = "2026-10-draft"
 
 var (
 	// ErrNotFound は対象の利用者またはセッションが無いことを表す。

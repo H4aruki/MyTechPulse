@@ -17,7 +17,7 @@ func TestInterestRepositoryConcurrentClicksAreSerialized(t *testing.T) {
 	pool := newTestPool(t)
 	authRepo := store.NewAuth(pool)
 	ensureTags(t, pool, "Go")
-	user, err := authRepo.CreateWithInterestsAndSession(ctx, "click-user", "hash", auth.RoleMember, []string{"Go"}, hashOf(41), fixedNow.Add(time.Hour))
+	user, err := authRepo.CreateWithInterestsAndSession(ctx, "click-user", "hash", auth.RoleMember, []string{"Go"}, hashOf(41), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestInterestRepositoryCollisionDoesNotChangeRows(t *testing.T) {
 	pool := newTestPool(t)
 	authRepo := store.NewAuth(pool)
 	ensureTags(t, pool, "Go")
-	user, err := authRepo.CreateWithInterestsAndSession(ctx, "collision-user", "hash", auth.RoleMember, []string{"Go"}, hashOf(42), fixedNow.Add(time.Hour))
+	user, err := authRepo.CreateWithInterestsAndSession(ctx, "collision-user", "hash", auth.RoleMember, []string{"Go"}, hashOf(42), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestInterestRepositoryClickIgnoresUnknownTags(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
 	ensureTags(t, pool, "Go")
-	user, err := store.NewAuth(pool).CreateWithInterestsAndSession(ctx, "unknown-tag-user", "hash", auth.RoleMember, []string{"Go"}, hashOf(43), fixedNow.Add(time.Hour))
+	user, err := store.NewAuth(pool).CreateWithInterestsAndSession(ctx, "unknown-tag-user", "hash", auth.RoleMember, []string{"Go"}, hashOf(43), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 	if err != nil {
 		t.Fatal(err)
 	}

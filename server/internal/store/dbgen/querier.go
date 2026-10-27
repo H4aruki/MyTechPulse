@@ -24,6 +24,7 @@ type Querier interface {
 	CreatePasskey(ctx context.Context, arg CreatePasskeyParams) (AuthPasskey, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	CreateUserTermsAgreement(ctx context.Context, arg CreateUserTermsAgreementParams) error
 	CreateWebAuthnChallenge(ctx context.Context, arg CreateWebAuthnChallengeParams) error
 	// 保持期間を過ぎた記事を消す。article_tags は連動して消える。
 	// 利用者が保存した記事（saved_articles）は、保持期間を過ぎても消さない。
