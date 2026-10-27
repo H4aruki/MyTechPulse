@@ -40,21 +40,17 @@ func (q *Queries) AddArticleTag(ctx context.Context, arg AddArticleTagParams) er
 	return err
 }
 
-const deleteExpiredArticles = `-- name: DeleteExpiredArticles :execrows
+const deleteUnsavedArticlesByID = `-- name: DeleteUnsavedArticlesByID :execrows
 DELETE FROM articles
-WHERE source = $1 AND published_at < $2
+WHERE id = ANY($1::bigint[])
   AND NOT EXISTS (SELECT 1 FROM saved_articles s WHERE s.article_id = articles.id)
 `
 
-type DeleteExpiredArticlesParams struct {
-	Source      string
-	PublishedAt pgtype.Timestamptz
-}
-
-// 保持期間を過ぎた記事を消す。article_tags は連動して消える。
+// 1文目でロックした記事のうち、保存されていないものを消す。article_tags は連動して消える。
 // 利用者が保存した記事（saved_articles）は、保持期間を過ぎても消さない。
-func (q *Queries) DeleteExpiredArticles(ctx context.Context, arg DeleteExpiredArticlesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredArticles, arg.Source, arg.PublishedAt)
+// 1文目と別の文にするのは、この文が開始時に取るスナップショットに、確定済みの保存を含めるため。
+func (q *Queries) DeleteUnsavedArticlesByID(ctx context.Context, ids []int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUnsavedArticlesByID, ids)
 	if err != nil {
 		return 0, err
 	}
@@ -348,6 +344,41 @@ func (q *Queries) ListTagsForMatching(ctx context.Context) ([]Tag, error) {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockExpiredArticleIDs = `-- name: LockExpiredArticleIDs :many
+SELECT id FROM articles
+WHERE source = $1 AND published_at < $2
+ORDER BY id
+FOR UPDATE SKIP LOCKED
+`
+
+type LockExpiredArticleIDsParams struct {
+	Source      string
+	PublishedAt pgtype.Timestamptz
+}
+
+// 保持期間を過ぎた記事を、行ロックを取って列挙する（削除の1文目。同じトランザクションで DeleteUnsavedArticlesByID を呼ぶ）。
+// 保存の途中（saved_articles の挿入が未確定）の記事は、外部キーの検査で共有ロックが付いているので、SKIP LOCKED で飛ばす（次の回に消える）。
+// ここでは保存の有無を見ない。確定済みの保存の判断は、新しいスナップショットで動く2文目で行う。
+func (q *Queries) LockExpiredArticleIDs(ctx context.Context, arg LockExpiredArticleIDsParams) ([]int64, error) {
+	rows, err := q.db.Query(ctx, lockExpiredArticleIDs, arg.Source, arg.PublishedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

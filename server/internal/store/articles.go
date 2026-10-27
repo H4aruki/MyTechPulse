@@ -156,8 +156,34 @@ func isSkippable(err error) bool {
 	return false
 }
 
+// DeleteExpired は、保持期間を過ぎた記事のうち、保存されていないものを消す。
+// 記事の保存（saved_articles の挿入）と同時に走っても、保存された記事は消えない。
+// 1文で書くと、削除の文の開始時のスナップショットで「保存なし」と判断した記事を、保存の確定を待ったあとにそのまま消してしまう。
+// そこで、1文目で行ロックを取り（保存の途中の記事は SKIP LOCKED で飛ばす）、別の文で保存の有無を新しいスナップショットで確かめ直して消す。
 func (s *ArticleFetch) DeleteExpired(ctx context.Context, source string, before time.Time) (int64, error) {
-	return s.q.DeleteExpiredArticles(ctx, dbgen.DeleteExpiredArticlesParams{Source: source, PublishedAt: tstz(before)})
+	fail := errors.New("store: 期限切れの記事を消せません")
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, fail
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+
+	ids, err := q.LockExpiredArticleIDs(ctx, dbgen.LockExpiredArticleIDsParams{Source: source, PublishedAt: tstz(before)})
+	if err != nil {
+		return 0, fail
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	n, err := q.DeleteUnsavedArticlesByID(ctx, ids)
+	if err != nil {
+		return 0, fail
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fail
+	}
+	return n, nil
 }
 
 func (s *ArticleFetch) StartRun(ctx context.Context, slot time.Time, trigger string, attempt int, startedAt time.Time) (int64, error) {
