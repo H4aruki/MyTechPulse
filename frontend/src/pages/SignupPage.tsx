@@ -10,6 +10,7 @@ import { AppLayout } from '@/components/AppLayout'
 import { TAG_CATEGORIES } from '@/constants/tags'
 import { authQueryKey } from '@/lib/auth'
 import { clearFeedbackState } from '@/lib/feedbackTracker'
+import { LEGAL_VERSION } from '@/lib/legal'
 
 // サーバー側の入力規則（利用者名は前後の空白を除いて1〜50文字、パスワードは12文字以上でUTF-8の72バイト以内、
 // タグは1〜128件で各1〜50文字）と同じ範囲を画面でも先に確認する。
@@ -62,6 +63,7 @@ export function SignupPage() {
   const queryClient = useQueryClient()
   const [step, setStep] = useState<1 | 2>(1)
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
+  const [agreed, setAgreed] = useState(false)
   const [formError, setFormError] = useState('')
 
   const {
@@ -90,6 +92,11 @@ export function SignupPage() {
           error instanceof ApiError
             ? error.problem.errors?.find((e) => e.field === 'password')?.message
             : undefined
+        // 規約の版が古いとき(画面を開いたまま規約が改定された場合など)。サーバーの文言をそのまま出す
+        const termsMessage =
+          error instanceof ApiError
+            ? error.problem.errors?.find((e) => e.field === 'agreed_terms_version')?.message
+            : undefined
         // サーバーのタグ一覧に無いタグを送ったとき(画面の古さなど)。サーバーの文言に、選び直す案内を足す
         const tagMessage =
           error instanceof ApiError
@@ -97,6 +104,7 @@ export function SignupPage() {
             : undefined
         setFormError(
           passwordMessage ??
+            termsMessage ??
             (tagMessage !== undefined
               ? `${tagMessage.replace(/。$/, '')}。画面を再読み込みして、タグを選び直してください。`
               : undefined) ??
@@ -141,9 +149,18 @@ export function SignupPage() {
       setFormError(tagError)
       return
     }
+    if (!agreed) {
+      setFormError('利用規約とプライバシーポリシーに同意してください。')
+      return
+    }
     setFormError('')
     const { username, password } = getValues()
-    mutation.mutate({ username: username.trim(), password, favorite_tags: tags })
+    mutation.mutate({
+      username: username.trim(),
+      password,
+      favorite_tags: tags,
+      agreed_terms_version: LEGAL_VERSION,
+    })
   }
 
   return (
@@ -280,6 +297,43 @@ export function SignupPage() {
               </p>
             )}
 
+            <div
+              role="group"
+              aria-label="規約への同意"
+              className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 text-sm shadow-sm"
+            >
+              <p className="mb-3 text-ink-muted">
+                登録の前に、
+                <Link
+                  to="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold text-brand-500 hover:underline"
+                >
+                  利用規約
+                </Link>
+                と
+                <Link
+                  to="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold text-brand-500 hover:underline"
+                >
+                  プライバシーポリシー
+                </Link>
+                （どちらも別のタブで開きます）をお読みください。
+              </p>
+              <label className="flex cursor-pointer items-center gap-2 font-bold text-ink">
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  className="size-4 accent-brand-500"
+                />
+                利用規約とプライバシーポリシーに同意する
+              </label>
+            </div>
+
             <div className="sticky bottom-0 mt-6 flex items-center gap-3 border-t border-slate-200 bg-surface/95 py-4 backdrop-blur">
               <button
                 type="button"
@@ -291,7 +345,7 @@ export function SignupPage() {
               <button
                 type="button"
                 onClick={handleRegister}
-                disabled={selectedTags.size === 0 || mutation.isPending}
+                disabled={selectedTags.size === 0 || !agreed || mutation.isPending}
                 className="flex-1 rounded-lg bg-brand-500 px-4 py-2.5 font-bold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
                 {mutation.isPending ? '登録中…' : `登録する（${selectedTags.size}件選択中）`}

@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ApiError, rateLimitMessage } from '@/api/client'
 import { signup } from '@/api/endpoints'
 import { authQueryKey } from '@/lib/auth'
+import { LEGAL_VERSION } from '@/lib/legal'
 import { SignupPage } from './SignupPage'
 
 vi.mock('@/api/endpoints', () => ({ signup: vi.fn() }))
@@ -46,7 +47,14 @@ function selectTags(...tags: string[]) {
   }
 }
 
+const AGREE_LABEL = '利用規約とプライバシーポリシーに同意する'
+
+function agreeToTerms() {
+  fireEvent.click(screen.getByRole('checkbox', { name: AGREE_LABEL }))
+}
+
 function clickRegister() {
+  agreeToTerms()
   fireEvent.click(screen.getByRole('button', { name: /^登録する/ }))
 }
 
@@ -72,6 +80,7 @@ describe('SignupPage', () => {
       username: 'bob',
       password: VALID_PASSWORD,
       favorite_tags: ['Go', 'React'],
+      agreed_terms_version: LEGAL_VERSION,
     })
     expect(client.getQueryData(authQueryKey)).toEqual(user)
   })
@@ -239,5 +248,72 @@ describe('SignupPage', () => {
     await goToTagStep()
 
     expect(screen.getByRole('button', { name: /^登録する/ })).toBeDisabled()
+  })
+
+  test('同意のチェックが無い間は登録ボタンが押せず、signupも呼ばれない', async () => {
+    renderSignup()
+
+    await goToTagStep()
+    selectTags('Go')
+    const button = screen.getByRole('button', { name: /^登録する/ })
+    expect(screen.getByRole('checkbox', { name: AGREE_LABEL })).not.toBeChecked()
+    expect(button).toBeDisabled()
+    fireEvent.click(button)
+
+    expect(signup).not.toHaveBeenCalled()
+  })
+
+  test('同意にチェックすると、版を付けて登録できる', async () => {
+    vi.mocked(signup).mockResolvedValue({ user })
+    renderSignup()
+
+    await goToTagStep()
+    selectTags('Go')
+    agreeToTerms()
+    expect(screen.getByRole('button', { name: /^登録する/ })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: /^登録する/ }))
+
+    expect(await screen.findByRole('heading', { name: '記事一覧' })).toBeInTheDocument()
+    expect(vi.mocked(signup).mock.calls[0][0]).toMatchObject({ agreed_terms_version: LEGAL_VERSION })
+  })
+
+  test('利用規約とプライバシーポリシーは別のタブで開くリンクになっている', async () => {
+    renderSignup()
+
+    await goToTagStep()
+
+    // フッターにも同名のリンクがあるため、同意の枠の中だけを見る
+    const group = within(screen.getByRole('group', { name: '規約への同意' }))
+    const terms = group.getByRole('link', { name: '利用規約' })
+    const privacy = group.getByRole('link', { name: 'プライバシーポリシー' })
+    expect(terms).toHaveAttribute('href', '/terms')
+    expect(terms).toHaveAttribute('target', '_blank')
+    expect(terms).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(privacy).toHaveAttribute('href', '/privacy')
+    expect(privacy).toHaveAttribute('target', '_blank')
+    expect(privacy).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  test('422でサーバーが規約の版の問題を返したら、その文言を出す', async () => {
+    vi.mocked(signup).mockRejectedValue(
+      new ApiError({
+        status: 422,
+        code: 'validation_failed',
+        errors: [
+          {
+            field: 'agreed_terms_version',
+            message: '利用規約が更新されました。画面を再読み込みして、もう一度同意してください',
+          },
+        ],
+      }),
+    )
+    renderSignup()
+
+    await goToTagStep()
+    selectTags('Go')
+    clickRegister()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('利用規約が更新されました')
+    expect(screen.getByRole('heading', { name: '新規登録' })).toBeInTheDocument()
   })
 })
