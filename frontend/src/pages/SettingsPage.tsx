@@ -52,7 +52,7 @@ export function SettingsPage() {
         )}
         {user && (
           <p className="text-sm text-ink-muted">
-            ログイン中のユーザー名: <span className="font-bold text-ink">{user.username}</span>
+            ログイン中のユーザー名: <span className="ph-no-capture font-bold text-ink">{user.username}</span>
           </p>
         )}
         <PasskeySettings onUnauthorized={leaveSession} />

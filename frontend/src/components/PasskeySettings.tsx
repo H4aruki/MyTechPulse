@@ -212,7 +212,9 @@ function PasskeySection({ onUnauthorized }: Props) {
       {passkeys.length > 0 && (
         <ul className="divide-y divide-slate-200">
           {passkeys.map((item) => (
-            <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+            // 利用者が付けた名前（人名になりうる）が、表示とボタンの aria-label に入る。
+            // 分析のクリック記録・画面の記録から、行ごと外す
+            <li key={item.id} className="ph-no-capture flex flex-wrap items-center justify-between gap-3 py-3">
               {editingId === item.id ? (
                 <form onSubmit={(e) => onRename(e, item.id)} className="flex flex-wrap items-center gap-2">
                   <label htmlFor={`passkey-edit-${item.id}`} className="sr-only">

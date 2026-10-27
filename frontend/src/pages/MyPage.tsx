@@ -69,7 +69,7 @@ export function MyPage() {
           </h2>
           {user && (
             <p className="text-sm text-ink-muted">
-              ユーザー名: <span className="font-bold text-ink">{user.username}</span>
+              ユーザー名: <span className="ph-no-capture font-bold text-ink">{user.username}</span>
             </p>
           )}
           <p className="text-sm">
