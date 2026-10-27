@@ -3,8 +3,10 @@ import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { ArticlesPage } from '@/pages/ArticlesPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { MyPage } from '@/pages/MyPage'
+import { PrivacyPage } from '@/pages/PrivacyPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { SignupPage } from '@/pages/SignupPage'
+import { TermsPage } from '@/pages/TermsPage'
 
 // LP（/）とアプリ本体（/app/）を分離しているため、SPA側は basename を /app に固定する
 export default function App() {
@@ -17,6 +19,8 @@ export default function App() {
         />
         <Route path="login" element={<LoginPage />} />
         <Route path="signup" element={<SignupPage />} />
+        <Route path="terms" element={<TermsPage />} />
+        <Route path="privacy" element={<PrivacyPage />} />
         <Route
           path="articles"
           element={
