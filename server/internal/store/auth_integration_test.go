@@ -108,7 +108,7 @@ func TestAuthRepositorySignupCreatesUserInterestsAndSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	user, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember,
-		[]string{" go ", "Rust"}, hashOf(1), fixedNow.Add(time.Hour))
+		[]string{" go ", "Rust"}, hashOf(1), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,6 +142,33 @@ func TestAuthRepositorySignupCreatesUserInterestsAndSession(t *testing.T) {
 	}
 }
 
+func TestAuthRepositorySignupRecordsTermsAgreement(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	repo := store.NewAuth(pool)
+	if _, err := pool.Exec(ctx, `INSERT INTO tag(tag_name) VALUES ('Go')`); err != nil {
+		t.Fatal(err)
+	}
+	user, err := repo.CreateWithInterestsAndSession(ctx, "agreer", "hash", auth.RoleMember,
+		[]string{"Go"}, hashOf(1), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 登録と同時に、同意した版と日時の行ができる
+	if n := queryInt(t, pool, `SELECT count(*) FROM user_terms_agreement
+		WHERE "user_ID" = $1 AND terms_version = $2 AND agreed_at > now() - interval '1 minute'`, user.ID, auth.CurrentTermsVersion); n != 1 {
+		t.Fatalf("agreement rows = %d", n)
+	}
+	// 失敗した登録(同名)では、同意の行も残らない
+	if _, err := repo.CreateWithInterestsAndSession(ctx, "agreer", "hash2", auth.RoleMember,
+		[]string{"Go"}, hashOf(2), fixedNow.Add(time.Hour), auth.CurrentTermsVersion); !errors.Is(err, auth.ErrUsernameTaken) {
+		t.Fatalf("err = %v", err)
+	}
+	if n := queryInt(t, pool, `SELECT count(*) FROM user_terms_agreement`); n != 1 {
+		t.Fatalf("agreement rows after failed signup = %d", n)
+	}
+}
+
 func TestAuthRepositorySignupCreatesRowsOnlyForSelectedTags(t *testing.T) {
 	ctx := context.Background()
 	pool := newTestPool(t)
@@ -151,7 +178,7 @@ func TestAuthRepositorySignupCreatesRowsOnlyForSelectedTags(t *testing.T) {
 		t.Fatal(err)
 	}
 	user, err := repo.CreateWithInterestsAndSession(ctx, "bob", "hash", auth.RoleMember,
-		[]string{"go", "Rust"}, hashOf(2), fixedNow.Add(time.Hour))
+		[]string{"go", "Rust"}, hashOf(2), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,11 +206,11 @@ func TestAuthRepositoryDuplicateUsernameRollsBackEverything(t *testing.T) {
 	repo := store.NewAuth(pool)
 	ensureTags(t, pool, "Go", "Other-Tag")
 	if _, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember,
-		[]string{"Go"}, hashOf(1), fixedNow.Add(time.Hour)); err != nil {
+		[]string{"Go"}, hashOf(1), fixedNow.Add(time.Hour), auth.CurrentTermsVersion); err != nil {
 		t.Fatal(err)
 	}
 	_, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash2", auth.RoleMember,
-		[]string{"Other-Tag"}, hashOf(2), fixedNow.Add(time.Hour))
+		[]string{"Other-Tag"}, hashOf(2), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 	if !errors.Is(err, auth.ErrUsernameTaken) {
 		t.Fatalf("want ErrUsernameTaken, got %v", err)
 	}
@@ -204,12 +231,12 @@ func TestAuthRepositoryFailureAfterUserInsertRollsBackEverything(t *testing.T) {
 	repo := store.NewAuth(pool)
 	ensureTags(t, pool, "Go", "Other-Tag")
 	if _, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember,
-		[]string{"Go"}, hashOf(1), fixedNow.Add(time.Hour)); err != nil {
+		[]string{"Go"}, hashOf(1), fixedNow.Add(time.Hour), auth.CurrentTermsVersion); err != nil {
 		t.Fatal(err)
 	}
 	// セッションの主キー(同じトークンハッシュ)が衝突し、利用者・初期興味度の作成の後で失敗させる
 	_, err := repo.CreateWithInterestsAndSession(ctx, "bob", "hash", auth.RoleMember,
-		[]string{"Other-Tag"}, hashOf(1), fixedNow.Add(time.Hour))
+		[]string{"Other-Tag"}, hashOf(1), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 	if err == nil || errors.Is(err, auth.ErrUsernameTaken) {
 		t.Fatalf("want generic failure, got %v", err)
 	}
@@ -232,7 +259,7 @@ func TestAuthRepositorySignupWithUnknownTagCreatesNothing(t *testing.T) {
 	ensureTags(t, pool, "Go")
 	for _, tags := range [][]string{{"Go", "No-Such-Tag"}, {"No-Such-Tag"}} {
 		_, err := repo.CreateWithInterestsAndSession(ctx, "carol", "hash", auth.RoleMember,
-			tags, hashOf(7), fixedNow.Add(time.Hour))
+			tags, hashOf(7), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 		if !errors.Is(err, auth.ErrUnknownFavoriteTag) {
 			t.Fatalf("tags %v: want ErrUnknownFavoriteTag, got %v", tags, err)
 		}
@@ -249,7 +276,7 @@ func TestAuthRepositorySignupWithUnknownTagCreatesNothing(t *testing.T) {
 	}
 	// 用意したタグだけなら登録できる(大文字小文字・前後の空白は無視)
 	if _, err := repo.CreateWithInterestsAndSession(ctx, "carol", "hash", auth.RoleMember,
-		[]string{" GO "}, hashOf(7), fixedNow.Add(time.Hour)); err != nil {
+		[]string{" GO "}, hashOf(7), fixedNow.Add(time.Hour), auth.CurrentTermsVersion); err != nil {
 		t.Fatal(err)
 	}
 	if n := queryInt(t, pool, `SELECT count(*) FROM tag`); n != 1 {
@@ -271,7 +298,7 @@ func TestAuthRepositoryConcurrentSignupWithDifferentSpellingsUsesOneTag(t *testi
 		go func() {
 			defer wg.Done()
 			_, errs[i] = repo.CreateWithInterestsAndSession(ctx, fmt.Sprintf("user%d", i), "hash", auth.RoleMember,
-				[]string{spelling}, hashOf(byte(10+i)), fixedNow.Add(time.Hour))
+				[]string{spelling}, hashOf(byte(10+i)), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 		}()
 	}
 	wg.Wait()
@@ -298,11 +325,11 @@ func TestAuthRepositoryExistingUsernameWithUnknownTagCreatesNothing(t *testing.T
 	repo := store.NewAuth(pool)
 	ensureTags(t, pool, "Go")
 	if _, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember,
-		[]string{"Go"}, hashOf(1), fixedNow.Add(time.Hour)); err != nil {
+		[]string{"Go"}, hashOf(1), fixedNow.Add(time.Hour), auth.CurrentTermsVersion); err != nil {
 		t.Fatal(err)
 	}
 	_, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash2", auth.RoleMember,
-		[]string{"No-Such-Tag"}, hashOf(2), fixedNow.Add(time.Hour))
+		[]string{"No-Such-Tag"}, hashOf(2), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 	if !errors.Is(err, auth.ErrUnknownFavoriteTag) {
 		t.Fatalf("want ErrUnknownFavoriteTag, got %v", err)
 	}
@@ -324,7 +351,7 @@ func TestAuthRepositorySessions(t *testing.T) {
 	repo := store.NewAuth(pool)
 	ensureTags(t, pool, "Go")
 	user, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember,
-		[]string{"Go"}, hashOf(1), fixedNow.Add(time.Hour))
+		[]string{"Go"}, hashOf(1), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +407,7 @@ func TestAuthRepositoryStoresOnlyTokenHash(t *testing.T) {
 	}
 	ensureTags(t, pool, "Go")
 	if _, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember,
-		[]string{"Go"}, hash, fixedNow.Add(time.Hour)); err != nil {
+		[]string{"Go"}, hash, fixedNow.Add(time.Hour), auth.CurrentTermsVersion); err != nil {
 		t.Fatal(err)
 	}
 	if n := queryInt(t, pool, `SELECT count(*) FROM auth_session WHERE token_hash = convert_to($1, 'UTF8')`, plain); n != 0 {
@@ -396,7 +423,7 @@ func TestAuthRepositoryFindByID(t *testing.T) {
 	pool := newTestPool(t)
 	repo := store.NewAuth(pool)
 	ensureTags(t, pool, "Go")
-	created, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember, []string{"go"}, hashOf(1), fixedNow.Add(time.Hour))
+	created, err := repo.CreateWithInterestsAndSession(ctx, "alice", "hash", auth.RoleMember, []string{"go"}, hashOf(1), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 	if err != nil {
 		t.Fatal(err)
 	}

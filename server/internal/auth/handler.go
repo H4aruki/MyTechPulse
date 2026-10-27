@@ -32,9 +32,10 @@ type Handler struct {
 
 // SignupRequest は会員登録の入力。
 type SignupRequest struct {
-	Username     string   `json:"username" minLength:"1" example:"synthetic-user" doc:"利用者名。前後の空白を除いて1〜50文字。制御文字・見えない文字・改行・タブは使えない"`
-	Password     string   `json:"password" minLength:"1" example:"synthetic-password" doc:"パスワード。12文字以上、UTF-8で72バイト以内。よく使われるパスワードと、利用者名と同じ文字列は使えない"`
-	FavoriteTags []string `json:"favorite_tags" minItems:"1" maxItems:"128" example:"[\"go\",\"react\"]" doc:"興味のあるタグ。1〜128件、各タグは前後の空白を除いて1〜50文字。文字・数字・半角の空白(続けて並べない)と . + # - _ / ( ) （ ） & ' ・ だけが使え、見えない文字・改行・タブは使えない。大文字小文字を無視して重複を除く。サーバーのタグ一覧にあるタグだけ選べる(知らないタグを含むと422)"`
+	Username           string   `json:"username" minLength:"1" example:"synthetic-user" doc:"利用者名。前後の空白を除いて1〜50文字。制御文字・見えない文字・改行・タブは使えない"`
+	Password           string   `json:"password" minLength:"1" example:"synthetic-password" doc:"パスワード。12文字以上、UTF-8で72バイト以内。よく使われるパスワードと、利用者名と同じ文字列は使えない"`
+	FavoriteTags       []string `json:"favorite_tags" minItems:"1" maxItems:"128" example:"[\"go\",\"react\"]" doc:"興味のあるタグ。1〜128件、各タグは前後の空白を除いて1〜50文字。文字・数字・半角の空白(続けて並べない)と . + # - _ / ( ) （ ） & ' ・ だけが使え、見えない文字・改行・タブは使えない。大文字小文字を無視して重複を除く。サーバーのタグ一覧にあるタグだけ選べる(知らないタグを含むと422)"`
+	AgreedTermsVersion string   `json:"agreed_terms_version" minLength:"1" example:"2026-10-draft" doc:"同意した利用規約・プライバシーポリシーの版。現行の版と一致しないと422(欠落・空も422)"`
 }
 
 // LoginRequest はログインの入力。
@@ -89,7 +90,7 @@ func (h Handler) Register(api huma.API) {
 		Method:        http.MethodPost,
 		Path:          "/api/v1/auth/signup",
 		Summary:       "会員登録",
-		Description:   "利用者を member として登録し、選んだタグを初期の興味として保存して、そのままログイン状態にする。接続元IPごとに、試行は1時間に60回(まとめては20回まで)、失敗(409・422)は15分に10回までで、超えると429と `Retry-After`(秒)を返す。失敗の枠を使い切ると、正しい入力でも枠が戻るまで429になる。" + csrfNote,
+		Description:   "利用者を member として登録し、選んだタグを初期の興味として保存して、そのままログイン状態にする。利用規約・プライバシーポリシーへの同意(`agreed_terms_version`)が必須で、現行の版と一致しないと422。同意した版と日時は、利用者の作成と同時に記録する。接続元IPごとに、試行は1時間に60回(まとめては20回まで)、失敗(409・422)は15分に10回までで、超えると429と `Retry-After`(秒)を返す。失敗の枠を使い切ると、正しい入力でも枠が戻るまで429になる。" + csrfNote,
 		Tags:          []string{"auth"},
 		DefaultStatus: http.StatusCreated,
 		Errors:        []int{http.StatusConflict, http.StatusUnprocessableEntity, http.StatusTooManyRequests},
@@ -218,9 +219,10 @@ func (h Handler) deleteCookie() http.Cookie {
 
 func (h Handler) signup(ctx context.Context, in *signupInput) (*authOutput, error) {
 	user, token, expires, err := h.Service.Signup(ctx, SignupInput{
-		Username:     in.Body.Username,
-		Password:     in.Body.Password,
-		FavoriteTags: in.Body.FavoriteTags,
+		Username:           in.Body.Username,
+		Password:           in.Body.Password,
+		FavoriteTags:       in.Body.FavoriteTags,
+		AgreedTermsVersion: in.Body.AgreedTermsVersion,
 	})
 	if err != nil {
 		return nil, toProblem(err, false)

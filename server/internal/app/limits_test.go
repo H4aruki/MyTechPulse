@@ -59,7 +59,7 @@ func newStepClock() *stepClock {
 }
 
 func signupFrom(h http.Handler, ip string, n int) *httptest.ResponseRecorder {
-	body := fmt.Sprintf(`{"username":"user-%s-%d","password":"synthetic-pass-12","favorite_tags":["go"]}`, ip, n)
+	body := fmt.Sprintf(`{"username":"user-%s-%d","password":"synthetic-pass-12","favorite_tags":["go"],"agreed_terms_version":"2026-10-draft"}`, ip, n)
 	headers := map[string]string{"Origin": webOrigin, "X-MTP-CSRF": "1", ipHeader: ip}
 	return post(h, "/api/v1/auth/signup", body, headers)
 }
@@ -81,8 +81,8 @@ func TestSignupRejectsInvisibleCharactersIn422(t *testing.T) {
 	h := newLimitedHandler(newStepClock())
 	headers := map[string]string{"Origin": webOrigin, "X-MTP-CSRF": "1", ipHeader: "203.0.113.20"}
 	cases := map[string]string{
-		"favorite_tags": `{"username":"u1","password":"synthetic-pass-12","favorite_tags":["go","a​b"]}`,
-		"username":      `{"username":"u​1","password":"synthetic-pass-12","favorite_tags":["go"]}`,
+		"favorite_tags": `{"username":"u1","password":"synthetic-pass-12","favorite_tags":["go","a​b"],"agreed_terms_version":"2026-10-draft"}`,
+		"username":      `{"username":"u​1","password":"synthetic-pass-12","favorite_tags":["go"],"agreed_terms_version":"2026-10-draft"}`,
 	}
 	for field, body := range cases {
 		rec := post(h, "/api/v1/auth/signup", body, headers)
@@ -148,7 +148,7 @@ func TestIPv6AddressesInTheSame64AreCountedTogether(t *testing.T) {
 func TestOversizedBodiesAreRejectedWith413(t *testing.T) {
 	h := newLimitedHandler(newStepClock())
 	filler := strings.Repeat("a", 64*1024)
-	body := `{"username":"u","password":"synthetic-pass-12","favorite_tags":["go"],"x":"` + filler + `"}`
+	body := `{"username":"u","password":"synthetic-pass-12","favorite_tags":["go"],"agreed_terms_version":"2026-10-draft","x":"` + filler + `"}`
 	headers := map[string]string{"Origin": webOrigin, "X-MTP-CSRF": "1"}
 
 	rec := post(h, "/api/v1/auth/signup", body, headers)
@@ -172,7 +172,7 @@ func TestOversizedBodiesAreRejectedWith413(t *testing.T) {
 	}
 
 	// 上限ちょうど以下は通る(チャンクでも)
-	small := `{"username":"u","password":"synthetic-pass-12","favorite_tags":["go"]}`
+	small := `{"username":"u","password":"synthetic-pass-12","favorite_tags":["go"],"agreed_terms_version":"2026-10-draft"}`
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/signup", strings.NewReader(small))
 	req.ContentLength = -1
 	req.Header.Set("Content-Type", "application/json")
