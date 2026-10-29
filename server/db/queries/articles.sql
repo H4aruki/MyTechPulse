@@ -27,11 +27,21 @@ WHERE f.enabled
 ORDER BY f."tag_ID"
 LIMIT 500;
 
--- name: DeleteExpiredArticles :execrows
--- 保持期間を過ぎた記事を消す。article_tags は連動して消える。
--- 利用者が保存した記事（saved_articles）は、保持期間を過ぎても消さない。
-DELETE FROM articles
+-- name: LockExpiredArticleIDs :many
+-- 保持期間を過ぎた記事を、行ロックを取って列挙する（削除の1文目。同じトランザクションで DeleteUnsavedArticlesByID を呼ぶ）。
+-- 保存の途中（saved_articles の挿入が未確定）の記事は、外部キーの検査で共有ロックが付いているので、SKIP LOCKED で飛ばす（次の回に消える）。
+-- ここでは保存の有無を見ない。確定済みの保存の判断は、新しいスナップショットで動く2文目で行う。
+SELECT id FROM articles
 WHERE source = $1 AND published_at < $2
+ORDER BY id
+FOR UPDATE SKIP LOCKED;
+
+-- name: DeleteUnsavedArticlesByID :execrows
+-- 1文目でロックした記事のうち、保存されていないものを消す。article_tags は連動して消える。
+-- 利用者が保存した記事（saved_articles）は、保持期間を過ぎても消さない。
+-- 1文目と別の文にするのは、この文が開始時に取るスナップショットに、確定済みの保存を含めるため。
+DELETE FROM articles
+WHERE id = ANY(sqlc.arg(ids)::bigint[])
   AND NOT EXISTS (SELECT 1 FROM saved_articles s WHERE s.article_id = articles.id);
 
 -- name: InsertFetchRun :one

@@ -25,9 +25,6 @@ type Querier interface {
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	CreateWebAuthnChallenge(ctx context.Context, arg CreateWebAuthnChallengeParams) error
-	// 保持期間を過ぎた記事を消す。article_tags は連動して消える。
-	// 利用者が保存した記事（saved_articles）は、保持期間を過ぎても消さない。
-	DeleteExpiredArticles(ctx context.Context, arg DeleteExpiredArticlesParams) (int64, error)
 	// 保持期限（終了日時、未終了なら表示日時）の古い順に、上限件数まで消す。回答などは連鎖して消える
 	DeleteExpiredFeedbackPrompts(ctx context.Context, arg DeleteExpiredFeedbackPromptsParams) (int64, error)
 	DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error
@@ -36,6 +33,10 @@ type Querier interface {
 	// 保存されていなくてもエラーにしない。
 	DeleteSavedArticle(ctx context.Context, arg DeleteSavedArticleParams) error
 	DeleteSession(ctx context.Context, tokenHash []byte) error
+	// 1文目でロックした記事のうち、保存されていないものを消す。article_tags は連動して消える。
+	// 利用者が保存した記事（saved_articles）は、保持期間を過ぎても消さない。
+	// 1文目と別の文にするのは、この文が開始時に取るスナップショットに、確定済みの保存を含めるため。
+	DeleteUnsavedArticlesByID(ctx context.Context, ids []int64) (int64, error)
 	FindPasskeyByCredentialID(ctx context.Context, credentialID []byte) (AuthPasskey, error)
 	FindSessionUser(ctx context.Context, arg FindSessionUserParams) (FindSessionUserRow, error)
 	// 会員登録とクリックは tag 表に行を作らない(#239、#262)。タグは正規化した名前(前後空白・大文字小文字を無視)で探すだけ。
@@ -76,6 +77,10 @@ type Querier interface {
 	// タグを先に tag 表で引き、article_tags は ("tag_ID", published_at) の索引で絞る。
 	ListTaggedArticles(ctx context.Context, arg ListTaggedArticlesParams) ([]ListTaggedArticlesRow, error)
 	ListTagsForMatching(ctx context.Context) ([]Tag, error)
+	// 保持期間を過ぎた記事を、行ロックを取って列挙する（削除の1文目。同じトランザクションで DeleteUnsavedArticlesByID を呼ぶ）。
+	// 保存の途中（saved_articles の挿入が未確定）の記事は、外部キーの検査で共有ロックが付いているので、SKIP LOCKED で飛ばす（次の回に消える）。
+	// ここでは保存の有無を見ない。確定済みの保存の判断は、新しいスナップショットで動く2文目で行う。
+	LockExpiredArticleIDs(ctx context.Context, arg LockExpiredArticleIDsParams) ([]int64, error)
 	LockFeedbackPrompt(ctx context.Context, id pgtype.UUID) (LockFeedbackPromptRow, error)
 	LockFeedbackSubmission(ctx context.Context, id pgtype.UUID) (LockFeedbackSubmissionRow, error)
 	// 同じ利用者・同じフォームの表示判定を1つずつ行う（まだ表示記録が無い初回でも効く）
