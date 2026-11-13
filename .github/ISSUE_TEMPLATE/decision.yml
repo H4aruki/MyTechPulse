@@ -1,0 +1,103 @@
+name: 決定・提案
+description: 決めきれないことを、選択肢と根拠を並べて期限までに決める
+title: "[decision] "
+labels: ["decision"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        選択肢は 2〜3 個。根拠が無い欄は「未確認」と書く（推測で埋めない）。
+        決定を覆したら、消さずに履歴へ足す。
+        判断に関わっていない開発者でも読めるように、「案 A」などの呼び名だけで済ませず、各選択肢の中身と採らなかった理由を書く。見出しの直後に、その案が何をするのかを書く。
+  - type: input
+    id: summary
+    attributes:
+      label: 一行で何を決めるか
+      description: 疑問文 1 つ。例「実行基盤を Cloud Run と Firebase Hosting のどちらにするか」
+    validations:
+      required: true
+  - type: input
+    id: blocking
+    attributes:
+      label: この決定が止めているもの
+      description: ブロックしている Issue や作業
+  - type: textarea
+    id: facts
+    attributes:
+      label: 今の状態
+      description: 分かっていることと分かっていないことを分ける。値や記載には日付か URL を添える
+      value: |
+        分かっていること:
+        -
+
+        分かっていないこと（誰に聞くか）:
+        -
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: 選択肢（2〜3 個）と、採らなかった案の理由
+      value: |
+        ### 案 A:
+        - 内容（何をする案か）:
+        - メリット:
+        - デメリット:
+        - 根拠・出典:
+
+        ### 案 B:
+        - 内容（何をする案か）:
+        - メリット:
+        - デメリット:
+        - 根拠・出典:
+    validations:
+      required: true
+  - type: textarea
+    id: comparison
+    attributes:
+      label: 比較と軸の重み
+      description: 判断軸は先に決める（後から都合のいい軸を作らない）。数字が分かるものは数字で
+      value: |
+        | 判断軸 | 案 A | 案 B |
+        |---|---|---|
+        | 期限までに見せられるか |  |  |
+        | 評価軸（審査基準・KPI）に効く理由があるか |  |  |
+
+        軸の重み（最優先はどれか）:
+  - type: textarea
+    id: deadline
+    attributes:
+      label: 期限と決める人
+      value: |
+        - 決める期限: YYYY-MM-DD HH:MM（JST）
+        - 決める人:
+        - 期限を過ぎた場合（暫定で A を採る など）:
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: スクショ（画面・図・実測結果）
+      description: '判断材料の画像をドラッグ&ドロップする。コミットしない。鍵や個人情報が写っていないか確認する。無ければ「なし（理由: ）」'
+    validations:
+      required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: 決定（決定後に埋める）
+      description: 空欄は「まだ決めていない」の意味。決定後、`docs/decisions.md` に 1 行追記する
+      value: |
+        - 決定:
+        - 決定日:
+        - 理由（比較の軸のどれか）:
+        - 見直す条件:
+        - 採らなかったもの（いつ・何を・なぜ・何を採らなかったか、3〜5 文）:
+  - type: textarea
+    id: glossary
+    attributes:
+      label: 用語集（専門用語の説明）
+      description: 本文に出た専門用語を 1 行ずつ。無ければ「なし」
+      value: |
+        - 用語: 説明
+    validations:
+      required: true

@@ -105,6 +105,108 @@ jobs:
       - name: 仕掛けの確認
         run: node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/agent-harness/**/*.test.mjs"
 
+  # 秘密情報（鍵・トークン）の混入を、gitleaks で検査する。
+  # あわせて、手元の pre-commit と同じ危険なファイル名を、PR / push の変更に対して拒否する。
+  # 必須ではなく、公開の工程（go-release の needs）にも入れていない。
+  # 誤検出の許可は .gitleaks.toml に、パスとルールを絞って書く。
+  secret-scan:
+    name: 秘密情報の検査
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: 危険なファイル名の判定を確かめる
+        run: bash scripts/check-risky-filenames.test.sh
+
+      - name: 変更に含まれる危険なファイル名を拒否する
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            range="${PR_BASE_SHA}...${PR_HEAD_SHA}"
+          elif [ -n "${PUSH_BEFORE:-}" ] && [ "$PUSH_BEFORE" != "$zero" ]; then
+            range="${PUSH_BEFORE}...${PUSH_AFTER}"
+          elif git rev-parse --verify --quiet origin/main >/dev/null; then
+            range="origin/main...HEAD"
+          else
+            range=""
+          fi
+          if [ -n "$range" ]; then
+            echo "検査範囲: $range"
+            files=$(git diff --name-only --diff-filter=ACMR "$range")
+          else
+            echo "検査範囲: 今のコミット（HEAD）"
+            files=$(git diff-tree --no-commit-id --name-only --diff-filter=ACMR -r HEAD)
+          fi
+          set +e
+          bad=$(printf '%s\n' "$files" | bash scripts/check-risky-filenames.sh)
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            if [ -n "$bad" ]; then
+              printf '秘密情報の可能性があるファイルが変更に含まれています:\n%s' "$bad" >&2
+              echo "手元の pre-commit を --no-verify で飛ばしても、ここで失敗します。" >&2
+            else
+              echo "危険なファイル名の検査を実行できませんでした。" >&2
+            fi
+            exit 1
+          fi
+      # gitleaks-action は organization のリポジトリで GITLEAKS_LICENSE を要求するため使わず、
+      # 公式 CLI をバージョン固定して直接実行する。
+      - name: gitleaks CLI を導入（バージョン固定・チェックサム検証）
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d)
+          cd "$work"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$archive" "$base/$archive"
+          curl -sSfL -o checksums.txt "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " ${archive}\$" checksums.txt | sha256sum -c -
+          tar -xzf "$archive" gitleaks
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 gitleaks "$HOME/.local/bin/gitleaks"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: 秘密情報の検査（gitleaks CLI、非ゼロで失敗）
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            range="$PR_BASE_SHA..$PR_HEAD_SHA"
+          elif [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "$zero" ]; then
+            range="$PUSH_BEFORE..$PUSH_AFTER"
+          else
+            range=""
+          fi
+          if [ -n "$range" ]; then
+            echo "検査範囲: $range"
+            gitleaks git --redact --verbose --exit-code 1 --log-opts="$range" .
+          else
+            # 新しい枝の初回 push など範囲が決まらないとき。--log-opts が無いと
+            # 全 refs（別ブランチの試験用ダミーも）を見て誤検知するため、今の枝の履歴だけにする。
+            echo "検査範囲: 今の枝の全履歴（HEAD）"
+            gitleaks git --redact --verbose --exit-code 1 --log-opts="HEAD" .
+          fi
+
   # 本番の入口（Caddy）の設定と、CI・文書の整合の確認。
   # どちらも本番の反映に関わるので、公開の工程（go-release の needs）に入れている
   hooks-test:
@@ -137,7 +239,7 @@ jobs:
       # 文書の相対リンクが切れていないか、現行の説明に旧構成の言葉が混ざっていないかを確かめる（どれもNode標準機能だけで動く）
       - name: 外部actionの固定・自動デプロイの条件・文書の整合を確認
         run: |
-          node --test scripts/verify-actions-pinned.test.mjs scripts/coverage-report.test.mjs scripts/cutover-frontend.test.mjs scripts/deploy-needed.test.mjs scripts/verify-go-deploy-gated.test.mjs scripts/check-doc-links.test.mjs scripts/check-current-docs.test.mjs scripts/update-cloudflare-ips.test.mjs scripts/check-ca-bundle.test.mjs
+          node --test scripts/verify-actions-pinned.test.mjs scripts/coverage-report.test.mjs scripts/cutover-frontend.test.mjs scripts/deploy-needed.test.mjs scripts/verify-go-deploy-gated.test.mjs scripts/check-doc-links.test.mjs scripts/check-current-docs.test.mjs scripts/update-cloudflare-ips.test.mjs scripts/check-ca-bundle.test.mjs scripts/automerge/eligibility-core.test.mjs scripts/automerge/eligibility.test.mjs scripts/automerge/guards.test.mjs
           node scripts/verify-actions-pinned.mjs
           node scripts/check-doc-links.mjs
           node scripts/check-current-docs.mjs
@@ -177,6 +279,9 @@ jobs:
 
       - name: DB運用スクリプトの安全の静的検査（test_database_safety.sh）
         run: bash ops/tests/test_database_safety.sh
+
+      - name: 自動マージの実行スクリプト（automerge.sh）
+        run: bash scripts/automerge/automerge_test.sh
 
   go-check:
     name: Goバックエンドの検査

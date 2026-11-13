@@ -63,3 +63,55 @@ prefix_rule(
     justification = "手動公開は禁止です。公開はmain反映後のCIに任せてください。",
     match = ["npx wrangler pages deploy dist"],
 )
+
+prefix_rule(
+    pattern = ["git", ["commit", "push", "rebase", "merge", "cherry-pick", "revert", "am"], "--no-verify"],
+    decision = "forbidden",
+    justification = "フックを飛ばす --no-verify は禁止です。通常の git コマンドで、手元の検査を通してください。",
+    match = [
+        "git commit --no-verify",
+        "git commit --no-verify -m msg",
+        "git push --no-verify",
+        "git rebase --no-verify",
+    ],
+    not_match = [
+        "git commit -m msg",
+        "git push -n",
+        "git push --dry-run",
+        "git log -n 5",
+        "git status",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "commit", "-n"],
+    decision = "forbidden",
+    justification = "git commit -n は --no-verify と同じでフックを飛ばすため禁止です。-m でメッセージを付けてコミットしてください。",
+    match = [
+        "git commit -n",
+        "git commit -n -m msg",
+    ],
+    not_match = [
+        "git commit -m msg",
+        "git push -n",
+        "git log -n 5",
+        "git commit -nm msg",
+        "git commit -an",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "-c", "core.hooksPath"],
+    decision = "forbidden",
+    justification = "core.hooksPath の上書きはフックを外すため禁止です。有効化は scripts/setup-hooks.sh を使い、値の確認は引数なしの git config core.hooksPath にしてください。",
+    match = [
+        "git -c core.hooksPath /dev/null status",
+        "git -c core.hooksPath true commit",
+    ],
+    not_match = [
+        "git status",
+        "git config core.hooksPath",
+        "git -c user.name=ada status",
+        "git -c core.hooksPath=/dev/null status",
+    ],
+)

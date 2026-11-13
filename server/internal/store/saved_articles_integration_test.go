@@ -334,6 +334,62 @@ func TestArticleRetentionKeepsSavedArticles(t *testing.T) {
 	}
 }
 
+// 保存の途中（saved_articles の挿入が未確定）の記事を、保持期間の削除が消さないこと（Issue #294）。
+// 外部キーの検査で、未確定の保存は記事の行に共有ロックを付けている。
+// 旧実装（1文の DELETE）は、開始時のスナップショットで「保存なし」と判断した記事のロックを待ち、
+// 保存の確定後にそのまま消して、保存の行まで連動して消していた。この試験では、削除が確定を待ってタイムアウトし、失敗する。
+// 今の実装は、ロックされた記事を飛ばして即座に0件で返り、保存の確定後も記事と保存の行が残る。
+func TestArticleRetentionSkipsArticleBeingSaved(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	fetch := store.NewArticleFetch(pool)
+	user := newPasskeyUser(t, pool, "alice")
+	cutoff := time.Date(2026, 10, 17, 3, 0, 0, 0, time.UTC)
+
+	recs := []articlefetch.Record{
+		record(article.SourceQiita, "saving", "https://qiita.com/u/items/saving", cutoff.Add(-time.Hour)),
+	}
+	if res, err := fetch.SaveArticles(ctx, recs); err != nil || res.Saved != 1 {
+		t.Fatalf("res = %+v, err = %v", res, err)
+	}
+	var articleID int64
+	if err := pool.QueryRow(ctx, `SELECT id FROM articles WHERE external_id = 'saving'`).Scan(&articleID); err != nil {
+		t.Fatal(err)
+	}
+
+	// 保存のトランザクションを、確定しないまま開いておく
+	saving, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = saving.Rollback(ctx) }()
+	if _, err := saving.Exec(ctx, `INSERT INTO saved_articles ("user_ID", article_id) VALUES ($1, $2)`, user, articleID); err != nil {
+		t.Fatal(err)
+	}
+
+	// 別の接続で削除を走らせる。待たずに0件で返る（待つ実装ならここでタイムアウトする）
+	deleteCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if n, err := fetch.DeleteExpired(deleteCtx, "qiita", cutoff); err != nil || n != 0 {
+		t.Fatalf("保存の途中の削除: deleted = %d, err = %v", n, err)
+	}
+
+	if err := saving.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := queryInt(t, pool, `SELECT count(*) FROM articles WHERE id = $1`, articleID); got != 1 {
+		t.Fatalf("保存の途中の記事が消えた")
+	}
+	if got := queryInt(t, pool, `SELECT count(*) FROM saved_articles WHERE "user_ID" = $1 AND article_id = $2`, user, articleID); got != 1 {
+		t.Fatalf("保存の行が消えた")
+	}
+
+	// 確定したあとの削除でも、保存済みなので消さない
+	if n, err := fetch.DeleteExpired(ctx, "qiita", cutoff); err != nil || n != 0 {
+		t.Fatalf("確定後の削除: deleted = %d, err = %v", n, err)
+	}
+}
+
 // tagArticle は、記事にタグを付ける（tag 表に無ければ作る）。
 func tagArticle(t *testing.T, pool *pgxpool.Pool, articleID int64, tags ...string) {
 	t.Helper()

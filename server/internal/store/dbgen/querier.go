@@ -26,9 +26,6 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	CreateUserTermsAgreement(ctx context.Context, arg CreateUserTermsAgreementParams) error
 	CreateWebAuthnChallenge(ctx context.Context, arg CreateWebAuthnChallengeParams) error
-	// 保持期間を過ぎた記事を消す。article_tags は連動して消える。
-	// 利用者が保存した記事（saved_articles）は、保持期間を過ぎても消さない。
-	DeleteExpiredArticles(ctx context.Context, arg DeleteExpiredArticlesParams) (int64, error)
 	// 保持期限（終了日時、未終了なら表示日時）の古い順に、上限件数まで消す。回答などは連鎖して消える
 	DeleteExpiredFeedbackPrompts(ctx context.Context, arg DeleteExpiredFeedbackPromptsParams) (int64, error)
 	DeleteExpiredSessions(ctx context.Context, expiresAt pgtype.Timestamptz) error
@@ -37,6 +34,10 @@ type Querier interface {
 	// 保存されていなくてもエラーにしない。
 	DeleteSavedArticle(ctx context.Context, arg DeleteSavedArticleParams) error
 	DeleteSession(ctx context.Context, tokenHash []byte) error
+	// 1文目でロックした記事のうち、保存されていないものを消す。article_tags は連動して消える。
+	// 利用者が保存した記事（saved_articles）は、保持期間を過ぎても消さない。
+	// 1文目と別の文にするのは、この文が開始時に取るスナップショットに、確定済みの保存を含めるため。
+	DeleteUnsavedArticlesByID(ctx context.Context, ids []int64) (int64, error)
 	FindPasskeyByCredentialID(ctx context.Context, credentialID []byte) (AuthPasskey, error)
 	FindSessionUser(ctx context.Context, arg FindSessionUserParams) (FindSessionUserRow, error)
 	// 会員登録とクリックは tag 表に行を作らない(#239、#262)。タグは正規化した名前(前後空白・大文字小文字を無視)で探すだけ。
@@ -63,6 +64,14 @@ type Querier interface {
 	LastFeedbackPrompt(ctx context.Context, arg LastFeedbackPromptParams) (LastFeedbackPromptRow, error)
 	// 記事のタグ。保存の学習（反映）に使う。
 	ListArticleTagsByArticles(ctx context.Context, articleIds []int64) ([]ListArticleTagsByArticlesRow, error)
+	// 興味のあるタグ（seed_tags）が付いた記事に、一緒に付いている別のタグを数える（Issue #241）。
+	// 1回の集計で、記事の数が多い順に返す。回数の下限はSQLでは掛けず、呼び出し側（recommendation.selectSimilarTags）が掛ける。
+	// 数えるのは article_tags に残っている記事だけ。保持期間を過ぎた未保存の記事は定期取得が消している。
+	// 利用者が保存して保持期間を過ぎた記事は表に残るので、その分も数に入る。表示期間（Qiita 5日、Zenn 14日）では絞らない。
+	// exclude_tags は、興味度が0より大きいタグ。似たタグにはしない。種のタグ自身もここに含めて渡す。
+	// タグ名は前後の空白を除いた小文字で比べる。記事が数千件の規模では、種のタグは ("tag_ID", published_at) の索引、
+	// 同じ記事の他のタグは主キー (article_id, "tag_ID") で引ける。新しい索引は足していない。
+	ListCooccurringTags(ctx context.Context, arg ListCooccurringTagsParams) ([]ListCooccurringTagsRow, error)
 	ListEnabledFetchTags(ctx context.Context) ([]ListEnabledFetchTagsRow, error)
 	ListFeedbackQuestions(ctx context.Context, formID int64) ([]ListFeedbackQuestionsRow, error)
 	ListFetchRunsForSlot(ctx context.Context, slotAt pgtype.Timestamptz) ([]ListFetchRunsForSlotRow, error)
@@ -77,6 +86,10 @@ type Querier interface {
 	// タグを先に tag 表で引き、article_tags は ("tag_ID", published_at) の索引で絞る。
 	ListTaggedArticles(ctx context.Context, arg ListTaggedArticlesParams) ([]ListTaggedArticlesRow, error)
 	ListTagsForMatching(ctx context.Context) ([]Tag, error)
+	// 保持期間を過ぎた記事を、行ロックを取って列挙する（削除の1文目。同じトランザクションで DeleteUnsavedArticlesByID を呼ぶ）。
+	// 保存の途中（saved_articles の挿入が未確定）の記事は、外部キーの検査で共有ロックが付いているので、SKIP LOCKED で飛ばす（次の回に消える）。
+	// ここでは保存の有無を見ない。確定済みの保存の判断は、新しいスナップショットで動く2文目で行う。
+	LockExpiredArticleIDs(ctx context.Context, arg LockExpiredArticleIDsParams) ([]int64, error)
 	LockFeedbackPrompt(ctx context.Context, id pgtype.UUID) (LockFeedbackPromptRow, error)
 	LockFeedbackSubmission(ctx context.Context, id pgtype.UUID) (LockFeedbackSubmissionRow, error)
 	// 同じ利用者・同じフォームの表示判定を1つずつ行う（まだ表示記録が無い初回でも効く）

@@ -12,6 +12,8 @@
 docs/
 ├── DocumentMap.md                        … このファイル
 ├── RequirementsSpecification.md          … 要件定義書
+├── automerge-runner.md                   … 判定OKのPRだけをboxからマージするスクリプトの置き方・起動・停止
+├── pr-template.md                        … PRテンプレートの使い方と、図・証拠の規則
 ├── superpowers/specs/                    … 変更前にレビューする詳細設計
 │   ├── 2026-09-10-user-feedback-design.md
 │   │                                       … 利用者フィードバック機能の設計
@@ -47,8 +49,11 @@ docs/
 │           ├── SignUp.md                 … G-02 会員登録画面
 │           ├── Login.md                  … G-03 ログイン画面
 │           └── ArticleList.md            … G-04 記事一覧画面
+├── automerge.md                          … 小さい修正PRの自動マージ判定の説明
 └── deploy/                               … 公開・運用の手順書
-    ├── lightsail-provisioning.md         … サーバーを一から作り直す手順（初回のGo版の起動まで）
+    ├── lightsail-provisioning.md         … サーバーを一から作り直す手順（初回のGo版の起動まで。2GBへ上げる判断）
+    ├── migrate-to-another-server.md      … 別のサーバーへ引っ越す手順（さくらのVPSを例にしたランブック）
+    ├── origin-lockdown.md                … 80/443 を Cloudflare からだけにし、オリジンへの直接アクセスを塞ぐ
     ├── go-auto-deploy.md                 … 通常の更新（自動デプロイ）の流れ・止め方・失敗時の見方
     ├── ci-and-release.md                 … CIの検査と、配布成果物（イメージ・画面・運用ファイル）
     ├── database-backup-and-restore.md    … DBのバックアップと復元の手順
@@ -80,7 +85,11 @@ Go移行Issue #118〜#129の実装計画への入口。依存順、設計書の�
 
 ### adr/
 
-後から変更しにくく、採用理由をコードだけでは判断しづらい設計判断を短く記録する。現在はGoモジュラーモノリス、サーバー側認証セッション、画面とAPI・DBの置き場（Cloudflare PagesとLightsail 1台）の、採用理由を収録している。
+後から変更しにくく、採用理由をコードだけでは判断しづらい設計判断を短く記録する。現在はGoモジュラーモノリス、サーバー側認証セッション、画面とAPI・DBの置き場（Cloudflare PagesとLightsail 1台）の、採用理由を収録している。あわせて、意思決定ログの書き方（`README.md`、`0000-template.md`）と、小さいPRの自動マージの決定（概要と索引の0004、決定ごとの0005〜0012）を置く。各ADRは、背景、検討した案、本人の発言、根拠、見直し方まで詳しく書く（`README.md` の「詳しさの要件」）。docs/adr が唯一の意思決定ログのフォルダである。
+
+### pr-template.md
+
+PRテンプレート（`.github/pull_request_template.md`）の使い方。人が最初に見る順番、図と画像の規則、各節の書き方、証拠の規則、自動マージとの関係、根拠の表をまとめている。
 
 ### RequirementsSpecification.md
 
@@ -130,11 +139,17 @@ APIに共通する決まりごと。データの形式や送り方、結果をHT
 
 公開・運用の手順書。目的ごとに分かれている。
 
-- `lightsail-provisioning.md`: 本番のサーバー（AWS Lightsail）を一から作り直す手順書。インスタンスの作成、初期設定、本番の設定ファイル（項目の一覧）、最初のGo版を手で起動する手順、日次バックアップ、完了チェックリストを記載している。通常の更新は `go-auto-deploy.md` が行う。
+- `lightsail-provisioning.md`: 本番のサーバー（AWS Lightsail）を一から作り直す手順書。インスタンスの作成、初期設定、本番の設定ファイル（項目の一覧）、最初のGo版を手で起動する手順、日次バックアップ、完了チェックリストを記載している。2GBプラン（月$12）へ上げる判断と、日付つきの実測、取得中のメモリの山の測り方もここにある。通常の更新は `go-auto-deploy.md` が行う。動いている本番の 80/443 を Cloudflare だけにする手順は `origin-lockdown.md`。
+- `migrate-to-another-server.md`: 別のサーバーへ引っ越す手順。さくらのVPSを例に、初期設定の違い、設定ファイルとDBダンプの運び方、自動デプロイの接続先とサーバー上の置き場所の付け替え、Cloudflare、当日の手順、切り戻し、旧サーバーの後片付けを記載している。契約とDNSの切り替えはオーナーの判断。取得中のメモリの山は未測定。
+- `origin-lockdown.md`: 動いている本番で、80番と443番を Cloudflare の範囲だけに通し、オリジンへの直接アクセスを塞ぐ手順。SSH（22番）は閉じない。外からの確認コマンド、固定 IP を付け替えるかの判断材料、作業後に Issue へ残す記録のひな形。
 - `go-auto-deploy.md`: 通常の更新の仕組み。`main` に取り込まれた変更が、検査成功後に自動で本番へ入る流れ、止め方、有効にする手順、失敗したときの見方。
 - `ci-and-release.md`: CIの検査の一覧（必須かどうか）と、配布成果物（Go版のDockerイメージ、画面、運用ファイル、manifest）の作り方・照合の仕方、必要な秘密の名前。
 - `database-backup-and-restore.md`: データベースを安全にバックアップし、別のDBへ復元して中身を確かめる手順。
 - `rollback-to-python.md`: Go版に重大な問題が出たときに、サーバーに残してある手段でPython版へ戻す緊急手順。切り戻し先を削除するときに、この資料も削除する。
+
+### automerge.md
+
+小さい修正PRを自動マージの対象にするかの判定の説明。ルールファイル（`.github/automerge-rules.json`）の各キー、クラスA/B/C、使い方、毎週の見直し。
 
 ## リポジトリの外にある資料
 

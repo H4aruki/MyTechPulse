@@ -1,0 +1,182 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { main, makeApi, gatherInput, dryRunMerged, execWithRetry, parseGoMod } from "./eligibility.mjs";
+import { evaluate } from "./eligibility-core.mjs";
+
+const rules = JSON.parse(readFileSync(new URL("../../.github/automerge-rules.json", import.meta.url), "utf8"));
+const R = "o/r";
+const PATCH = "@@ -1,1 +1,2 @@\n a\n+b";
+
+function fakeExec({ fail = null, prs = [1] } = {}) {
+  const pkg = Buffer.from(JSON.stringify({ dependencies: { react: "1" } })).toString("base64");
+  return (args) => {
+    const key = args.join(" ");
+    if (fail && key.includes(fail)) throw new Error("boom");
+    if (args[0] === "repo") return JSON.stringify({ nameWithOwner: R });
+    if (args[0] === "pr") return JSON.stringify(prs.map((number) => ({ number })));
+    if (args[0] === "api" && args[1] === "graphql") return JSON.stringify({ data: { repository: { pullRequest: { reviewThreads: { pageInfo: { hasNextPage: false }, nodes: [{ isResolved: true }] } } } } });
+    const p = args[1];
+    if (/\/pulls\/\d+$/.test(p)) {
+      return JSON.stringify({ title: "修正", state: "open", draft: false, mergeable_state: "clean", body: "## 判断が必要なこと\nなし", labels: [], base: { ref: "main", repo: { full_name: R } }, head: { sha: "abc1234567", repo: { full_name: R } } });
+    }
+    if (p.includes("/files")) return JSON.stringify([[{ filename: "server/internal/x/x.go", status: "modified", additions: 5, deletions: 1, patch: PATCH }, { filename: "server/internal/x/x_test.go", status: "modified", additions: 9, deletions: 0, patch: PATCH }]]);
+    if (p.includes("/check-runs")) return JSON.stringify([{ check_runs: rules.requiredChecks.map((name) => ({ name, status: "completed", conclusion: "success" })) }]);
+    if (p.endsWith("/status")) return JSON.stringify({ statuses: [] });
+    if (p.includes("/compare/")) return JSON.stringify({ behind_by: 0 });
+    if (p.includes("/reviews")) return JSON.stringify([[]]);
+    if (p.includes("/contents/server/go.mod")) return JSON.stringify({ encoding: "base64", content: Buffer.from("module x\n\nrequire (\n\tgithub.com/jackc/pgx/v5 v5.7.1\n\tgithub.com/a/b v1.0.0 // indirect\n)\n").toString("base64") });
+    if (p.includes("/contents/frontend/package.json")) return JSON.stringify({ encoding: "base64", content: pkg });
+    if (p.includes("/contents/")) return JSON.stringify([{ name: "x.go", type: "file" }, { name: "x_test.go", type: "file" }]);
+    throw new Error("想定外: " + key);
+  };
+}
+
+function run(argv, exec) {
+  let out = "", errText = "";
+  const code = main(["--rules", new URL("../../.github/automerge-rules.json", import.meta.url).pathname, "--repo", R, ...argv], { exec, write: (s) => (out += s), err: (s) => (errText += s) });
+  return { code, out, errText };
+}
+
+test("組み立て→判定→要約（対象は終了コード0）", () => {
+  const r = run(["--pr", "1"], fakeExec());
+  assert.equal(r.code, 0);
+  assert.match(r.out, /PR #1 対象（クラスA）/);
+});
+
+test("--json は判定結果と headSha", () => {
+  const r = run(["--pr", "1", "--json"], fakeExec());
+  const j = JSON.parse(r.out);
+  assert.equal(j.eligible, true);
+  assert.equal(j.headSha, "abc1234567");
+});
+
+test("--comment-markdown は renderComment の結果", () => {
+  const r = run(["--pr", "1", "--comment-markdown"], fakeExec());
+  assert.match(r.out, /対象（クラスA）/);
+});
+
+test("取得失敗は終了コード2（fail closed）", () => {
+  const r = run(["--pr", "1"], fakeExec({ fail: "/check-runs" }));
+  assert.equal(r.code, 2);
+  assert.match(r.errText, /取得失敗/);
+});
+
+test("引数エラーは終了コード2", () => {
+  assert.equal(run([], fakeExec()).code, 2);
+  assert.equal(run(["--pr", "abc"], fakeExec()).code, 2);
+  assert.equal(run(["--nope"], fakeExec()).code, 2);
+});
+
+test("対象外は終了コード1", () => {
+  const exec = fakeExec();
+  const bad = (args) => (args[1]?.includes("/compare/") ? JSON.stringify({ behind_by: 3 }) : exec(args));
+  const r = run(["--pr", "1"], bad);
+  assert.equal(r.code, 1);
+  assert.match(r.out, /state\.behind/);
+});
+
+test("gatherInput は merged-dryrun で compare を取らない", () => {
+  const { input } = gatherInput(makeApi(fakeExec({ fail: "/compare/" })), R, 1, "merged-dryrun");
+  assert.equal(input.compare, null);
+  assert.equal(evaluate(input, rules).eligible, true);
+});
+
+test("dry-run は表と集計の形を出し、取得失敗の行は対象外", () => {
+  const exec = fakeExec({ prs: [1, 2] });
+  const api = makeApi((args) => {
+    if (args[1] === "repos/o/r/pulls/2") throw new Error("boom");
+    return exec(args);
+  });
+  const r = dryRunMerged({ api, repo: R, count: 2, rules, listMerged: () => [1, 2] });
+  assert.match(r.markdown, /\| PR \| 題 \| クラス \| 対象か \| 当たったルール \|/);
+  assert.match(r.markdown, /クラス別: A 1 本 \/ B 0 本 \/ C 0 本/);
+  assert.match(r.markdown, /取得失敗（対象外）/);
+  assert.match(r.markdown, /本文ルール/);
+  assert.equal(r.eligible, 1);
+});
+
+test("dry-run は main 経由で markdown を出力する", () => {
+  const r = run(["--dry-run-merged", "1"], fakeExec());
+  assert.equal(r.code, 0);
+  assert.match(r.out, /# 自動マージ判定のドライラン/);
+});
+
+test("--json に stats・failures・class・eligible・headSha が全部入る", () => {
+  const j = JSON.parse(run(["--pr", "1", "--json"], fakeExec()).out);
+  for (const k of ["stats", "failures", "class", "eligible", "headSha"]) assert.ok(k in j, k);
+});
+
+test("--render-comment は JSON からコメントを作り、ネットワークを使わない", () => {
+  const dir = mkdtempSync(join(tmpdir(), "elig-"));
+  const f = join(dir, "r.json");
+  writeFileSync(f, run(["--pr", "1", "--json"], fakeExec()).out);
+  const noNet = () => { throw new Error("ネットワーク禁止"); };
+  const r = run(["--render-comment", f, "--merge-status", "保留（時間帯のため）"], noNet);
+  assert.equal(r.code, 0);
+  assert.match(r.out, /マージ: 保留（時間帯のため）/);
+  assert.match(r.out, /対象（クラスA）/);
+  assert.match(r.out, /head abc1234/);
+  assert.doesNotMatch(r.out, /JST JST/);
+  assert.equal(run(["--render-comment", join(dir, "nothing.json")], noNet).code, 2);
+});
+
+test("--comment-markdown は --merge-status を渡せ、無ければ既定の文言", () => {
+  assert.match(run(["--pr", "1", "--comment-markdown", "--merge-status", "しない"], fakeExec()).out, /マージ: しない/);
+  assert.match(run(["--pr", "1", "--comment-markdown"], fakeExec()).out, /マージ: 未実行（判定のみ）/);
+});
+
+test("symlink は親ディレクトリの一覧の type で弾く（先が普通のファイルでも）", () => {
+  const exec = fakeExec();
+  const dirOf = (type) => (args) =>
+    /\/contents\/server\/internal\/x\?ref=/.test(args[1] ?? "") ? JSON.stringify([{ name: "x.go", type }, { name: "x_test.go", type: "file" }]) : exec(args);
+  const r = run(["--pr", "1", "--json"], dirOf("symlink"));
+  assert.equal(r.code, 1);
+  assert.ok(JSON.parse(r.out).failures.some((f) => f.rule === "path.symlink"));
+  // ファイル単体の取得は「先の中身 type: file」を返す（GitHub の仕様）。それでも見逃さない。
+  const trap = (args) => (/\/contents\/server\/internal\/x\/x\.go\?/.test(args[1] ?? "") ? JSON.stringify({ type: "file" }) : dirOf("symlink")(args));
+  assert.equal(run(["--pr", "1"], trap).code, 1);
+  // 一覧が取れない・エントリが無いときは失敗（fail closed）
+  const unknown = (args) => (/\/contents\/server\/internal\/x\?ref=/.test(args[1] ?? "") ? (() => { throw new Error("404") })() : exec(args));
+  assert.equal(run(["--pr", "1"], unknown).code, 1);
+  const missing = (args) => (/\/contents\/server\/internal\/x\?ref=/.test(args[1] ?? "") ? JSON.stringify([{ name: "other.go", type: "file" }]) : exec(args));
+  assert.equal(run(["--pr", "1"], missing).code, 1);
+  // 同じ親ディレクトリは1回だけ取る
+  let n = 0;
+  const count = (args) => { if (/\/contents\/server\/internal\/x\?ref=/.test(args[1] ?? "")) n++; return exec(args); };
+  run(["--pr", "1"], count);
+  assert.equal(n, 1);
+});
+
+test("go.mod が取れなければ外部 import は通らない（fail closed）／parseGoMod", () => {
+  assert.deepEqual(parseGoMod("module m\ngo 1.24\nrequire a.com/x v1.0.0\nrequire (\n\tb.com/y/v2 v2.1.0 // indirect\n)\n"), ["a.com/x", "b.com/y/v2"]);
+  const exec = fakeExec();
+  const api = makeApi((args) => (args[1]?.includes("/contents/server/go.mod") ? (() => { throw new Error("404") })() : exec(args)));
+  assert.equal(gatherInput(api, R, 1, "open").input.baseGoModules, null);
+});
+
+test("dry-run: 失敗0のPRは eligibleWithoutBody に数えない（二重計上しない）", () => {
+  const r = dryRunMerged({ api: makeApi(fakeExec()), repo: R, count: 1, rules, listMerged: () => [1] });
+  assert.equal(r.eligible, 1);
+  assert.equal(r.eligibleWithoutBody, 0);
+  assert.match(r.markdown, /対象は 1 本（本文ルールを含めた場合は 1 本）/);
+});
+
+test("再試行: 一時的な失敗だけ、最大3回、2秒→5秒の待ち", () => {
+  const waits = [];
+  let n = 0;
+  const flaky = () => { if (++n < 3) throw new Error("net/http: TLS handshake timeout"); return "ok"; };
+  assert.equal(execWithRetry(flaky, ["api", "x"], { sleep: (ms) => waits.push(ms) }), "ok");
+  assert.deepEqual(waits, [2000, 5000]);
+  n = 0;
+  const always = () => { n++; throw new Error("HTTP 502 Bad Gateway"); };
+  assert.throws(() => execWithRetry(always, [], { sleep: () => {} }), /502/);
+  assert.equal(n, 3);
+  for (const msg of ["gh: Not Found (HTTP 404)", "unknown flag: --nope"]) {
+    n = 0;
+    assert.throws(() => execWithRetry(() => { n++; throw new Error(msg); }, [], { sleep: () => {} }));
+    assert.equal(n, 1, msg);
+  }
+});

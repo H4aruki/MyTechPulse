@@ -14,6 +14,7 @@
 | Go APIのimage検査 | 公開せずに作った最終イメージの起動、疎通、非root実行 | 必須 |
 | 設定まわりの仕掛けの確認 | 本番の入口（Caddyfile）の検証、外部Actionの固定、自動デプロイの条件、文書のリンクと旧構成の言葉 | 必須（自動デプロイの前提でもある。失敗すると本番へ反映しない） |
 | エージェント設定の仕掛けの確認 | Claude CodeとCodexのフック、Skillsの内容一致などエージェント設定（`.claude/hooks`・`.codex/hooks`・`scripts/agent-harness`）の試験 | 必須ではない（自動デプロイの前提にも入れない。失敗しても本番への反映は止まらない） |
+| 秘密情報の検査 | gitleaksで鍵やトークンの混入を検査し、`.env` や鍵ファイルなど危険なファイル名も拒否する（例外は手元の pre-commit と同じ。誤検出の許可は `.gitleaks.toml`） | 必須ではない（自動デプロイの前提にも入れない。失敗しても本番への反映は止まらない） |
 
 - 必須の5つは、GitHubのRuleset（Settings → Rules → Rulesets → `main`）で指定しています。表示名を変えるときは、Ruleset側も同じ名前に直してください（一致しないと取り込めなくなります）。
 - PRでは、基本的に読み取り権限だけです。カバレッジをコメントする2つのjobだけ、PRへの書き込み権限を持ちます。本番の秘密や、パッケージへの書き込み権限は渡しません。
@@ -80,4 +81,4 @@ node scripts/release-manifest.mjs verify \
 | `LIGHTSAIL_SSH_KEY`、`LIGHTSAIL_HOST`、`LIGHTSAIL_USER` | 自動デプロイが、本番サーバーへ接続して入れ替える |
 | `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` | 画面（Cloudflare Pages）の公開 |
 
-リポジトリ変数 `GO_DEPLOY_ENABLED`（`true` のときだけ自動デプロイが動く）は、Secretsではなく Variables にあります。
+リポジトリ変数 `GO_DEPLOY_ENABLED`（`true` のときだけ自動デプロイが動く）は、Secretsではなく Variables にあります。接続先のサーバーを変えるときは、`LIGHTSAIL_HOST` と、workflow に固定した SSH のホスト公開鍵を一緒に変えます。手順は [migrate-to-another-server.md](migrate-to-another-server.md) です。
