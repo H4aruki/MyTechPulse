@@ -68,6 +68,47 @@ func (s *FeedArticles) ListPopular(ctx context.Context, source string, since tim
 	return out, nil
 }
 
+// ListCooccurringTags は、seedTags のどれかが付いた記事に一緒に付いている別のタグを、記事の数が多い順に返す。
+// タグは interest.NormalizeTag と同じく、前後の空白を除いた小文字で比べる。種が無ければ問い合わせない。
+// 回数の下限はここでは掛けない。表に残っている記事だけを数える。
+func (s *FeedArticles) ListCooccurringTags(ctx context.Context, seedTags, excludeTags []string) ([]recommendation.TagCooccurrence, error) {
+	seeds := normalizedTagKeys(seedTags)
+	if len(seeds) == 0 {
+		return []recommendation.TagCooccurrence{}, nil
+	}
+	rows, err := s.q.ListCooccurringTags(ctx, dbgen.ListCooccurringTagsParams{
+		SeedTags: seeds, ExcludeTags: normalizedTagKeys(excludeTags),
+	})
+	if err != nil {
+		return nil, errors.New("store: フィードの記事を取得できません")
+	}
+	out := make([]recommendation.TagCooccurrence, 0, len(rows))
+	for _, row := range rows {
+		if row.ArticleCount <= 0 {
+			continue
+		}
+		out = append(out, recommendation.TagCooccurrence{Tag: row.TagName, Count: int(row.ArticleCount)})
+	}
+	return out, nil
+}
+
+func normalizedTagKeys(tags []string) []string {
+	out := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		key := interest.NormalizeTag(tag)
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, key)
+	}
+	return out
+}
+
 // feedArticle は、DBの行を記事にする。DBの提供元（'qiita'・'zenn'）を、画面と推薦で使う表記に戻す。
 func feedArticle(id int64, source, title, url, author string, likes int32, published pgtype.Timestamptz, tags []string) article.Article {
 	a := article.Article{ID: id, Title: title, URL: url, Author: author, Likes: int(likes), PublishedAt: published.Time, Tags: tags}

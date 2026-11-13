@@ -37,13 +37,20 @@ type popularCall struct {
 	limit  int
 }
 
+type cooccurCall struct {
+	seeds   []string
+	exclude []string
+}
+
 // memoryArticles は、DBの問い合わせと同じ絞り方・並べ方をする試験用の記事置き場。
 type memoryArticles struct {
 	items        []article.Article
 	err          error
 	popularErr   error
+	cooccurErr   error
 	taggedCalls  []taggedCall
 	popularCalls []popularCall
+	cooccurCalls []cooccurCall
 }
 
 func (m *memoryArticles) ListTagged(_ context.Context, source string, tags []string, since time.Time, limit int) ([]article.Article, error) {
@@ -95,6 +102,77 @@ func (m *memoryArticles) ListPopular(_ context.Context, source string, since tim
 	return out, nil
 }
 
+// ListCooccurringTags は、SQLと同じく、種のタグが付いた記事に一緒に付いている別のタグを数える。
+// 表示期間では絞らない。exclude に入ったタグは返さない。記事1件につき、タグは1回だけ数える。
+func (m *memoryArticles) ListCooccurringTags(_ context.Context, seedTags, excludeTags []string) ([]TagCooccurrence, error) {
+	m.cooccurCalls = append(m.cooccurCalls, cooccurCall{append([]string(nil), seedTags...), append([]string(nil), excludeTags...)})
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.cooccurErr != nil {
+		return nil, m.cooccurErr
+	}
+	seeds := map[string]bool{}
+	for _, tag := range seedTags {
+		if key := interest.NormalizeTag(tag); key != "" {
+			seeds[key] = true
+		}
+	}
+	excluded := map[string]bool{}
+	for _, tag := range excludeTags {
+		if key := interest.NormalizeTag(tag); key != "" {
+			excluded[key] = true
+		}
+	}
+	type acc struct {
+		display string
+		n       int
+	}
+	counts := map[string]*acc{}
+	for _, item := range m.items {
+		seen := map[string]string{}
+		for _, tag := range item.Tags {
+			key := interest.NormalizeTag(tag)
+			if key == "" {
+				continue
+			}
+			if _, ok := seen[key]; !ok {
+				seen[key] = tag
+			}
+		}
+		onArticle := make([]string, 0, len(seen))
+		for key := range seen {
+			if seeds[key] {
+				onArticle = append(onArticle, key)
+			}
+		}
+		if len(onArticle) == 0 {
+			continue
+		}
+		for key, display := range seen {
+			counted := false
+			for _, seed := range onArticle {
+				if seed != key {
+					counted = true
+					break
+				}
+			}
+			if !counted || excluded[key] {
+				continue
+			}
+			if counts[key] == nil {
+				counts[key] = &acc{display: display}
+			}
+			counts[key].n++
+		}
+	}
+	out := make([]TagCooccurrence, 0, len(counts))
+	for _, count := range counts {
+		out = append(out, TagCooccurrence{Tag: count.display, Count: count.n})
+	}
+	return out, nil
+}
+
 var dbNow = time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 
 func dbService(t *testing.T, weights []interest.Weight, repo *memoryArticles) Service {
@@ -138,7 +216,10 @@ func TestServiceGetFromDBDoesNotCallProvidersAndRespectsWindows(t *testing.T) {
 	if got.Warnings == nil || len(got.Warnings) != 0 {
 		t.Fatalf("Warnings = %#v", got.Warnings)
 	}
-	// タグが5つあっても、10件に満たない提供元は人気の記事で埋める
+	// タグが5つあっても、10件に満たない提供元は人気の記事で埋める。似たタグは使わない
+	if len(repo.cooccurCalls) != 0 {
+		t.Fatalf("cooccur calls = %+v", repo.cooccurCalls)
+	}
 	if len(repo.popularCalls) != 2 {
 		t.Fatalf("popular calls = %+v", repo.popularCalls)
 	}
@@ -377,5 +458,301 @@ func TestServiceGetFromDBUsesFeedTimeout(t *testing.T) {
 	}
 	if !repo.hadDeadline {
 		t.Fatal("DBの問い合わせに期限が付いていない")
+	}
+}
+
+func TestServiceGetFromDBFillsWithSimilarTagsBeforePopular(t *testing.T) {
+	hour := dbNow.Add(-time.Hour)
+	old := dbNow.Add(-10 * 24 * time.Hour)
+	repo := &memoryArticles{items: []article.Article{
+		// 5日より古いのでフィードには出ない。共起の数には入る
+		testArticle(article.SourceQiita, "https://qiita.com/old/a", []string{"Go", "Rust"}, 1, old),
+		testArticle(article.SourceQiita, "https://qiita.com/old/b", []string{"Go", "Rust"}, 1, old),
+		testArticle(article.SourceQiita, "https://qiita.com/old/c", []string{"Go", "Rust"}, 1, old),
+		// 共起2回は下限未満。記事は人気の枠に回る
+		testArticle(article.SourceQiita, "https://qiita.com/old/d", []string{"Go", "Docker"}, 1, old),
+		testArticle(article.SourceQiita, "https://qiita.com/old/e", []string{"Go", "Docker"}, 1, old),
+		testArticle(article.SourceQiita, "https://qiita.com/both", []string{"Go", "Rust"}, 2, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/go", []string{"Go"}, 1, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/rust-high", []string{"Rust"}, 8, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/rust-low", []string{"Rust"}, 3, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/docker", []string{"Docker"}, 50, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/kotlin", []string{"Kotlin"}, 100, hour),
+	}}
+	got, err := dbService(t, []interest.Weight{{TagID: 1, Tag: "Go", Value: 5000}}, repo).Get(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 興味のあるタグ、似たタグ（いいね順）、人気の記事（いいね順）。点数0どうしでも、似たタグを人気より前に置く
+	want := []string{
+		"https://qiita.com/both", "https://qiita.com/go",
+		"https://qiita.com/rust-high", "https://qiita.com/rust-low",
+		"https://qiita.com/kotlin", "https://qiita.com/docker",
+	}
+	if u := urls(got.QiitaArticles); !slices.Equal(u, want) {
+		t.Fatalf("Qiita = %v", u)
+	}
+	if len(repo.cooccurCalls) != 1 {
+		t.Fatalf("cooccur calls = %+v", repo.cooccurCalls)
+	}
+	if !slices.Equal(repo.cooccurCalls[0].seeds, []string{"go"}) || !slices.Equal(repo.cooccurCalls[0].exclude, []string{"go"}) {
+		t.Fatalf("cooccur = %+v", repo.cooccurCalls[0])
+	}
+}
+
+func TestServiceGetFromDBKeepsSimilarInsideTheFreshWindow(t *testing.T) {
+	day := 24 * time.Hour
+	repo := &memoryArticles{items: []article.Article{
+		testArticle(article.SourceQiita, "https://qiita.com/old/a", []string{"Go", "Rust"}, 1, dbNow.Add(-10*day)),
+		testArticle(article.SourceQiita, "https://qiita.com/old/b", []string{"Go", "Rust"}, 1, dbNow.Add(-10*day)),
+		testArticle(article.SourceQiita, "https://qiita.com/old/c", []string{"Go", "Rust"}, 1, dbNow.Add(-10*day)),
+		testArticle(article.SourceZenn, "https://zenn.dev/old-go", []string{"Go"}, 0, dbNow.Add(-20*day)),
+		testArticle(article.SourceZenn, "https://zenn.dev/old-rust", []string{"Rust"}, 99, dbNow.Add(-20*day)),
+		testArticle(article.SourceZenn, "https://zenn.dev/fresh-rust", []string{"Rust"}, 1, dbNow.Add(-time.Hour)),
+		testArticle(article.SourceZenn, "https://zenn.dev/kotlin", []string{"Kotlin"}, 100, dbNow.Add(-time.Hour)),
+	}}
+	got, err := dbService(t, []interest.Weight{{TagID: 1, Tag: "Go", Value: 5000}}, repo).Get(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 14日を過ぎた似たタグの記事は出さない。古い興味タグの記事のうしろに、14日以内の似たタグ、そのうしろに人気
+	want := []string{"https://zenn.dev/old-go", "https://zenn.dev/fresh-rust", "https://zenn.dev/kotlin"}
+	if u := urls(got.ZennArticles); !slices.Equal(u, want) {
+		t.Fatalf("Zenn = %v", u)
+	}
+	var saw bool
+	for _, call := range repo.taggedCalls {
+		if call.source != article.SourceZenn || !slices.Contains(call.tags, "Rust") {
+			continue
+		}
+		saw = true
+		if !call.since.Equal(dbNow.Add(-zennWindow)) {
+			t.Fatalf("similar since = %v", call.since)
+		}
+	}
+	if !saw {
+		t.Fatal("Zennの似たタグを読んでいない")
+	}
+}
+
+func TestServiceGetFromDBSkipsSimilarForAFullSource(t *testing.T) {
+	hour := dbNow.Add(-time.Hour)
+	old := dbNow.Add(-10 * 24 * time.Hour)
+	items := []article.Article{
+		testArticle(article.SourceQiita, "https://qiita.com/old/a", []string{"Go", "Rust"}, 1, old),
+		testArticle(article.SourceQiita, "https://qiita.com/old/b", []string{"Go", "Rust"}, 1, old),
+		testArticle(article.SourceQiita, "https://qiita.com/old/c", []string{"Go", "Rust"}, 1, old),
+		testArticle(article.SourceZenn, "https://zenn.dev/rust", []string{"Rust"}, 1, hour),
+		testArticle(article.SourceZenn, "https://zenn.dev/kotlin", []string{"Kotlin"}, 100, hour),
+	}
+	for i := range 10 {
+		items = append(items, testArticle(article.SourceQiita, "https://qiita.com/go/"+string(rune('a'+i)), []string{"Go"}, 0, hour))
+	}
+	repo := &memoryArticles{items: items}
+	got, err := dbService(t, []interest.Weight{{TagID: 1, Tag: "Go", Value: 5000}}, repo).Get(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.QiitaArticles) != 10 {
+		t.Fatalf("Qiita = %v", urls(got.QiitaArticles))
+	}
+	if u := urls(got.ZennArticles); !slices.Equal(u, []string{"https://zenn.dev/rust", "https://zenn.dev/kotlin"}) {
+		t.Fatalf("Zenn = %v", u)
+	}
+	if len(repo.cooccurCalls) != 1 {
+		t.Fatalf("cooccur calls = %d", len(repo.cooccurCalls))
+	}
+	for _, call := range repo.taggedCalls {
+		if call.source == article.SourceQiita && slices.Contains(call.tags, "Rust") {
+			t.Fatalf("10件そろったQiitaで似たタグを読んだ: %+v", call)
+		}
+	}
+	if len(repo.popularCalls) != 1 || repo.popularCalls[0].source != article.SourceZenn {
+		t.Fatalf("popular calls = %+v", repo.popularCalls)
+	}
+}
+
+func TestServiceGetFromDBSkipsCooccurrenceWhenBothSourcesAreFull(t *testing.T) {
+	hour := dbNow.Add(-time.Hour)
+	items := []article.Article{}
+	for i := range 10 {
+		items = append(items,
+			testArticle(article.SourceQiita, "https://qiita.com/go/"+string(rune('a'+i)), []string{"Go"}, 0, hour),
+			testArticle(article.SourceZenn, "https://zenn.dev/go/"+string(rune('a'+i)), []string{"Go"}, 0, hour),
+		)
+	}
+	repo := &memoryArticles{items: items}
+	got, err := dbService(t, []interest.Weight{{TagID: 1, Tag: "Go", Value: 5000}}, repo).Get(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.QiitaArticles) != 10 || len(got.ZennArticles) != 10 {
+		t.Fatalf("Qiita %d Zenn %d", len(got.QiitaArticles), len(got.ZennArticles))
+	}
+	if len(repo.cooccurCalls) != 0 || len(repo.popularCalls) != 0 {
+		t.Fatalf("cooccur %+v popular %+v", repo.cooccurCalls, repo.popularCalls)
+	}
+}
+
+func TestServiceGetFromDBLimitsSimilarTagsToEmptySlots(t *testing.T) {
+	hour := dbNow.Add(-time.Hour)
+	old := dbNow.Add(-10 * 24 * time.Hour)
+	items := []article.Article{
+		testArticle(article.SourceQiita, "https://qiita.com/go", []string{"Go"}, 0, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/rust", []string{"Rust"}, 0, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/aws", []string{"AWS"}, 0, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/docker", []string{"Docker"}, 0, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/kotlin", []string{"Kotlin"}, 1, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/swift", []string{"Swift"}, 100, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/java", []string{"Java"}, 50, hour),
+	}
+	for i := range 5 {
+		items = append(items, testArticle(article.SourceQiita, "https://qiita.com/old/k/"+string(rune('a'+i)), []string{"Go", "Kotlin"}, 1, old))
+	}
+	for i := range 4 {
+		items = append(items, testArticle(article.SourceQiita, "https://qiita.com/old/s/"+string(rune('a'+i)), []string{"Go", "Swift"}, 1, old))
+	}
+	weights := []interest.Weight{
+		{TagID: 1, Tag: "Go", Value: 8000}, {TagID: 2, Tag: "Rust", Value: 6000},
+		{TagID: 3, Tag: "AWS", Value: 4000}, {TagID: 4, Tag: "Docker", Value: 2000},
+	}
+	repo := &memoryArticles{items: items}
+	got, err := dbService(t, weights, repo).Get(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 空きは1枠。回数の多い Kotlin だけを似たタグにし、いいねの多い Swift は人気の記事としてそのうしろ
+	want := []string{
+		"https://qiita.com/go", "https://qiita.com/rust", "https://qiita.com/aws", "https://qiita.com/docker",
+		"https://qiita.com/kotlin", "https://qiita.com/swift", "https://qiita.com/java",
+	}
+	if u := urls(got.QiitaArticles); !slices.Equal(u, want) {
+		t.Fatalf("Qiita = %v", u)
+	}
+}
+
+func TestServiceGetFromDBDoesNotSearchSimilarWhenFiveTagsExist(t *testing.T) {
+	hour := dbNow.Add(-time.Hour)
+	old := dbNow.Add(-10 * 24 * time.Hour)
+	items := []article.Article{
+		testArticle(article.SourceQiita, "https://qiita.com/go", []string{"Go"}, 0, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/swift", []string{"Swift"}, 1, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/java", []string{"Java"}, 100, hour),
+	}
+	for i := range 4 {
+		items = append(items, testArticle(article.SourceQiita, "https://qiita.com/old/s/"+string(rune('a'+i)), []string{"Go", "Swift"}, 1, old))
+	}
+	// 上位5つが埋まっている。6番目の Swift は共起が多くても、似たタグとしては探さない
+	weights := []interest.Weight{
+		{TagID: 1, Tag: "Go", Value: 6000}, {TagID: 2, Tag: "Rust", Value: 5000},
+		{TagID: 3, Tag: "AWS", Value: 4000}, {TagID: 4, Tag: "Docker", Value: 3000},
+		{TagID: 5, Tag: "React", Value: 2000}, {TagID: 6, Tag: "Swift", Value: 1000},
+	}
+	repo := &memoryArticles{items: items}
+	got, err := dbService(t, weights, repo).Get(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 共起は調べない。Swift は人気の記事として入り、6番目の興味度が付くので点数で Java より前に並ぶ
+	want := []string{"https://qiita.com/go", "https://qiita.com/swift", "https://qiita.com/java"}
+	if u := urls(got.QiitaArticles); !slices.Equal(u, want) {
+		t.Fatalf("Qiita = %v", u)
+	}
+	if len(repo.cooccurCalls) != 0 {
+		t.Fatalf("cooccur calls = %+v", repo.cooccurCalls)
+	}
+}
+
+func TestServiceGetFromDBAllowsZeroInterestAsSimilar(t *testing.T) {
+	hour := dbNow.Add(-time.Hour)
+	old := dbNow.Add(-10 * 24 * time.Hour)
+	items := []article.Article{
+		testArticle(article.SourceQiita, "https://qiita.com/go", []string{"Go"}, 0, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/rust", []string{"Rust"}, 1, hour),
+		testArticle(article.SourceQiita, "https://qiita.com/java", []string{"Java"}, 100, hour),
+	}
+	for i := range 3 {
+		items = append(items, testArticle(article.SourceQiita, "https://qiita.com/old/"+string(rune('a'+i)), []string{"Go", "Rust"}, 1, old))
+	}
+	weights := []interest.Weight{{TagID: 1, Tag: "Go", Value: 5000}, {TagID: 2, Tag: "Rust", Value: 0}}
+	repo := &memoryArticles{items: items}
+	got, err := dbService(t, weights, repo).Get(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 興味度0は行が無いのと同じ。似たタグにして、いいねの多い人気の記事より前に置く
+	want := []string{"https://qiita.com/go", "https://qiita.com/rust", "https://qiita.com/java"}
+	if u := urls(got.QiitaArticles); !slices.Equal(u, want) {
+		t.Fatalf("Qiita = %v", u)
+	}
+	if len(repo.cooccurCalls) != 1 || slices.Contains(repo.cooccurCalls[0].exclude, "rust") {
+		t.Fatalf("cooccur = %+v", repo.cooccurCalls)
+	}
+}
+
+func TestServiceGetFromDBReturnsCooccurrenceError(t *testing.T) {
+	dbErr := errors.New("db down")
+	repo := &memoryArticles{cooccurErr: dbErr}
+	weights := []interest.Weight{{TagID: 1, Tag: "Go", Value: 5000}}
+	if _, err := dbService(t, weights, repo).Get(context.Background(), 1); !errors.Is(err, dbErr) {
+		t.Fatalf("err = %v", err)
+	}
+	if len(repo.popularCalls) != 0 {
+		t.Fatalf("popular calls = %+v", repo.popularCalls)
+	}
+}
+
+// failNthTagged は、n回目のタグ検索だけ失敗させる。失敗した呼び出しの引数は failed に残す。
+type failNthTagged struct {
+	memoryArticles
+	n, at  int
+	fail   error
+	failed taggedCall
+}
+
+func (f *failNthTagged) ListTagged(ctx context.Context, source string, tags []string, since time.Time, limit int) ([]article.Article, error) {
+	f.n++
+	if f.n == f.at {
+		f.failed = taggedCall{source, append([]string(nil), tags...), since, limit}
+		return nil, f.fail
+	}
+	return f.memoryArticles.ListTagged(ctx, source, tags, since, limit)
+}
+
+func TestServiceGetFromDBReturnsSimilarTaggedError(t *testing.T) {
+	old := dbNow.Add(-10 * 24 * time.Hour)
+	dbErr := errors.New("db down")
+	// 興味のあるタグの検索が Qiita、Zenn の順で2回あり、その次の3回目が Qiita の似たタグの検索。
+	repo := &failNthTagged{at: 3, fail: dbErr}
+	repo.items = []article.Article{
+		testArticle(article.SourceQiita, "https://qiita.com/old/a", []string{"Go", "Rust"}, 1, old),
+		testArticle(article.SourceQiita, "https://qiita.com/old/b", []string{"Go", "Rust"}, 1, old),
+		testArticle(article.SourceQiita, "https://qiita.com/old/c", []string{"Go", "Rust"}, 1, old),
+	}
+	s := dbService(t, []interest.Weight{{TagID: 1, Tag: "Go", Value: 5000}}, nil)
+	s.Articles = repo
+	if _, err := s.Get(context.Background(), 1); !errors.Is(err, dbErr) {
+		t.Fatalf("err = %v", err)
+	}
+	// 共起を1回数えたあとで落ちている。失敗した検索は、興味のある Go ではなく、共起で選んだ Rust。
+	if len(repo.cooccurCalls) != 1 {
+		t.Fatalf("cooccur calls = %+v", repo.cooccurCalls)
+	}
+	if !slices.Equal(repo.cooccurCalls[0].seeds, []string{"go"}) || !slices.Equal(repo.cooccurCalls[0].exclude, []string{"go"}) {
+		t.Fatalf("cooccur = %+v", repo.cooccurCalls[0])
+	}
+	if repo.n != 3 || repo.failed.source != article.SourceQiita || !slices.Equal(repo.failed.tags, []string{"Rust"}) || repo.failed.limit != dbTaggedLimit || !repo.failed.since.Equal(dbNow.Add(-qiitaWindow)) {
+		t.Fatalf("failed call = %+v n = %d", repo.failed, repo.n)
+	}
+	if len(repo.taggedCalls) != 2 {
+		t.Fatalf("tagged calls = %+v", repo.taggedCalls)
+	}
+	for _, call := range repo.taggedCalls {
+		if !slices.Equal(call.tags, []string{"Go"}) {
+			t.Fatalf("interest call = %+v", call)
+		}
+	}
+	if len(repo.popularCalls) != 0 {
+		t.Fatalf("popular calls = %+v", repo.popularCalls)
 	}
 }

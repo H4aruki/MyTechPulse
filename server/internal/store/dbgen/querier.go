@@ -63,6 +63,14 @@ type Querier interface {
 	LastFeedbackPrompt(ctx context.Context, arg LastFeedbackPromptParams) (LastFeedbackPromptRow, error)
 	// 記事のタグ。保存の学習（反映）に使う。
 	ListArticleTagsByArticles(ctx context.Context, articleIds []int64) ([]ListArticleTagsByArticlesRow, error)
+	// 興味のあるタグ（seed_tags）が付いた記事に、一緒に付いている別のタグを数える（Issue #241）。
+	// 1回の集計で、記事の数が多い順に返す。回数の下限はSQLでは掛けず、呼び出し側（recommendation.selectSimilarTags）が掛ける。
+	// 数えるのは article_tags に残っている記事だけ。保持期間を過ぎた未保存の記事は定期取得が消している。
+	// 利用者が保存して保持期間を過ぎた記事は表に残るので、その分も数に入る。表示期間（Qiita 5日、Zenn 14日）では絞らない。
+	// exclude_tags は、興味度が0より大きいタグ。似たタグにはしない。種のタグ自身もここに含めて渡す。
+	// タグ名は前後の空白を除いた小文字で比べる。記事が数千件の規模では、種のタグは ("tag_ID", published_at) の索引、
+	// 同じ記事の他のタグは主キー (article_id, "tag_ID") で引ける。新しい索引は足していない。
+	ListCooccurringTags(ctx context.Context, arg ListCooccurringTagsParams) ([]ListCooccurringTagsRow, error)
 	ListEnabledFetchTags(ctx context.Context) ([]ListEnabledFetchTagsRow, error)
 	ListFeedbackQuestions(ctx context.Context, formID int64) ([]ListFeedbackQuestionsRow, error)
 	ListFetchRunsForSlot(ctx context.Context, slotAt pgtype.Timestamptz) ([]ListFetchRunsForSlotRow, error)
