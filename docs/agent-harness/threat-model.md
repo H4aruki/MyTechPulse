@@ -15,6 +15,7 @@
 |---|---|
 | 秘密情報の読み取り・記録 | ignore、権限deny、コマンドフック、文章ルール |
 | force pushやmain直接push | フック、Codex rules、GitHub ruleset |
+| フックを飛ばす指定（--no-verify、hooksPathの上書き） | コマンドフック、Codexの接頭辞規則、CIのファイル名検査とgitleaks |
 | PRの自己承認・自動マージ | フックと文章ルール。人間だけが判断 |
 | DBや既存ファイルの削除 | 事前許可、ボリューム削除遮断、本番DB MCPを導入しない |
 | 手動の本番操作 | SSHとWranglerを遮断し、CIへ一本化 |

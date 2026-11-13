@@ -116,6 +116,80 @@ test('Codex workerのログを丸ごと表示するコマンドを止める', ()
   }
 });
 
+test('フックを飛ばす --no-verify と git commit の -n を止める', () => {
+  for (const cmd of [
+    'git commit --no-verify',
+    'git commit "--no-verify"',
+    'git commit --no-verify -m "msg"',
+    'git commit -m "msg" --no-verify',
+    'git push --no-verify',
+    'git rebase --no-verify',
+    'git merge --no-verify',
+    'git commit -n',
+    'git commit -nm "msg"',
+    'git commit -an',
+    'git commit -n -m "msg"',
+    'git -C /tmp/repo commit -n',
+    'sudo git commit --no-verify',
+    'git push --dry-run --no-verify',
+    'git push -n --no-verify',
+  ]) {
+    assert.equal(checkCommand(cmd).blocked, true, cmd);
+  }
+});
+
+test('送らない確認、件数指定、通常のコミットは止めない', () => {
+  for (const cmd of [
+    'git push -n',
+    'git push --dry-run',
+    'git push -n origin feature/example',
+    'git log -n 5',
+    'git commit -m "msg"',
+    'git commit -am "msg"',
+    'git commit -m "do not use --no-verify"',
+    'git commit -m "--no-verify"',
+    'git commit -m "use -n now"',
+    'git commit --amend -m "msg"',
+    // -u の引数 "no"。-n は --no-verify ではない
+    'git commit -uno',
+    // -m のメッセージが n。結合形 -nm とは別
+    'git commit -mn "msg"',
+    'git status',
+  ]) {
+    assert.equal(checkCommand(cmd).blocked, false, cmd);
+  }
+});
+
+test('core.hooksPath の上書きを止める', () => {
+  for (const cmd of [
+    'git -c core.hooksPath=/dev/null status',
+    'git -c core.hooksPath=/dev/null commit -m "x"',
+    'git -ccore.hooksPath=/tmp/none status',
+    'git -c core.hooksPath /dev/null status',
+    'git -c core.HOOKSPATH=/dev/null status',
+    'git config core.hooksPath /tmp/none',
+    'git config --global core.hooksPath /tmp/none',
+    'git config --add core.hooksPath /tmp/none',
+    'git config --unset core.hooksPath',
+    'sudo git -c core.hooksPath=/dev/null commit -m "x"',
+  ]) {
+    assert.equal(checkCommand(cmd).blocked, true, cmd);
+  }
+});
+
+test('core.hooksPath の読み取りと、別の設定は止めない', () => {
+  for (const cmd of [
+    'git config core.hooksPath',
+    'git config --get core.hooksPath',
+    'git config --local core.hooksPath',
+    'git config --show-origin --get core.hooksPath',
+    'git -c user.name=ada commit -m "msg"',
+    'git status',
+  ]) {
+    assert.equal(checkCommand(cmd).blocked, false, cmd);
+  }
+});
+
 test('Codex workerのログでも、範囲を絞る読み方は止めない', () => {
   for (const cmd of [
     'tail -n 50 a.codex.log',

@@ -24,6 +24,7 @@ MyTechPulse は、Qiita と Zenn から利用者の興味タグに合う記事�
 
 - `.env`、`server/.env`、`frontend/.env` を読まない。項目名は `.env.example`、`server/.env.example`、`frontend/.env.example` で確認する。
 - `git push --force`、`git reset --hard`、`git clean` など、履歴や作業内容を失う操作をしない。
+- `--no-verify` と `git commit -n`（`-nm` や `-an` の結合形も含む）でフックを飛ばさない。`core.hooksPath` を書き換えない（`git -c` での指定も、`git config` に値を書くことも禁止）。読み取りの `git config core.hooksPath` と、送らない確認の `git push -n` は使ってよい。
 - `main` へ直接 push しない。
 - PR の承認とマージをしない。最終判断は人間が行う。
 - DBボリュームを削除しない。停止だけなら `docker compose down` を使う。
