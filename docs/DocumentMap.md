@@ -12,6 +12,7 @@
 docs/
 ├── DocumentMap.md                        … このファイル
 ├── RequirementsSpecification.md          … 要件定義書
+├── automerge-runner.md                   … 判定OKのPRだけをboxからマージするスクリプトの置き方・起動・停止
 ├── superpowers/specs/                    … 変更前にレビューする詳細設計
 │   ├── 2026-09-10-user-feedback-design.md
 │   │                                       … 利用者フィードバック機能の設計
