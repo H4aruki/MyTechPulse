@@ -74,6 +74,24 @@ function renderCard(article: Article = makeArticle(), entry?: string) {
   return client
 }
 
+describe('ArticleCard のタグ', () => {
+  afterEach(() => cleanup())
+
+  test('空白の無い長いタグは、枠を超えないための印と全文の title を持つ', () => {
+    const tag = 'a'.repeat(40)
+    render(
+      <ul>
+        <ArticleCard article={makeArticle({ tags: [tag] })} onOpen={() => undefined} />
+      </ul>,
+    )
+
+    const pill = screen.getByText(tag)
+    expect(pill).toHaveClass('tag-wrap')
+    expect(pill).toHaveAttribute('title', tag)
+    expect(pill).toHaveTextContent(tag)
+  })
+})
+
 describe('ArticleCard の保存ボタン', () => {
   beforeEach(() => {
     vi.mocked(fetchSavedArticles)

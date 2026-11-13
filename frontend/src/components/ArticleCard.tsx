@@ -51,9 +51,10 @@ export function ArticleCard({ article, onOpen, saved = false, onToggleSave }: Ar
         className={`card-glass ring-focus flex h-full w-full cursor-pointer flex-col gap-3 p-5 text-left transition duration-300 hover:-translate-y-1${canSave ? ' pr-14' : ''}`}
       >
         <div className="flex items-start justify-between gap-2">
-          <ul className="flex min-w-0 flex-wrap gap-1.5">
+          <ul className="flex min-w-0 flex-wrap items-start gap-1.5">
+            {/* 長いタグは tag-wrap で折り返す。title は改行されても全文を出す */}
             {tags.map((tag) => (
-              <li key={tag} className="tag-pill text-accent-ink">
+              <li key={tag} className="tag-pill tag-wrap text-accent-ink" title={tag}>
                 {tag}
               </li>
             ))}

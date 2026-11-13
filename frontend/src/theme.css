@@ -85,6 +85,21 @@
     white-space: nowrap;
   }
 
+  /*
+   * ログイン後の記事カードのタグだけ、長い語を枠の中で折り返す。
+   * APIのタグには空白の無い長い英数字があり、上の nowrap のままだと
+   * 狭い画面で提供元のバッジやカードの外にはみ出す。
+   * トップページの見本は .tag-pill だけなので、今までどおり1行のまま。
+   * inline-flex のままだと中の文字が縮まず、折り返しが効かない。
+   */
+  .tag-pill.tag-wrap {
+    display: inline-block;
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
   .card-glass {
     background: var(--color-surface);
     border: 1px solid var(--color-line);
