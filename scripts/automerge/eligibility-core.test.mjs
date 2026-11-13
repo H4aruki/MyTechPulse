@@ -218,12 +218,12 @@ test("禁止の書き方: 削除行・文脈行は対象外", () => {
 });
 
 test("secret: 全ファイルを調べる（テスト・docsも）", () => {
-  const lines = ["AKIAABCDEFGHIJKLMNOP", "ghp_" + "a".repeat(36), "github_pat_" + "A".repeat(30), "-----BEGIN RSA PRIVATE KEY-----", "xoxb-1234567890-abc", "sk-" + "a".repeat(24)];
+  const lines = ["AKIA" + "ABCDEFGHIJKLMNOP", "ghp_" + "a".repeat(36), "github_pat_" + "A".repeat(30), "-----BEGIN RSA PRIVATE KEY-----", "xoxb-1234567890-abc", "sk-" + "a".repeat(24)];
   for (const l of lines) {
     const r = evaluate(base({ files: [withPatch("server/internal/feed/a_test.go", [`x := "${l}"`])] }), rules);
     assert.ok(rulesOf(r).includes("content.secret"), l);
   }
-  const r = evaluate(base({ files: [...base().files, withPatch("docs/a.md", ["AKIAABCDEFGHIJKLMNOP"])] }), rules);
+  const r = evaluate(base({ files: [...base().files, withPatch("docs/a.md", ["AKIA" + "ABCDEFGHIJKLMNOP"])] }), rules);
   assert.ok(rulesOf(r).includes("content.secret"));
 });
 

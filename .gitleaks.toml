@@ -42,3 +42,18 @@ id = "generic-api-key"
     [[rules.allowlists]]
     description = "履歴にだけ残る。同じリハーサル用の例をコメントに書いたもの（本番の値ではない）"
     paths = ['''(^|/)ops/make_synthetic_dump\.sh$''']
+
+    [[rules.allowlists]]
+    description = "自動マージ判定の秘密情報検出テストのダミー（本物の鍵ではない。履歴に残るため）"
+    paths = ['''(^|/)scripts/automerge/eligibility-core\.test\.mjs$''']
+    regexTarget = "match"
+    regexes = ['''AKIAABCDEFGHIJKLMNOP''']
+
+[[rules]]
+id = "aws-access-token"
+
+    [[rules.allowlists]]
+    description = "自動マージ判定の秘密情報検出テストのダミー（本物の鍵ではない。履歴に残るため）"
+    paths = ['''(^|/)scripts/automerge/eligibility-core\.test\.mjs$''']
+    regexTarget = "match"
+    regexes = ['''AKIAABCDEFGHIJKLMNOP''']
