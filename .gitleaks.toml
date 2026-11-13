@@ -1,0 +1,44 @@
+# gitleaks の設定。デフォルト規則はそのまま使い（useDefault = true）、
+# ダミーと分かっているものだけを、パスとルール（generic-api-key）で限定して許可する。
+# ルールの無効化や、ファイル全体を全ルールで許可することはしない。
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+    [[rules.allowlists]]
+    description = "レート制限テストのダミー password / body（本物の鍵ではない）"
+    paths = ['''(^|/)server/internal/app/limits_test\.go$''']
+
+    [[rules.allowlists]]
+    description = "認証ルート試験のダミー signup/login body（本物の鍵ではない）"
+    paths = ['''(^|/)server/internal/app/auth_routes_test\.go$''']
+
+    [[rules.allowlists]]
+    description = "試験用のダミー secretToken（本物の鍵ではない）"
+    paths = ['''(^|/)server/internal/articlefetch/job_http_test\.go$''']
+
+    [[rules.allowlists]]
+    description = "ハンドラ試験のダミー signup/login body と password（本物の鍵ではない）"
+    paths = ['''(^|/)server/internal/auth/handler_test\.go$''']
+
+    [[rules.allowlists]]
+    description = "セキュリティ試験のダミー login JSON（本物の鍵ではない）"
+    paths = ['''(^|/)server/internal/auth/security_test\.go$''']
+
+    [[rules.allowlists]]
+    description = "ポリシー試験のダミー Password（本物の鍵ではない）"
+    paths = ['''(^|/)server/internal/auth/policy_limiter_test\.go$''']
+
+    [[rules.allowlists]]
+    description = "パスキー試験のダミー loginPassword など（本物の鍵ではない）"
+    paths = ['''(^|/)server/internal/passkey/login_test\.go$''']
+
+    [[rules.allowlists]]
+    description = "履歴にだけ残る。リハーサル用の例 MTP_REHEARSAL_EXISTING_PASSWORD（本番の値ではない）"
+    paths = ['''(^|/)docs/deploy/go-migration-rehearsal\.md$''']
+
+    [[rules.allowlists]]
+    description = "履歴にだけ残る。同じリハーサル用の例をコメントに書いたもの（本番の値ではない）"
+    paths = ['''(^|/)ops/make_synthetic_dump\.sh$''']
