@@ -66,3 +66,5 @@ dry-run の表は、PRごとのクラス・対象か・当たったルールid�
 ## 毎週の見直し
 
 毎週、dry-run の結果と実際のPRを見て、しきい値（`limits` など）が厳しすぎないか、緩すぎないかを見直します。
+
+実行側（マージする仕組み）は [automerge-runner.md](automerge-runner.md) を参照します。
