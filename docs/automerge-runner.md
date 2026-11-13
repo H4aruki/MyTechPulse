@@ -37,6 +37,8 @@ nohup scripts/automerge/automerge.sh <PR番号> >/dev/null 2>&1 &
 
 main の最後に終わった CI が成功でなければ、「保留（mainが赤）」とコメントして終わります。壊れた main に重ねないためです。走っているデプロイは打ち切られないので、既定では待ちません（`mergeGuards.blockWhileMainDeployRunning` を `true` にすると待ちます）。
 
+マージの直前に `gh api repos/<repo>/rules/branches/main` を読み、`pull_request` か `required_status_checks` の規則が1つ以上あるときだけ進みます。取れない・空なら「保留（mainの保護を確認できない）」でマージしません。
+
 ## 結果の見方
 
 - PRのコメントを1つだけ、毎回上書きします（先頭に `<!-- automerge-eligibility -->`）。

@@ -17,7 +17,7 @@ case "$1 $2" in
   "pr checks") ;;
   "run list") [ -z "${FAKE_RUN_FAIL:-}" ] || exit 1; if [ -n "${FAKE_RUNS:-}" ]; then echo "$FAKE_RUNS"; else echo '[{"status":"completed","conclusion":"success"}]'; fi ;;
   "pr view") [ -z "${FAKE_PRVIEW_FAIL:-}" ] || exit 1; echo "${FAKE_HEAD_SHA:-abc123}" ;;
-  "api "*|"api") case "$*" in *"-X "*) ;; *) echo "${FAKE_COMMENT_ID:-}" ;; esac ;;
+  "api "*|"api") case "$*" in *rules/branches*) [ -z "${FAKE_PROT_FAIL:-}" ] || exit 1; d='[{"type":"pull_request"}]'; echo "${FAKE_PROT:-$d}" ;; *"-X "*) ;; *) echo "${FAKE_COMMENT_ID:-}" ;; esac ;;
 esac
 exit 0
 F
@@ -25,7 +25,7 @@ F
 cat > "$T/elig" <<'F'
 #!/usr/bin/env bash
 case "$*" in
-  *--json*) [ -z "${FAKE_ELIG_EC:-}" ] || exit "$FAKE_ELIG_EC"; echo "{\"eligible\":${FAKE_ELIGIBLE:-true},\"class\":\"docs\",\"failures\":[],\"headSha\":\"abc123\"}" ;;
+  *--json*) printf 'elig %s\n' "$*" >> "$FAKE_CALLS"; [ -z "${FAKE_ELIG_EC:-}" ] || exit "$FAKE_ELIG_EC"; echo "{\"eligible\":${FAKE_ELIGIBLE:-true},\"class\":\"docs\",\"failures\":[],\"headSha\":\"abc123\"}" ;;
   *--render-comment*) # 本物と同じく、本文はマーカーで始まり、「マージ:」の行は渡された文言の1つだけ
     a="$*"; printf '<!-- automerge-eligibility -->\n## 自動マージの判定: fake\n\n%s\n' "${a##*--merge-status }" ;;
   *) echo "## 自動マージの判定: fake" ;;
@@ -85,6 +85,17 @@ printf '{"mergeGuards":{"blackoutWindowsJst":[["xx","yy"]]}}' > "$T/bad.json"
 run 時間帯の確認失敗 AUTOMERGE_ENABLED=true AUTOMERGE_RULES="$T/bad.json"
 expect "時間帯の確認失敗: マージしない" 'pr merge' 0
 grep -q '時間帯の確認に失敗' "$T/calls" || { echo "NG: 確認失敗の文言なし"; fail=1; }
+
+run 保護あり AUTOMERGE_ENABLED=true 'FAKE_PROT=[{"type":"required_status_checks"}]'
+expect "mainの保護あり: マージする" 'pr merge' 1
+run 保護なし AUTOMERGE_ENABLED=true 'FAKE_PROT=[]'
+expect "mainの保護なし: マージしない" 'pr merge' 0
+grep -q 'mainの保護を確認できない' "$T/calls" || { echo "NG: 保護の保留文言なし"; fail=1; }
+run 保護取得失敗 AUTOMERGE_ENABLED=true FAKE_PROT_FAIL=1
+expect "保護の取得失敗: マージしない" 'pr merge' 0
+
+run 判定にrules AUTOMERGE_ENABLED=true AUTOMERGE_RULES="$T/bad.json"
+expect "選んだルールを判定にも渡す" "elig --pr 7 --rules $T/bad.json --json" 1
 
 run run一覧の失敗 AUTOMERGE_ENABLED=true FAKE_RUN_FAIL=1
 expect "gh run list 失敗: マージしない" 'pr merge' 0
