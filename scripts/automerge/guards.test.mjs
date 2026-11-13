@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inBlackout, secondsUntilEnd } from "./guards.mjs";
 
@@ -60,4 +60,8 @@ test("CLI: 終了コードとルールファイル", () => {
   writeFileSync(f, JSON.stringify({ mergeGuards: { blackoutWindowsJst: [["09:00", "09:10"]] } }));
   assert.equal(run("in-blackout", "--now", "09:05", "--rules", f).status, 0);
   assert.equal(run("in-blackout", "--now", "05:30", "--rules", f).status, 1);
+  // 設定エラーは 2（0=窓の中、1=窓の外のどちらでもない）。呼び出し側はマージを保留にする
+  writeFileSync(f, JSON.stringify({ mergeGuards: { blackoutWindowsJst: [["xx", "yy"]] } }));
+  assert.equal(run("in-blackout", "--now", "05:30", "--rules", f).status, 2);
+  assert.equal(run("in-blackout", "--now", "05:30", "--rules", join(dirname(f), "none.json")).status, 2);
 });

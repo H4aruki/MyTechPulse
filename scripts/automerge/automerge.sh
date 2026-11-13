@@ -46,8 +46,14 @@ RULES=""
 if [ -n "${AUTOMERGE_ELIGIBILITY_CMD:-}" ]; then
   ELIG_CMD="$AUTOMERGE_ELIGIBILITY_CMD"
 else
-  git -C "$HOME_DIR" fetch -q origin main
-  git -C "$HOME_DIR" archive origin/main scripts/automerge .github/automerge-rules.json | tar -x -C "$WORK"
+  # 判定のPRが main に入る前は、判定スクリプトもルールも無い。取り出せなければ、何もせず終了コード3で終わる。
+  if ! { git -C "$HOME_DIR" fetch -q origin main \
+    && git -C "$HOME_DIR" archive origin/main scripts/automerge .github/automerge-rules.json | tar -x -C "$WORK" \
+    && [ -f "$WORK/scripts/automerge/eligibility.mjs" ]; }; then
+    log "判定不能" no "判定スクリプトが main に無い（先に判定のPRをマージする）"
+    echo "判定スクリプトが main に無い（先に判定のPRをマージする）" >&2
+    exit 3
+  fi
   ELIG_CMD="node $WORK/scripts/automerge/eligibility.mjs"
   [ -f "$WORK/scripts/automerge/guards.mjs" ] && GUARDS="$WORK/scripts/automerge/guards.mjs"
 fi
@@ -73,7 +79,8 @@ windows_file() { # 窓の一覧を持つファイルを返す（無ければ既�
 }
 
 upsert_comment() { # 本文
-  local body="$MARKER"$'\n'"$1" id
+  local body="$1" id
+  case "$body" in "$MARKER"*) ;; *) body="$MARKER"$'\n'"$body" ;; esac # 本文が既にマーカーで始まるなら足さない
   id="$(gh api "repos/$REPO/issues/$PR/comments?per_page=100" --paginate \
     --jq "[.[] | select(.body | startswith(\"$MARKER\")) | .id][0] // empty" | sed -n 1p)"
   if [ -n "$id" ]; then
@@ -86,16 +93,17 @@ upsert_comment() { # 本文
 # 1回分の判定とマージ。リポジトリ全体のロックの中で動かす。
 # 終了コード: 0=終わり / 10=時間帯のため保留（待ってやり直す。窓の終わりまでの秒数を $WORK/hold に書く）
 round() { # 何回目か(0,1)
-  local attempt="$1" json ec=0 eligible class fails md status verdict merged=no
+  local attempt="$1" json ec=0 eligible class status verdict merged=no jf="$WORK/elig.json" md
   json="$($ELIG_CMD --pr "$PR" --json)" || ec=$?
   if [ "$ec" -gt 1 ] || ! echo "$json" | jq -e . >/dev/null 2>&1; then
     log "判定エラー" no "判定スクリプトが失敗（終了コード $ec）"
+    upsert_comment "判定できなかった（取得失敗）。マージはしていません。" || true
     return 0
   fi
+  echo "$json" > "$jf"
   eligible="$(echo "$json" | jq -r '.eligible')"
   class="$(echo "$json" | jq -r '.class // "-"')"
   SHA="$(echo "$json" | jq -r '.headSha // ""')"
-  md="$($ELIG_CMD --pr "$PR" --comment-markdown)" || true
   verdict="対象外"; [ "$eligible" = true ] && verdict="対象($class)"
 
   local hold=0
@@ -104,34 +112,46 @@ round() { # 何回目か(0,1)
   elif [ "${AUTOMERGE_ENABLED:-false}" != true ]; then
     status="マージ: 停止中（AUTOMERGE_ENABLED=false、コメントだけ）"
   else
-    local now secs
+    local now secs bec=0
     now="$(now_jst)"
-    if node "$GUARDS" in-blackout --now "$now" --rules "$(windows_file)"; then
-      secs="$(node "$GUARDS" seconds-until-end --now "$now" --rules "$(windows_file)")"
-      if [ "$attempt" -eq 0 ]; then
-        status="マージ: 保留（取得・バックアップの時間帯。あと約$((secs / 60))分で再判定します）"
-        echo "$((secs + 60))" > "$WORK/hold"
-        hold=1
-      else
-        status="マージ: 保留（再判定でも時間帯の中でした。今回は終了します）"
-      fi
+    node "$GUARDS" in-blackout --now "$now" --rules "$(windows_file)" || bec=$?
+    if [ "$bec" -gt 1 ]; then
+      # 0=窓の中、1=窓の外。それ以外は設定エラーなどで、確かめられないのでマージしない
+      status="マージ: 保留（時間帯の確認に失敗）"
+    elif [ "$bec" -eq 0 ]; then
+      secs="$(node "$GUARDS" seconds-until-end --now "$now" --rules "$(windows_file)")" || secs=""
+      case "$secs" in
+        '' | *[!0-9]*) status="マージ: 保留（時間帯の確認に失敗）" ;;
+        *)
+          if [ "$attempt" -eq 0 ]; then
+            status="マージ: 保留（取得・バックアップの時間帯。あと約$((secs / 60))分で再判定します）"
+            echo "$((secs + 60))" > "$WORK/hold"
+            hold=1
+          else
+            status="マージ: 保留（再判定でも時間帯の中でした。今回は終了します）"
+          fi
+          ;;
+      esac
     else
-      local runs latest running=false
-      runs="$(gh run list --workflow ci.yml --branch main --event push -L 5 --json status,conclusion)"
-      latest="$(echo "$runs" | jq -r '[.[] | select(.status == "completed")][0].conclusion // "none"')"
-      if [ "$(rule_get '.mergeGuards.blockWhileMainDeployRunning')" = true ] \
-        && [ "$(echo "$runs" | jq '[.[] | select(.status != "completed")] | length')" -gt 0 ]; then
-        running=true
-      fi
-      if [ "$running" = true ]; then
-        status="マージ: 保留（mainの検査が実行中）"
-      elif [ "$latest" != success ]; then
-        status="マージ: 保留（mainが赤）"
-        [ "$latest" = none ] && status="マージ: 保留（mainの検査結果が見つからない）"
+      # ここから先の gh は、失敗したら保留にして終わる（round は || の文脈で set -e が効かないため、自分で見る）
+      local runs latest running=false fresh
+      if ! runs="$(gh run list --workflow ci.yml --branch main --event push -L 5 --json status,conclusion)" \
+        || ! echo "$runs" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        status="マージ: 保留（mainの検査結果を取得できない）"
       else
-        local fresh
-        fresh="$(gh pr view "$PR" --json headRefOid -q .headRefOid)"
-        if [ -z "$SHA" ] || [ "$fresh" != "$SHA" ]; then
+        latest="$(echo "$runs" | jq -r '[.[] | select(.status == "completed")][0].conclusion // "none"')"
+        if [ "$(rule_get '.mergeGuards.blockWhileMainDeployRunning')" = true ] \
+          && [ "$(echo "$runs" | jq '[.[] | select(.status != "completed")] | length')" -gt 0 ]; then
+          running=true
+        fi
+        if [ "$running" = true ]; then
+          status="マージ: 保留（mainの検査が実行中）"
+        elif [ "$latest" != success ]; then
+          status="マージ: 保留（mainが赤）"
+          [ "$latest" = none ] && status="マージ: 保留（mainの検査結果が見つからない）"
+        elif ! fresh="$(gh pr view "$PR" --json headRefOid -q .headRefOid)" || [ -z "$fresh" ]; then
+          status="マージ: 保留（PRの最新コミットを確認できない）"
+        elif [ -z "$SHA" ] || [ "$fresh" != "$SHA" ]; then
           status="マージ: 保留（判定のあとにコミットが増えた）"
         elif gh pr merge "$PR" --squash --match-head-commit "$SHA" >/dev/null; then
           merged=yes
@@ -143,7 +163,10 @@ round() { # 何回目か(0,1)
       fi
     fi
   fi
-  upsert_comment "$md"$'\n\n'"$status"
+  # 判定は上の1回だけ。保存したJSONから、ネットワークを使わず本文を作る。
+  md="$($ELIG_CMD --render-comment "$jf" --merge-status "$status")" || md="判定の本文を作れなかった。
+$status"
+  upsert_comment "$md" || true
   log "$verdict" "$merged" "${status#マージ: }"
   [ "$hold" -eq 1 ] && return 10
   return 0
