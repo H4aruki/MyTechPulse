@@ -46,13 +46,17 @@ Caddy の 403 は、接続を一度受けてから拒否します。拒否の処
 
 ## 1. SSH が鍵だけでしか入れないことを確かめる
 
-サーバーへ入り、次を実行します。`sudo` が要ることがあります。
+サーバーへ入り、次を実行します。`sudo` が要ることがあります。`<CLIENT_ADDR>` は、別の端末から SSH してくるときの、その端末のアドレスです。`<CLIENT_HOST>` は、その端末の名前です。名前が無いときは、アドレスを入れてください。空白やカンマは含めません。どちらもサーバーのアドレスではありません。このコマンドの全文は共有しません。
 
 ```bash
-sudo sshd -T | grep -E 'passwordauthentication|permitrootlogin|pubkeyauthentication|kbdinteractiveauthentication|challengeresponseauthentication'
+sudo sshd -T -C user=ubuntu,host=<CLIENT_HOST>,addr=<CLIENT_ADDR> | grep -E 'passwordauthentication|permitrootlogin|pubkeyauthentication|kbdinteractiveauthentication|challengeresponseauthentication'
 ```
 
-`sshd -T` は、いま効いている値を小文字で出します。狙いと読み方は次のとおりです。
+`sshd -T` は、いまの条件で効いている値を、小文字で、項目ごとに1行出します。`-C` の `user` はログインする利用者、`host` は接続元の名前、`addr` は接続元のアドレスです。`-C` を付けないと、`Match` は評価されません。利用者や接続元で変わる設定は、その出力には入りません。
+
+grep の行が複数なのは、パスワードや root や鍵のように、見ている項目が複数だからです。各項目の値は1行です。`Match` の値が、同じ項目を複数行に分けて出ることはありません。同じ項目が2行以上出たとき、または grep が何も出さないときは、結果が読めません。ファイアウォールへ進みません。
+
+狙いと読み方は次のとおりです。
 
 | 表示 | 狙い | 違うとき |
 | --- | --- | --- |
@@ -62,24 +66,60 @@ sudo sshd -T | grep -E 'passwordauthentication|permitrootlogin|pubkeyauthenticat
 | `permitrootlogin no` | root では入れない | `yes` は root で入れる。`prohibit-password` と `without-password` は、root のパスワードだけを止める値で、このサーバーの狙い（root では入れない）とは違う |
 | `pubkeyauthentication yes` | 鍵では入れる | `no` なら鍵で入れない。ファイアウォールを変えない |
 
-行が複数出るときは、`Match` で条件が分かれています。ログインに使う `ubuntu` に効く値を見ます。grep が何も出さないときは、コマンドが失敗しています。ファイアウォールへ進みません。
+狙いと違うときは、セットアップスクリプト全体は本番でやり直しません（Docker や fail2ban も触るため）。SSH のドロップインだけを直します。中身は [ops/lightsail-vm-setup.sh](../../ops/lightsail-vm-setup.sh) と同じ次の3行で、置き場所は `/etc/ssh/sshd_config.d/99-mytechpulse-hardening.conf` です。
 
-狙いと違うときは、セットアップスクリプト全体は本番でやり直しません（Docker や fail2ban も触るため）。SSH のドロップインだけを、[ops/lightsail-vm-setup.sh](../../ops/lightsail-vm-setup.sh) と同じ次の内容にします。
+sshd は、同じ項目を最初に読んだ値だけを使います。後の行は、その項目を上書きしません。`/etc/ssh/sshd_config.d/` のファイルは、名前の辞書順で読まれます。`50-cloud-init.conf` は `99-mytechpulse-hardening.conf` より前です。`50-cloud-init.conf` に `PasswordAuthentication yes` があると、使われるのはその `yes` で、99 の `no` は使われません。`100-` で始まる名前も、辞書順では `99-` より前です。`sshd_config` 本体では、`Include` より前の行がドロップインより先です。`Include` より後の行は、ドロップインがすでにその項目を持っていれば使われません。
 
+ファイルを変える前に、いまの設定をサーバー上へコピーします。リポジトリへは置きません。次のコマンドが出すパスが `<BACKUP_DIR>` です。あとのコマンドでは、そのパスを引用符の中へ入れます。
+
+```bash
+stamp=$(date +%Y%m%d%H%M%S)
+sudo mkdir -p "/var/backups/ssh-hardening-$stamp"
+sudo cp -a /etc/ssh/sshd_config "/var/backups/ssh-hardening-$stamp/sshd_config"
+sudo cp -a /etc/ssh/sshd_config.d "/var/backups/ssh-hardening-$stamp/sshd_config.d"
+echo "/var/backups/ssh-hardening-$stamp"
 ```
+
+`sshd_config.d` がまだ無いときは、2つ目の `cp` は失敗します。そのときは本体だけ控え、ディレクトリを作ってからドロップインを置きます。戻すときも、`sshd_config.d` のバックアップが無いなら `sshd_config` だけを戻し、今回作った `99-mytechpulse-hardening.conf` を消します。
+
+次に、99 のファイルより先に読まれる場所へ、コメントでない `yes` が無いか見ます。ドロップインの並びは、名前の辞書順です。
+
+```bash
+sudo grep -nH -E '^[[:space:]]*Include[[:space:]]+' /etc/ssh/sshd_config
+sudo sh -c 'ls -1 /etc/ssh/sshd_config.d/*.conf 2>/dev/null | LC_ALL=C sort'
+sudo grep -nH -E '^[[:space:]]*(PasswordAuthentication|KbdInteractiveAuthentication|ChallengeResponseAuthentication|PermitRootLogin)[[:space:]]+' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf
+```
+
+`sshd_config.d` が無いときは、最後の grep からそのパスを外して、`sshd_config` だけを見ます。
+
+`99-mytechpulse-hardening.conf` より前のファイル、または `sshd_config` の `Include` より前に、`PasswordAuthentication yes` があるときは、99 の `no` は効きません。バックアップのあと、その `yes` を `no` に変えるか、行頭に `#` を付けて無効にします。`KbdInteractiveAuthentication` と `PermitRootLogin` も、先に読まれる行が `yes` なら同じです。直したあと、同じ grep で、先に読まれる `yes` が残っていないことを見ます。`50-cloud-init.conf` は、Ubuntu の cloud-init が置くファイルです。
+
+そのあとで、99 のファイルを置きます。反映の前に構文を確かめます。いまの接続は閉じません。
+
+```bash
+sudo install -m 0755 -d /etc/ssh/sshd_config.d
+sudo tee /etc/ssh/sshd_config.d/99-mytechpulse-hardening.conf >/dev/null <<'EOF'
 # MyTechPulse: 本番VMのSSH硬化設定（ops/lightsail-vm-setup.sh が生成）
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
-```
-
-置き場所は `/etc/ssh/sshd_config.d/99-mytechpulse-hardening.conf` です。反映の前に構文を確かめ、失敗したらファイルを戻します。いまの接続は閉じません。
-
-```bash
+EOF
 sudo sshd -t && sudo systemctl try-reload-or-restart ssh
 ```
 
-`sshd -t` が失敗したときは、reload しません。
+`sshd -t` が失敗したときは、reload しません。動いている sshd は、まだ古い設定です。バックアップから戻し、バックアップに無かった `99-mytechpulse-hardening.conf` だけ消します。戻したあと `sudo sshd -t` が成功することを見ます。
+
+```bash
+sudo cp -a "<BACKUP_DIR>/sshd_config" /etc/ssh/sshd_config
+sudo mkdir -p /etc/ssh/sshd_config.d
+sudo cp -a "<BACKUP_DIR>/sshd_config.d/." /etc/ssh/sshd_config.d/
+if [ ! -f "<BACKUP_DIR>/sshd_config.d/99-mytechpulse-hardening.conf" ]; then
+  sudo rm -f /etc/ssh/sshd_config.d/99-mytechpulse-hardening.conf
+fi
+sudo sshd -t
+```
+
+reload できたあとは、この章の最初と同じ `-C` 付きの `sshd -T` をもう一度実行します。表の狙いと一致するまで、ファイアウォールへ進みません。`passwordauthentication yes` のままなら、先に読まれる `yes` が残っています。99 のファイルを足しただけでは変わりません。
 
 ファイアウォールを変える前に、別の端末で次の2つを実行します。引用符の中の `<ORIGIN_IP>` だけを、手元の静的 IP に置き換えます。山かっこを引用符の外に置くと、シェルがリダイレクトとして読みます。アドレスは履歴に残るので、このコマンドの全文は共有しません。
 
@@ -97,7 +137,7 @@ ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o NumberOfP
 
 ## 2. Cloudflare の範囲を Caddy と揃える
 
-範囲の取り方は [scripts/update-cloudflare-ips.mjs](../../scripts/update-cloudflare-ips.mjs) と同じです。取得元は `https://api.cloudflare.com/client/v4/ips` の `result.ipv4_cidrs` と `result.ipv6_cidrs` です。Caddy は、この一覧を [ops/caddy/cloudflare-ips.caddy](../../ops/caddy/cloudflare-ips.caddy) と [ops/caddy/cloudflare-trusted-proxies.caddy](../../ops/caddy/cloudflare-trusted-proxies.caddy) に書いて使います。ファイアウォールも、この2ファイルと同じ一覧にします。ブラウザの別一覧と数が違ったら、こちらの `--check` が成功する方へ合わせます。
+範囲の取り方は [scripts/update-cloudflare-ips.mjs](../../scripts/update-cloudflare-ips.mjs) と同じです。`fetchIps` は export されていて、生成物の書き換えは `process.argv[1]` が `fileURLToPath(import.meta.url)` と一致する直接実行のときだけ動き、import しても書き換わらない。取得元は `https://api.cloudflare.com/client/v4/ips` の `result.ipv4_cidrs` と `result.ipv6_cidrs` です。Caddy は、この一覧を [ops/caddy/cloudflare-ips.caddy](../../ops/caddy/cloudflare-ips.caddy) と [ops/caddy/cloudflare-trusted-proxies.caddy](../../ops/caddy/cloudflare-trusted-proxies.caddy) に書いて使います。ファイアウォールも、この2ファイルと同じ一覧にします。ブラウザの別一覧と数が違ったら、こちらの `--check` が成功する方へ合わせます。
 
 リポジトリのルートで実行します。
 
@@ -149,7 +189,7 @@ IPv4 と IPv6 は別のファイアウォールです。IPv6 の欄が無いイ�
 
 1. SSH（TCP 22）の行は、編集しない。消さない。「Allow Lightsail browser SSH」のチェックも変えない。
 2. IPv4 の HTTP（TCP 80）を編集し、**Restrict to IP address** にする。送信元を、2章の IPv4 範囲だけにする。HTTPS（TCP 443）も同じ範囲にする。
-3. 同じポートに「すべてのアドレス」のルールが残っていないことを見る。AWS の説明では、同じポートに複数のルールがあると、より広い方が使われます。すべてのアドレスが残っていると、範囲を足しても誰でも届きます。
+3. 同じポートに「すべてのアドレス」のルールが残っていないことを見る。AWS の説明では、同じポートに複数のルールがあると、より広い方が使われます。すべてのアドレスが残っていると、範囲を足しても誰でも届きます。TCP 以外も見ます。UDP の 443（HTTP/3。[docker-compose.yml](../../docker-compose.yml) は `443/udp` を公開しています）や、プロトコル `all` で 80 または 443 を含む行が、すべてのアドレスのままだと、TCP だけを絞っても届きます。その行も、Cloudflare の範囲だけにするか、外します。
 4. IPv6 を有効にしているなら、IPv6 ファイアウォールの 80 と 443 も、2章の IPv6 範囲だけにする。22番は変えない。
 
 AWS の案内（2026-11-13 に確認した [ファイアウォールの説明](https://docs.aws.amazon.com/lightsail/latest/userguide/understanding-firewall-and-port-mappings-in-amazon-lightsail.html)）では、コンソールは一度に送信元 30 件まで、API・CLI・SDK は IPv4 と IPv6 でそれぞれ 60 件までです。ポートごとに送信元を 1 件と数えると、IPv4 は「範囲の件数 × 2（80 と 443）」です。15 件なら 30 件で、コンソールの上限と同じ数になり、SSH の分を足すと超えます。コンソールが保存を拒んだら、保存されていない状態で止めます。22番を消して枠を空けません。4章の CLI へ移ります。
@@ -175,7 +215,16 @@ aws lightsail get-instance-port-states \
 
 ### 4-2. 置き換え用の JSON を作る
 
-リポジトリのルートで実行します。出力先は `/tmp` だけです。スクリプトは、22番が 1 件で無いとき、出力先がリポジトリの中のとき、インスタンス名に山かっこが残っているとき、80/443 が全世界のままのとき、送信元が 60 件を超えるときは、ファイルを書かずに終了コード 2 で止まります。
+リポジトリのルートで実行します。出力先は `/tmp` だけです。スクリプトは、次のときにファイルを書かず、終了コード 2 で止まります。
+
+- 22番の TCP が 1 件ではない
+- 出力先がリポジトリの中である
+- インスタンス名に山かっこが残っている
+- 差し替え後の TCP 80 または TCP 443 に、`0.0.0.0/0` または `::/0` が残っている
+- 残すルールに、80番または443番を含む範囲で、プロトコルが tcp 以外（`all` や `udp`。Caddy の HTTP/3 用の UDP 443 など）かつ `0.0.0.0/0` または `::/0` の行がある
+- 送信元が 60 件を超える
+
+TCP の 80 と 443 が全世界へ開いていても、そのことだけでは止まりません。22番の TCP が 1 件あれば、その 80/443 は Cloudflare の範囲へ差し替えます。全世界を理由に止まるのは、差し替えたあとの TCP 80/443 に全世界が残るときと、残すルールが tcp 以外で 80 または 443 を全世界へ開いたままのときです。tcp 以外のその行は、スクリプトは消しません。止まったら `put-instance-public-ports` は実行しません。UDP 443 を残すなら、TCP と同じ Cloudflare の範囲だけにしてから、4-1 の取得をやり直します。プロトコル `all` で全世界へ開いている行は、外すか、TCP と UDP に分けて Cloudflare の範囲だけにします。
 
 ```bash
 node --input-type=module - /tmp/lightsail-ports-before.json /tmp/lightsail-put.json "<INSTANCE_NAME>" <<'END_SCRIPT'
@@ -220,18 +269,33 @@ function protocolOf(p) {
   return String(p.protocol || "").toLowerCase();
 }
 
-function coversWeb(p) {
-  if (protocolOf(p) !== "tcp") return false;
+function hitsPort(p, port) {
   const from = Number(p.fromPort);
   const to = Number(p.toPort);
-  const hit = (port) => from <= port && port <= to;
-  return hit(80) || hit(443);
+  return from <= port && port <= to;
+}
+
+function hitsWeb(p) {
+  return hitsPort(p, 80) || hitsPort(p, 443);
+}
+
+function coversWeb(p) {
+  return protocolOf(p) === "tcp" && hitsWeb(p);
+}
+
+function openToWorld(p) {
+  const v4 = Array.isArray(p.cidrs) && p.cidrs.some((c) => c === "0.0.0.0/0");
+  const v6 = Array.isArray(p.ipv6Cidrs) && p.ipv6Cidrs.some((c) => c === "::/0");
+  return v4 || v6;
 }
 
 const keep = states.filter((p) => !coversWeb(p));
 const ssh = keep.filter((p) => protocolOf(p) === "tcp" && Number(p.fromPort) === 22 && Number(p.toPort) === 22);
 if (ssh.length !== 1) {
   fail("22番の TCP ルールが1件ではありません。80や443を含む広いルールしか無い可能性もあります。ファイルは書きません。");
+}
+if (keep.some((p) => protocolOf(p) !== "tcp" && hitsWeb(p) && openToWorld(p))) {
+  fail("残すルールに、80番または443番を含み、プロトコルが tcp 以外（all や udp）で、0.0.0.0/0 または ::/0 へ開いている行があります。このスクリプトはその行を消しません。ファイルは書きません。");
 }
 
 const cidrs = await fetchIps();
@@ -265,10 +329,8 @@ if (!portInfos.some((p) => p.protocol === "tcp" && p.fromPort === 22 && p.toPort
   fail("22番が結果から消えました。ファイルは書きません。");
 }
 for (const p of portInfos) {
-  if ((p.fromPort === 80 || p.fromPort === 443) && p.toPort === p.fromPort && p.protocol === "tcp") {
-    if ((p.cidrs || []).some((c) => c === "0.0.0.0/0") || (p.ipv6Cidrs || []).some((c) => c === "::/0")) {
-      fail("80/443 が全世界へ開いたままです。ファイルは書きません。");
-    }
+  if (p.protocol === "tcp" && (p.fromPort === 80 || p.fromPort === 443) && p.toPort === p.fromPort && openToWorld(p)) {
+    fail("差し替える TCP の 80番または443番に、0.0.0.0/0 または ::/0 が含まれています。ファイルは書きません。");
   }
 }
 
@@ -281,7 +343,7 @@ if (v4Sources > 60 || v6Sources > 60) {
 await writeFile(afterPath, JSON.stringify({ instanceName, portInfos }, null, 2) + "\n");
 console.log(`wrote ${afterPath}`);
 console.log(`kept_rules=${keep.length} ssh_rules=${ssh.length} v4=${v4.length} v6=${v6.length} ipv6_enabled=${ipv6Enabled} ipv4_sources=${v4Sources} ipv6_sources=${v6Sources}`);
-console.log("22番は残しています。80/443 だけを Cloudflare の範囲に差し替えました。このファイルはリポジトリに置かず、作業後に消してください。");
+console.log("22番は残しています。TCP の 80/443 だけを Cloudflare の範囲に差し替えました。tcp 以外で残したルールはそのままです。このファイルはリポジトリに置かず、作業後に消してください。");
 END_SCRIPT
 ```
 
@@ -294,22 +356,45 @@ python3 - <<'PY'
 import json
 data = json.load(open("/tmp/lightsail-put.json"))
 infos = data["portInfos"]
+def world(p):
+    v4 = any(c == "0.0.0.0/0" for c in (p.get("cidrs") or []))
+    v6 = any(c == "::/0" for c in (p.get("ipv6Cidrs") or []))
+    return v4 or v6
+
+def covers(p, port):
+    try:
+        return int(p["fromPort"]) <= port <= int(p["toPort"])
+    except (KeyError, TypeError, ValueError):
+        return False
+
+udp443_world = False
+all_web_world = False
 print("instance_name_set", bool(data.get("instanceName")))
 for p in infos:
-    web = p.get("protocol") == "tcp" and p.get("fromPort") in (80, 443) and p.get("toPort") == p.get("fromPort")
-    world = any(c == "0.0.0.0/0" for c in (p.get("cidrs") or []))
-    world6 = any(c == "::/0" for c in (p.get("ipv6Cidrs") or []))
+    proto = str(p.get("protocol") or "").lower()
+    w = world(p)
+    web = proto == "tcp" and p.get("fromPort") in (80, 443) and p.get("toPort") == p.get("fromPort")
+    udp443 = proto == "udp" and covers(p, 443)
+    all_web = proto == "all" and (covers(p, 80) or covers(p, 443))
+    udp443_world = udp443_world or (udp443 and w)
+    all_web_world = all_web_world or (all_web and w)
     print(
-        f"port={p.get('fromPort')} proto={p.get('protocol')} "
+        f"port={p.get('fromPort')}-{p.get('toPort')} proto={proto} "
         f"v4={len(p.get('cidrs') or [])} v6={len(p.get('ipv6Cidrs') or [])} "
-        f"web_open_to_world={(world or world6) if web else 'n/a'}"
+        f"web_open_to_world={w if web else 'n/a'} "
+        f"udp443_open_to_world={w if udp443 else 'n/a'} "
+        f"all_web_open_to_world={w if all_web else 'n/a'}"
     )
-ssh = [p for p in infos if p.get("protocol") == "tcp" and p.get("fromPort") == 22 and p.get("toPort") == 22]
+ssh = [p for p in infos if str(p.get("protocol") or "").lower() == "tcp" and p.get("fromPort") == 22 and p.get("toPort") == 22]
 print("ssh_rules", len(ssh))
+print("udp443_open_to_world", udp443_world)
+print("all_web_open_to_world", all_web_world)
 PY
 ```
 
-`ssh_rules` が 1、80 と 443 の `web_open_to_world` が `False` であること。違うときは `put-instance-public-ports` を実行しません。
+`ssh_rules` が 1 であること。80 と 443 の `web_open_to_world` が `False`、末尾の `udp443_open_to_world` と `all_web_open_to_world` が `False` であること。違うときは `put-instance-public-ports` を実行しません。
+
+`web_open_to_world` は、TCP の 80 または 443 がその1ポートで `0.0.0.0/0` または `::/0` を含むときだけ True です。`udp443_open_to_world` は、UDP で 443 を含む行が全世界のとき True です。`all_web_open_to_world` は、プロトコル `all` で 80 または 443 を含む行が全世界のとき True です。行ごとの表示が `n/a` なのは、その行が対象外であることです。末尾の2行は、対象の行が1つでも全世界なら True です。
 
 キー名は CLI の版で変わることがあります。送る前に、ローカルで次を実行し、`instanceName` と `portInfos` があることを見ます。このコマンドは AWS へ通信しません。
 
@@ -339,19 +424,41 @@ aws lightsail get-instance-port-states \
 python3 - <<'PY'
 import json
 d = json.load(open("/tmp/lightsail-ports-after.json"))
+
+def world(p):
+    v4 = any(c == "0.0.0.0/0" for c in (p.get("cidrs") or []))
+    v6 = any(c == "::/0" for c in (p.get("ipv6Cidrs") or []))
+    return v4 or v6
+
+def covers(p, port):
+    try:
+        return int(p["fromPort"]) <= port <= int(p["toPort"])
+    except (KeyError, TypeError, ValueError):
+        return False
+
+udp443_world = False
+all_web_world = False
 for p in d.get("portStates", []):
-    web = p.get("protocol") == "tcp" and p.get("fromPort") in (80, 443) and p.get("toPort") == p.get("fromPort")
-    world = any(c == "0.0.0.0/0" for c in (p.get("cidrs") or []))
-    world6 = any(c == "::/0" for c in (p.get("ipv6Cidrs") or []))
+    proto = str(p.get("protocol") or "").lower()
+    w = world(p)
+    web = proto == "tcp" and p.get("fromPort") in (80, 443) and p.get("toPort") == p.get("fromPort")
+    udp443 = proto == "udp" and covers(p, 443)
+    all_web = proto == "all" and (covers(p, 80) or covers(p, 443))
+    udp443_world = udp443_world or (udp443 and w)
+    all_web_world = all_web_world or (all_web and w)
     print(
-        f"port={p.get('fromPort')} proto={p.get('protocol')} state={p.get('state')} "
+        f"port={p.get('fromPort')}-{p.get('toPort')} proto={proto} state={p.get('state')} "
         f"v4={len(p.get('cidrs') or [])} v6={len(p.get('ipv6Cidrs') or [])} "
-        f"web_open_to_world={(world or world6) if web else 'n/a'}"
+        f"web_open_to_world={w if web else 'n/a'} "
+        f"udp443_open_to_world={w if udp443 else 'n/a'} "
+        f"all_web_open_to_world={w if all_web else 'n/a'}"
     )
+print("udp443_open_to_world", udp443_world)
+print("all_web_open_to_world", all_web_world)
 PY
 ```
 
-22番が `open`、80 と 443 の `web_open_to_world` が `False` であること。80番（と 443番）の `v4` が 2章の IPv4 の件数と一致すること。行が分かれているときは、そのポートの `v4` を足した数が一致すればよいです。
+22番が `open`、80 と 443 の `web_open_to_world` が `False`、末尾の `udp443_open_to_world` と `all_web_open_to_world` が `False` であること。見方は 4-2 と同じです。80番（と 443番）の `v4` が 2章の IPv4 の件数と一致すること。行が分かれているときは、そのポートの `v4` を足した数が一致すればよいです。
 
 別の端末で、鍵の SSH がまだ入れることを確かめます。入れないときは、コンソールで 22番を開け、保存した `/tmp/lightsail-ports-before.json` をそのまま `--cli-input-json` に渡して戻そうとしないでください（`portStates` と `state` があり、送る形と違います）。80/443 の戻し方は、末尾の「戻し方」です。
 
@@ -398,6 +505,27 @@ curl -sS -o /dev/null -w 'http_code=%{http_code}\n' --max-time 15 \
 nc -vz -w 5 "<ORIGIN_IP>" 443
 ```
 
+この `nc` は TCP です。UDP 443 とプロトコル `all` は、ここでは見ていません。
+
+直接（UDP 443）。Caddy は HTTP/3 のために UDP の 443 を待っています（[docker-compose.yml](../../docker-compose.yml) の `443:443/udp`）。`--http3-only` は TCP へ戻りません。UDP 443 だけを見ます。
+
+```bash
+curl --version | grep -i http3 || echo "curl_http3=no"
+curl -sS -o /dev/null -w 'http_code=%{http_code}\n' --http3-only --max-time 15 \
+  --resolve "api.mytechpulse.net:443:<ORIGIN_IP>" \
+  https://api.mytechpulse.net/health/live || echo "exit:$?"
+```
+
+| 結果 | 意味 |
+| --- | --- |
+| `curl_http3=no`、または `--http3-only` を知らない | この curl では UDP 443 を見ていません。4-3 の `udp443_open_to_world` が False であることを見ます |
+| `http_code=403` または `200` | UDP 443 がサーバーまで届いている。ファイアウォールはまだ開いている。ここで止め、ルールを見直す |
+| `exit:28` かつ `http_code=000` | 時間内に HTTP/3 の応答が無い。4-3 の `udp443_open_to_world` も False であること。タイムアウトだけでは、ファイアウォールが捨てたことと、Caddy が UDP で答えていないことの区別はつきません |
+
+`nc -u` は使いません。UDP は、応答が無くても開いているように見えることがあります。
+
+プロトコル `all` は、外からその名前では指定できません。`all` は TCP と UDP の両方を含みます。この章の TCP の curl と、上の UDP 443 がどちらもサーバーまで届かないこと、および 4-3 の `all_web_open_to_world` が False であることを見ます。curl が HTTP/3 に未対応のときは、TCP がタイムアウトすることと、4-3 の `all_web_open_to_world` が False であることを見ます。`all` で 80 または 443 が全世界へ開いていると、TCP の curl はタイムアウトせず、403 や 200 になります。
+
 Cloudflare 経由。`--resolve` は付けません。`/health/live` はプロセスの生存、`/health/ready` は DB までです。自動デプロイが見るのは `/health/ready` です。
 
 ```bash
@@ -409,7 +537,7 @@ curl -sS -o /dev/null -w 'ready=%{http_code}\n' --max-time 15 \
 
 両方 200 であること。live が 200 で ready が 503 のときは、入口は通っていて DB が応答していません。ファイアウォールを全世界へ戻す理由にはなりません。
 
-IPv6 を有効にしているときだけ、直接の IPv6 もタイムアウトになることを見ます。引用符の中の `<ORIGIN_IPV6>` だけをアドレスに置き換え、アドレスを囲む `[` `]` は残します。
+IPv6 を有効にしているときだけ、直接の IPv6 もタイムアウトになることを見ます。引用符の中の `<ORIGIN_IPV6>` だけをアドレスに置き換え、アドレスを囲む `[` `]` は残します。IPv6 の UDP 443 とプロトコル `all` は、4-3 の `udp443_open_to_world` と `all_web_open_to_world` が False であること（`::/0` が付いていないこと）も見ます。
 
 ```bash
 curl -sS -g -o /dev/null -w 'http_code=%{http_code}\n' --max-time 15 \
@@ -556,7 +684,7 @@ Issue #251 に、次をコピーして埋めます。アドレス、ルールの
 - 実施した人:
 
 ### SSH
-- `sudo sshd -T` の passwordauthentication:
+- `sudo sshd -T -C`（user=ubuntu と接続元。アドレスは書かない）の passwordauthentication:
 - kbdinteractiveauthentication（出なければ「行なし」）:
 - permitrootlogin:
 - pubkeyauthentication:
@@ -570,6 +698,8 @@ Issue #251 に、次をコピーして埋めます。アドレス、ルールの
 - 80/443 をその範囲だけにした:
 - 22番は変更していない:
 - 直接（curl --resolve）の 443 と 80: タイムアウト（exit 28）/ それ以外（コードだけ。アドレスは書かない）
+- 直接の UDP 443（curl --http3-only）: タイムアウト / 届いた / curl が HTTP/3 に未対応
+- `udp443_open_to_world` と `all_web_open_to_world` が False:
 - Cloudflare 経由の /health/live と /health/ready:
 
 ### 固定 IP
