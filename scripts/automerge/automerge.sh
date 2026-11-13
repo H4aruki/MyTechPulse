@@ -94,7 +94,7 @@ upsert_comment() { # 本文
 # 終了コード: 0=終わり / 10=時間帯のため保留（待ってやり直す。窓の終わりまでの秒数を $WORK/hold に書く）
 round() { # 何回目か(0,1)
   local attempt="$1" json ec=0 eligible class status verdict merged=no jf="$WORK/elig.json" md
-  json="$($ELIG_CMD --pr "$PR" --json)" || ec=$?
+  json="$($ELIG_CMD --pr "$PR" ${RULES:+--rules "$RULES"} --json)" || ec=$?
   if [ "$ec" -gt 1 ] || ! echo "$json" | jq -e . >/dev/null 2>&1; then
     log "判定エラー" no "判定スクリプトが失敗（終了コード $ec）"
     upsert_comment "判定できなかった（取得失敗）。マージはしていません。" || true
@@ -134,7 +134,7 @@ round() { # 何回目か(0,1)
       esac
     else
       # ここから先の gh は、失敗したら保留にして終わる（round は || の文脈で set -e が効かないため、自分で見る）
-      local runs latest running=false fresh
+      local runs latest running=false fresh prot
       if ! runs="$(gh run list --workflow ci.yml --branch main --event push -L 5 --json status,conclusion)" \
         || ! echo "$runs" | jq -e 'type == "array"' >/dev/null 2>&1; then
         status="マージ: 保留（mainの検査結果を取得できない）"
@@ -153,6 +153,9 @@ round() { # 何回目か(0,1)
           status="マージ: 保留（PRの最新コミットを確認できない）"
         elif [ -z "$SHA" ] || [ "$fresh" != "$SHA" ]; then
           status="マージ: 保留（判定のあとにコミットが増えた）"
+        elif ! prot="$(gh api "repos/$REPO/rules/branches/main")" \
+          || [ "$(echo "$prot" | jq '[.[]? | select(.type == "pull_request" or .type == "required_status_checks")] | length' 2>/dev/null || echo 0)" -lt 1 ]; then
+          status="マージ: 保留（mainの保護を確認できない）"
         elif gh pr merge "$PR" --squash --match-head-commit "$SHA" >/dev/null; then
           merged=yes
           status="マージ: した"
