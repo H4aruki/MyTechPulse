@@ -25,7 +25,7 @@ function failureMessage({ save, error }: Failure, location: Location): ReactNode
         <Link
           to="/login"
           state={loginRedirectState(location)}
-          className="font-bold underline"
+          className="font-semibold text-accent-ink underline"
         >
           ログインする
         </Link>
@@ -95,7 +95,7 @@ export function SaveButton({ saved, onToggle }: SaveButtonProps) {
         aria-label={saved ? '保存を外す' : '保存する'}
         disabled={pending}
         onClick={handleClick}
-        className="absolute top-1 right-1 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-brand-700 transition hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+        className="ring-focus absolute top-1 right-1 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-accent-ink transition hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-60"
       >
         <svg
           aria-hidden="true"
@@ -111,13 +111,13 @@ export function SaveButton({ saved, onToggle }: SaveButtonProps) {
       </button>
       <div role="status">
         {undoVisible && (
-          <p className="mt-2 flex items-center gap-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
+          <p className="mt-2 flex items-center gap-3 rounded-[10px] bg-accent-soft px-3 py-2 text-xs text-accent-ink">
             保存しました
             <button
               type="button"
               disabled={pending}
               onClick={handleUndo}
-              className="cursor-pointer font-bold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+              className="ring-focus cursor-pointer rounded-sm font-semibold underline disabled:cursor-not-allowed disabled:opacity-60"
             >
               取り消す
             </button>

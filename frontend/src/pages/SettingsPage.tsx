@@ -43,15 +43,15 @@ export function SettingsPage() {
         if (!logoutMutation.isPending) logoutMutation.mutate()
       }}
     >
-      <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-10">
-        <h1 className="text-2xl font-bold text-ink">設定</h1>
+      <div className="mx-auto w-full max-w-3xl space-y-8 px-6 py-12">
+        <h1 className="text-3xl font-bold tracking-tight text-ink">設定</h1>
         {logoutFailed && (
           <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
             ログアウトに失敗しました。もう一度お試しください。
           </p>
         )}
         {user && (
-          <p className="text-sm text-ink-muted">
+          <p className="text-sm text-ink-70">
             ログイン中のユーザー名: <span className="font-bold text-ink">{user.username}</span>
           </p>
         )}

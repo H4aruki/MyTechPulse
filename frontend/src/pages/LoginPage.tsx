@@ -88,16 +88,16 @@ export function LoginPage() {
 
   return (
     <AppLayout>
-      <div className="mx-auto w-full max-w-md px-4 py-16">
-        <h1 className="mb-8 text-center text-2xl font-bold text-ink">ログイン</h1>
+      <div className="mx-auto w-full max-w-md px-6 py-16">
+        <h1 className="mb-8 text-center text-3xl font-bold tracking-tight text-ink">ログイン</h1>
 
         <form
           onSubmit={handleSubmit(onSubmit)}
           noValidate
-          className="space-y-5 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
+          className="card-glass space-y-5 p-6 sm:p-8"
         >
           <div>
-            <label htmlFor="username" className="mb-1.5 block text-sm font-bold text-ink">
+            <label htmlFor="username" className="mb-1.5 block text-sm font-semibold text-ink">
               ユーザー名
             </label>
             <input
@@ -105,7 +105,7 @@ export function LoginPage() {
               type="text"
               autoComplete="username webauthn"
               {...register('username')}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              className="field w-full"
             />
             {errors.username && (
               <p className="mt-1 text-sm text-red-600">{errors.username.message}</p>
@@ -113,7 +113,7 @@ export function LoginPage() {
           </div>
 
           <div>
-            <label htmlFor="password" className="mb-1.5 block text-sm font-bold text-ink">
+            <label htmlFor="password" className="mb-1.5 block text-sm font-semibold text-ink">
               パスワード
             </label>
             <input
@@ -121,7 +121,7 @@ export function LoginPage() {
               type="password"
               autoComplete="current-password webauthn"
               {...register('password')}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              className="field w-full"
             />
             {errors.password && (
               <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
@@ -136,7 +136,7 @@ export function LoginPage() {
                   type="button"
                   onClick={onPasskeyLogin}
                   disabled={busy}
-                  className="mt-2 rounded-lg border border-red-300 bg-white px-3 py-1.5 font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="ring-focus mt-2 min-h-11 rounded-[10px] border border-red-300 bg-white px-3 py-1.5 font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   もう一度試す
                 </button>
@@ -147,7 +147,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded-lg bg-brand-500 px-4 py-2.5 font-bold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="btn-primary ring-focus min-h-11 w-full justify-center disabled:cursor-not-allowed"
           >
             {mutation.isPending ? 'ログイン中…' : 'ログイン'}
           </button>
@@ -157,15 +157,15 @@ export function LoginPage() {
               type="button"
               onClick={onPasskeyLogin}
               disabled={busy}
-              className="w-full rounded-lg border border-brand-500 bg-white px-4 py-2.5 font-bold text-brand-500 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400"
+              className="btn-ghost ring-focus min-h-11 w-full justify-center disabled:cursor-not-allowed"
             >
               {passkey.phase === 'explicit' || passkey.phase === 'finishing' ? '確認中…' : 'パスキーでログイン'}
             </button>
           )}
 
-          <p className="text-center text-sm text-ink-muted">
+          <p className="text-center text-sm text-ink-70">
             アカウントをお持ちでない方は{' '}
-            <Link to="/signup" className="font-bold text-brand-500 hover:underline">
+            <Link to="/signup" className="ring-focus rounded-sm font-semibold text-accent-ink hover:underline">
               新規登録
             </Link>
           </p>

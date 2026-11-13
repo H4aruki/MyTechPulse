@@ -8,12 +8,12 @@ SEOが効く範囲と効かない範囲を分けたハイブリッド構成に�
 
 | パス | 実体 | スタイル | 方式 |
 | --- | --- | --- | --- |
-| `/` | `index.html` | `src/lp.css` | 静的HTML（実質SSG）。Reactを読み込まないJSゼロのページ。検索インデックスとOGPのために事前生成された状態を保つ |
-| `/app`・`/app/*` | `app.html` + `src/` | `src/index.css` | React SPA。認証必須のためインデックス対象外（`noindex`） |
+| `/` | `index.html` | `src/lp.css`（中で `src/theme.css` を読む） | 静的HTML（実質SSG）。Reactを読み込まないJSゼロのページ。検索インデックスとOGPのために事前生成された状態を保つ |
+| `/app`・`/app/*` | `app.html` + `src/` | `src/index.css`（中で `src/theme.css` を読む） | React SPA。認証必須のためインデックス対象外（`noindex`） |
 
 ログイン後の画面はユーザーごとにパーソナライズされインデックス不可なので、SSRサーバーは持たない。バックエンド（Go製API）と合わせて「静的フロント + API」の2ピース構成。
 
-CSSのエントリはLPとSPAで分かれている。LPをFigmaの新デザイン（sky系）に刷新した際（Issue #80）、SPAは旧配色（`brand-*`）のまま残したためで、デザイントークンが別系統になっている。**LPだけを触るときは `src/lp.css`、ログイン後の画面を触るときは `src/index.css`** を見ること。将来SPAも同じデザインに揃える場合は、この2ファイルを統合するのが自然な着地点になる。
+色・書体・ボタン・カードは `src/theme.css` にまとめてある。トップページとログイン後の画面の両方がこれを読む。トップページだけで使う背景グリッドやアニメーションは `src/lp.css` に残している。見た目を変えるときは `theme.css` を直し、同じ色をどちらか片方に書き写さない。
 
 SPAのエントリを `app/index.html` ではなく `app.html` に置いているのは Cloudflare Pages の制約による。Pages は `_redirects` の書き換え先から `.html` と `/index` を剥がして正規化するため、`/app/*  /app/index.html  200` は書き換え先が自分のパターンに再度一致するループと判定され、ルールごと無視される。`npx wrangler pages dev dist` を実行すると `Infinite loop detected in this rule and has been ignored` として再現できる。
 

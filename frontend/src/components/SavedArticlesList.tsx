@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { ApiError, rateLimitMessage, UnauthorizedError } from '@/api/client'
 import { fetchSavedArticles } from '@/api/endpoints'
 import type { SavedArticleItem } from '@/api/types'
+import { sourceBadgeClass, sourceLabel } from '@/lib/articleSource'
 import { SAVED_ARTICLES_QUERY_KEY, useToggleSavedArticle } from '@/lib/savedArticles'
 
 const PAGE_LIMIT = 20
@@ -12,19 +13,12 @@ const SAVE_LIMIT = 500
 
 const dateFormat = new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium' })
 
-function sourceLabel(source: string): string {
-  const lower = source.toLowerCase()
-  if (lower === 'qiita') return 'Qiita'
-  if (lower === 'zenn') return 'Zenn'
-  return source
-}
-
 function unsaveFailureMessage(error: unknown): ReactNode {
   if (error instanceof UnauthorizedError) {
     return (
       <>
         ログインが必要です。
-        <Link to="/login" className="font-bold underline">
+        <Link to="/login" className="font-semibold text-accent-ink underline">
           ログインする
         </Link>
       </>
@@ -75,7 +69,7 @@ export function SavedArticlesList() {
   }
 
   if (query.isPending) {
-    return <p className="text-sm text-ink-muted">読み込んでいます…</p>
+    return <p className="text-sm text-ink-70">読み込んでいます…</p>
   }
   if (query.isError) {
     return (
@@ -84,7 +78,7 @@ export function SavedArticlesList() {
         <button
           type="button"
           onClick={() => void query.refetch()}
-          className="min-h-11 cursor-pointer rounded-lg border border-red-300 px-4 font-bold hover:bg-red-100"
+          className="ring-focus min-h-11 cursor-pointer rounded-[10px] border border-red-300 px-4 font-semibold hover:bg-red-100"
         >
           再試行
         </button>
@@ -97,7 +91,7 @@ export function SavedArticlesList() {
 
   if (items.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-sm text-ink-muted">
+      <p className="rounded-2xl border border-dashed border-line bg-surface px-4 py-6 text-sm text-ink-70">
         まだ保存した記事はありません。記事一覧の栞のボタンで保存できます。
       </p>
     )
@@ -105,24 +99,29 @@ export function SavedArticlesList() {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-ink-muted">
+      <p className="text-sm text-ink-70">
         {total}件 / {SAVE_LIMIT}件
       </p>
       <ul className="space-y-3">
         {items.map((item) => (
-          <li key={item.id} className="rounded-lg border border-slate-200 bg-white p-3">
-            <div className="flex items-start gap-2">
-              <div className="min-w-0 flex-1 space-y-1">
+          <li key={item.id} className="card-glass p-4">
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1 space-y-2">
+                <span
+                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${sourceBadgeClass(item.source)}`}
+                >
+                  {sourceLabel(item.source)}
+                </span>
                 <a
                   href={item.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-bold text-brand-700 underline break-words"
+                  className="ring-focus block rounded-sm font-semibold break-words text-accent-ink underline"
                 >
                   {item.title}
                 </a>
-                <p className="text-xs text-ink-muted">
-                  {sourceLabel(item.source)} ・ {dateFormat.format(new Date(item.saved_at))}に保存
+                <p className="text-xs text-ink-70">
+                  {dateFormat.format(new Date(item.saved_at))}に保存
                 </p>
               </div>
               <button
@@ -130,7 +129,7 @@ export function SavedArticlesList() {
                 aria-label={`保存を外す: ${item.title}`}
                 disabled={pendingIds.has(item.id)}
                 onClick={() => void unsave(item.id)}
-                className="flex h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-full px-2 text-sm font-bold text-brand-700 hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className="btn-ghost ring-focus min-h-11 shrink-0 px-3 py-2 text-sm disabled:cursor-not-allowed"
               >
                 外す
               </button>
@@ -148,7 +147,7 @@ export function SavedArticlesList() {
           type="button"
           disabled={query.isFetchingNextPage}
           onClick={() => void query.fetchNextPage()}
-          className="min-h-11 cursor-pointer rounded-lg border border-slate-300 px-4 text-sm font-bold text-ink hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="btn-ghost ring-focus min-h-11 px-4 py-2 text-sm disabled:cursor-not-allowed"
         >
           {query.isFetchingNextPage ? '読み込んでいます…' : 'もっと見る'}
         </button>

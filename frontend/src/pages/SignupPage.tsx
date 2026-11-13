@@ -148,17 +148,17 @@ export function SignupPage() {
 
   return (
     <AppLayout>
-      <div className="mx-auto w-full max-w-3xl px-4 py-16">
+      <div className="mx-auto w-full max-w-3xl px-6 py-16">
         {step === 1 ? (
           <>
-            <h1 className="mb-8 text-center text-2xl font-bold text-ink">新規登録</h1>
+            <h1 className="mb-8 text-center text-3xl font-bold tracking-tight text-ink">新規登録</h1>
             <form
               onSubmit={handleSubmit(goToStep2)}
               noValidate
-              className="mx-auto max-w-md space-y-5 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
+              className="card-glass mx-auto max-w-md space-y-5 p-6 sm:p-8"
             >
               <div>
-                <label htmlFor="username" className="mb-1.5 block text-sm font-bold text-ink">
+                <label htmlFor="username" className="mb-1.5 block text-sm font-semibold text-ink">
                   ユーザー名
                 </label>
                 <input
@@ -166,7 +166,7 @@ export function SignupPage() {
                   type="text"
                   autoComplete="username"
                   {...register('username')}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                  className="field w-full"
                 />
                 {errors.username && (
                   <p className="mt-1 text-sm text-red-600">{errors.username.message}</p>
@@ -174,7 +174,7 @@ export function SignupPage() {
               </div>
 
               <div>
-                <label htmlFor="password" className="mb-1.5 block text-sm font-bold text-ink">
+                <label htmlFor="password" className="mb-1.5 block text-sm font-semibold text-ink">
                   パスワード
                 </label>
                 <input
@@ -182,12 +182,12 @@ export function SignupPage() {
                   type="password"
                   autoComplete="new-password"
                   {...register('password')}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                  className="field w-full"
                 />
                 {errors.password ? (
                   <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
                 ) : (
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-ink-70">
                     {PASSWORD_MIN_CHARS}文字以上。よく使われるパスワードは使えません。
                   </p>
                 )}
@@ -201,14 +201,14 @@ export function SignupPage() {
 
               <button
                 type="submit"
-                className="w-full rounded-lg bg-brand-500 px-4 py-2.5 font-bold text-white transition hover:bg-brand-700"
+                className="btn-primary ring-focus min-h-11 w-full justify-center"
               >
                 次へ：興味のあるタグを選ぶ
               </button>
 
-              <p className="text-center text-sm text-ink-muted">
+              <p className="text-center text-sm text-ink-70">
                 すでにアカウントをお持ちの方は{' '}
-                <Link to="/login" className="font-bold text-brand-500 hover:underline">
+                <Link to="/login" className="ring-focus rounded-sm font-semibold text-accent-ink hover:underline">
                   ログイン
                 </Link>
               </p>
@@ -216,10 +216,10 @@ export function SignupPage() {
           </>
         ) : (
           <>
-            <h1 className="mb-2 text-center text-2xl font-bold text-ink">
+            <h1 className="mb-2 text-center text-3xl font-bold tracking-tight text-ink">
               興味のあるタグを選択してください
             </h1>
-            <p className="mb-8 text-center text-sm text-ink-muted">
+            <p className="mb-8 text-center text-sm text-ink-70">
               選んだタグをもとに、Qiita / Zenn からあなた向けの記事を集めます（1つ以上）
             </p>
 
@@ -229,7 +229,7 @@ export function SignupPage() {
                 return (
                   <fieldset
                     key={category.id}
-                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                    className="card-glass p-5"
                   >
                     <legend className="px-1">
                       <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-ink">
@@ -237,7 +237,7 @@ export function SignupPage() {
                           type="checkbox"
                           checked={allChecked}
                           onChange={(e) => toggleCategory(category.tags, e.target.checked)}
-                          className="size-4 accent-brand-500"
+                          className="size-4 accent-accent-ink"
                         />
                         <span aria-hidden="true">{category.emoji}</span>
                         {category.label}
@@ -252,8 +252,8 @@ export function SignupPage() {
                             key={tag}
                             className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm transition ${
                               checked
-                                ? 'border-brand-500 bg-brand-500 font-bold text-white'
-                                : 'border-slate-300 bg-white text-ink-muted hover:border-brand-500 hover:text-brand-700'
+                                ? 'border-accent-ink bg-accent-ink font-semibold text-white'
+                                : 'border-ink/15 bg-surface text-ink-70 hover:border-accent hover:text-accent-ink'
                             }`}
                           >
                             <input
@@ -280,11 +280,11 @@ export function SignupPage() {
               </p>
             )}
 
-            <div className="sticky bottom-0 mt-6 flex items-center gap-3 border-t border-slate-200 bg-surface/95 py-4 backdrop-blur">
+            <div className="sticky bottom-0 mt-6 flex items-center gap-3 border-t border-line bg-bg/95 py-4 backdrop-blur">
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="rounded-lg border border-slate-300 px-4 py-2.5 font-bold text-ink-muted transition hover:bg-slate-100"
+                className="btn-ghost ring-focus min-h-11 px-4 py-2 text-sm"
               >
                 戻る
               </button>
@@ -292,7 +292,7 @@ export function SignupPage() {
                 type="button"
                 onClick={handleRegister}
                 disabled={selectedTags.size === 0 || mutation.isPending}
-                className="flex-1 rounded-lg bg-brand-500 px-4 py-2.5 font-bold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                className="btn-primary ring-focus min-h-11 flex-1 justify-center disabled:cursor-not-allowed"
               >
                 {mutation.isPending ? '登録中…' : `登録する（${selectedTags.size}件選択中）`}
               </button>

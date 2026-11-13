@@ -13,7 +13,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   const location = useLocation()
 
   if (isPending) {
-    return <p className="py-16 text-center text-ink-muted">読み込んでいます…</p>
+    return <p className="py-16 text-center text-ink-70">読み込んでいます…</p>
   }
 
   if (isError) {
@@ -28,7 +28,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
         <button
           type="button"
           onClick={() => refetch()}
-          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-700"
+          className="btn-primary ring-focus min-h-11 px-4 py-2 text-sm"
         >
           再試行
         </button>

@@ -133,14 +133,14 @@ export function FeedbackDialog({ presentation, onUnauthorized, onClose }: Feedba
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-ink/40 p-4 sm:items-center">
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="feedback-title"
         onKeyDown={onKeyDown}
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
+        className="card-glass max-h-[90vh] w-full max-w-md overflow-y-auto p-6"
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <h2 id="feedback-title" className="text-lg font-bold text-ink">
@@ -151,7 +151,7 @@ export function FeedbackDialog({ presentation, onUnauthorized, onClose }: Feedba
             onClick={close}
             disabled={sending}
             aria-label="閉じる"
-            className="rounded-lg px-2 text-xl leading-none text-ink-muted hover:bg-slate-100 disabled:opacity-50"
+            className="ring-focus flex h-11 w-11 items-center justify-center rounded-[10px] text-xl leading-none text-ink-70 hover:bg-surface-2 disabled:opacity-50"
           >
             ×
           </button>
@@ -167,10 +167,10 @@ export function FeedbackDialog({ presentation, onUnauthorized, onClose }: Feedba
                   type="button"
                   disabled={sending}
                   onClick={() => void chooseOverall(score)}
-                  className="flex flex-col items-center rounded-lg border border-slate-300 px-1 py-2 text-sm hover:border-brand-500 disabled:opacity-50"
+                  className="ring-focus flex min-h-11 flex-col items-center rounded-[10px] border border-ink/15 px-1 py-2 text-sm hover:border-accent disabled:opacity-50"
                 >
                   <span className="font-bold">{score}</span>
-                  <span className="text-[11px] leading-tight text-ink-muted">{SCORE_LABELS[score]}</span>
+                  <span className="text-[11px] leading-tight text-ink-70">{SCORE_LABELS[score]}</span>
                 </button>
               ))}
             </div>
@@ -192,7 +192,7 @@ export function FeedbackDialog({ presentation, onUnauthorized, onClose }: Feedba
                   {SCORES.map((score) => (
                     <label
                       key={score}
-                      className="flex flex-col items-center rounded-lg border border-slate-200 px-1 py-2 text-xs"
+                      className="ring-focus flex min-h-11 flex-col items-center rounded-[10px] border border-line px-1 py-2 text-xs"
                     >
                       <input
                         type="radio"
@@ -202,7 +202,7 @@ export function FeedbackDialog({ presentation, onUnauthorized, onClose }: Feedba
                         onChange={() => setAnswers((prev) => ({ ...prev, [q.id]: score }))}
                       />
                       <span className="font-bold">{score}</span>
-                      <span className="text-[11px] leading-tight text-ink-muted">{SCORE_LABELS[score]}</span>
+                      <span className="text-[11px] leading-tight text-ink-70">{SCORE_LABELS[score]}</span>
                     </label>
                   ))}
                 </div>
@@ -211,7 +211,7 @@ export function FeedbackDialog({ presentation, onUnauthorized, onClose }: Feedba
             <button
               type="submit"
               disabled={!complete || sending}
-              className="w-full rounded-lg bg-brand-500 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
+              className="btn-primary ring-focus min-h-11 w-full justify-center px-4 py-2 text-sm"
             >
               送信
             </button>
@@ -231,7 +231,7 @@ export function FeedbackDialog({ presentation, onUnauthorized, onClose }: Feedba
         )}
 
         {step !== 'thanks' && (
-          <p className="mt-4 text-xs text-ink-muted">
+          <p className="mt-4 text-xs text-ink-70">
             回答はあなたのアカウントに紐づけて保存し、サービス改善の分析に使います。
           </p>
         )}

@@ -46,41 +46,41 @@ export function MyPage() {
         if (!logoutMutation.isPending) logoutMutation.mutate()
       }}
     >
-      <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-10">
+      <div className="mx-auto w-full max-w-3xl space-y-8 px-6 py-12">
         {/* 戻り先は記事一覧。履歴に依存せず、直接開いた場合でも同じ場所へ戻す */}
         <Link
           to="/articles"
           aria-label="戻る"
-          className="inline-flex items-center gap-1 text-sm font-bold text-brand-700 hover:underline"
+          className="ring-focus inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-accent-ink hover:underline"
         >
           <span aria-hidden="true">←</span>
           戻る
         </Link>
-        <h1 className="text-2xl font-bold text-ink">マイページ</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-ink">マイページ</h1>
         {logoutFailed && (
           <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
             ログアウトに失敗しました。もう一度お試しください。
           </p>
         )}
 
-        <section aria-labelledby="mypage-account" className="space-y-2">
-          <h2 id="mypage-account" className="text-lg font-bold text-ink">
+        <section aria-labelledby="mypage-account" className="card-glass space-y-2 p-6">
+          <h2 id="mypage-account" className="text-lg font-bold tracking-tight text-ink">
             アカウント
           </h2>
           {user && (
-            <p className="text-sm text-ink-muted">
+            <p className="text-sm text-ink-70">
               ユーザー名: <span className="font-bold text-ink">{user.username}</span>
             </p>
           )}
           <p className="text-sm">
-            <Link to="/settings" className="font-bold text-brand-700 underline">
+            <Link to="/settings" className="ring-focus rounded-sm font-semibold text-accent-ink underline">
               設定（パスキーの管理など）へ
             </Link>
           </p>
         </section>
 
         <section aria-labelledby="mypage-saved" className="space-y-2">
-          <h2 id="mypage-saved" className="text-lg font-bold text-ink">
+          <h2 id="mypage-saved" className="text-lg font-bold tracking-tight text-ink">
             保存した記事
           </h2>
           <SavedArticlesList />

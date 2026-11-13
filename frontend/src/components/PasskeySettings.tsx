@@ -146,11 +146,11 @@ function PasskeySection({ onUnauthorized }: Props) {
   }
 
   return (
-    <section aria-labelledby="passkey-heading" className="rounded-xl border border-slate-200 bg-white p-6">
-      <h2 id="passkey-heading" className="mb-2 font-display text-xl font-bold text-ink">
+    <section aria-labelledby="passkey-heading" className="card-glass p-6">
+      <h2 id="passkey-heading" className="mb-2 text-xl font-bold tracking-tight text-ink">
         パスキー
       </h2>
-      <p className="mb-4 text-sm text-ink-muted">
+      <p className="mb-4 text-sm text-ink-70">
         指紋・顔・PINなど、端末の本人確認で使える認証方法です。最大{MAX_PASSKEYS}件まで登録できます。パスワードでのログインもこれまでどおり使えます。
       </p>
 
@@ -162,7 +162,7 @@ function PasskeySection({ onUnauthorized }: Props) {
               type="button"
               onClick={startAdd}
               disabled={busy || full}
-              className="mt-2 rounded-lg border border-red-300 bg-white px-3 py-1.5 font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="ring-focus mt-2 min-h-11 rounded-[10px] border border-red-300 bg-white px-3 py-1.5 font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               もう一度試す
             </button>
@@ -186,31 +186,31 @@ function PasskeySection({ onUnauthorized }: Props) {
             maxLength={64}
             placeholder="例: iPhone"
             onChange={(e) => setNewName(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="field text-sm"
           />
         </div>
         <button
           type="submit"
           disabled={busy || full}
-          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-50"
+          className="btn-primary ring-focus min-h-11 px-4 py-2 text-sm"
         >
           {busy ? '追加しています…' : 'パスキーを追加'}
         </button>
-        {full && <p className="text-sm text-ink-muted">上限に達しています。不要なものを削除してください。</p>}
+        {full && <p className="text-sm text-ink-70">上限に達しています。不要なものを削除してください。</p>}
       </form>
 
-      {list.isPending && <p className="text-sm text-ink-muted">読み込んでいます…</p>}
+      {list.isPending && <p className="text-sm text-ink-70">読み込んでいます…</p>}
       {list.isError && !(list.error instanceof UnauthorizedError) && (
         <p role="alert" className="text-sm text-red-700">
           パスキーの一覧を取得できませんでした。
         </p>
       )}
       {list.data && passkeys.length === 0 && (
-        <p className="text-sm text-ink-muted">登録されたパスキーはまだありません。</p>
+        <p className="text-sm text-ink-70">登録されたパスキーはまだありません。</p>
       )}
 
       {passkeys.length > 0 && (
-        <ul className="divide-y divide-slate-200">
+        <ul className="divide-y divide-line">
           {passkeys.map((item) => (
             <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
               {editingId === item.id ? (
@@ -223,15 +223,15 @@ function PasskeySection({ onUnauthorized }: Props) {
                     value={editName}
                     maxLength={64}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+                    className="field text-sm"
                   />
-                  <button type="submit" className="rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-bold text-white">
+                  <button type="submit" className="btn-primary ring-focus min-h-11 px-3 py-2 text-sm">
                     保存
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditingId(null)}
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-ink-muted"
+                    className="btn-ghost ring-focus min-h-11 px-3 py-2 text-sm"
                   >
                     キャンセル
                   </button>
@@ -239,8 +239,8 @@ function PasskeySection({ onUnauthorized }: Props) {
               ) : (
                 <div>
                   <p className="font-bold text-ink">{item.name}</p>
-                  <p className="text-xs text-ink-muted">登録: {formatDate(item.created_at)}</p>
-                  <p className="text-xs text-ink-muted">
+                  <p className="text-xs text-ink-70">登録: {formatDate(item.created_at)}</p>
+                  <p className="text-xs text-ink-70">
                     最後に使った日時: {item.last_used_at ? formatDate(item.last_used_at) : 'まだ使っていません'}
                   </p>
                 </div>
@@ -256,7 +256,7 @@ function PasskeySection({ onUnauthorized }: Props) {
                       setError(null)
                       setNotice(null)
                     }}
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-ink-muted hover:bg-slate-100"
+                    className="btn-ghost ring-focus min-h-11 px-3 py-2 text-sm"
                   >
                     名前を変更
                   </button>
@@ -264,7 +264,7 @@ function PasskeySection({ onUnauthorized }: Props) {
                     type="button"
                     aria-label={`${item.name}を削除`}
                     onClick={() => onDelete(item)}
-                    className="rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+                    className="ring-focus min-h-11 rounded-[10px] border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
                   >
                     削除
                   </button>

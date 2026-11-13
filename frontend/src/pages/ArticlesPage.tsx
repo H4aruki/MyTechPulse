@@ -30,7 +30,7 @@ interface ArticleSectionProps {
 function ArticleSection({ title, articles, onOpen, savedIds, onToggleSave }: ArticleSectionProps) {
   return (
     <section>
-      <h2 className="mb-4 font-display text-xl font-bold text-ink">{title}</h2>
+      <h2 className="mb-4 text-xl font-bold tracking-tight text-ink">{title}</h2>
       {articles && articles.length > 0 ? (
         <ul className="grid gap-4 sm:grid-cols-2">
           {articles.map((article) => (
@@ -44,7 +44,7 @@ function ArticleSection({ title, articles, onOpen, savedIds, onToggleSave }: Art
           ))}
         </ul>
       ) : (
-        <p className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-ink-muted">
+        <p className="rounded-2xl border border-dashed border-line bg-surface px-4 py-8 text-center text-sm text-ink-70">
           おすすめの記事はまだありません。
         </p>
       )}
@@ -127,8 +127,8 @@ export function ArticlesPage() {
 
   return (
     <AppLayout authenticated onLogout={handleLogout}>
-      <div className="mx-auto w-full max-w-6xl px-4 py-10">
-        <h1 className="mb-8 text-2xl font-bold text-ink">あなたにおすすめの記事</h1>
+      <div className="mx-auto w-full max-w-5xl px-6 py-12">
+        <h1 className="mb-8 text-3xl font-bold tracking-tight text-ink">あなたにおすすめの記事</h1>
 
         {logoutFailed && (
           <p role="alert" className="mb-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -136,10 +136,10 @@ export function ArticlesPage() {
           </p>
         )}
 
-        {isPending && <p className="py-16 text-center text-ink-muted">記事を読み込んでいます…</p>}
+        {isPending && <p className="py-16 text-center text-ink-70">記事を読み込んでいます…</p>}
 
         {isError && !sessionExpired && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-8 text-center">
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-8 text-center">
             <p className="mb-4 text-sm text-red-700">
               {error instanceof Error
                 ? error.message
@@ -148,7 +148,7 @@ export function ArticlesPage() {
             <button
               type="button"
               onClick={() => refetch()}
-              className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-700"
+              className="btn-primary ring-focus min-h-11 px-4 py-2 text-sm"
             >
               再読み込み
             </button>
@@ -158,7 +158,7 @@ export function ArticlesPage() {
         {data && data.warnings && data.warnings.length > 0 && (
           <div
             role="status"
-            className="mb-8 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+            className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
           >
             <p className="font-bold">一部の記事を取得できませんでした。</p>
             <ul className="mt-1 list-inside list-disc">

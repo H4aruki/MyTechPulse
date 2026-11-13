@@ -1,4 +1,5 @@
 import type { Article } from '@/api/types'
+import { sourceBadgeClass, sourceLabel } from '@/lib/articleSource'
 import { SaveButton } from './SaveButton'
 
 interface ArticleCardProps {
@@ -16,9 +17,21 @@ function formatPublishedAt(value: string): string {
   return new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium' }).format(date)
 }
 
+function Likes({ count }: { count: number }) {
+  return (
+    <span className="flex items-center gap-1" aria-label={`${count} いいね`}>
+      <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+      </svg>
+      {count.toLocaleString('ja-JP')}
+    </span>
+  )
+}
+
 /**
  * 旧実装は innerHTML + テンプレート文字列で組み立てていたため escapeHtml による
  * 手動のXSS対策が必要だったが、Reactが既定でエスケープするため不要になった。
+ * 形はトップページの見本カード（タグ、提供元の色、いいね）に揃えている。
  */
 export function ArticleCard({ article, onOpen, saved = false, onToggleSave }: ArticleCardProps) {
   // Go版APIはタグの無い記事を null で返すことがある
@@ -35,30 +48,29 @@ export function ArticleCard({ article, onOpen, saved = false, onToggleSave }: Ar
       <button
         type="button"
         onClick={() => onOpen(article)}
-        className="flex h-full w-full cursor-pointer flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        className={`card-glass ring-focus flex h-full w-full cursor-pointer flex-col gap-3 p-5 text-left transition duration-300 hover:-translate-y-1${canSave ? ' pr-14' : ''}`}
       >
-        <h3 className={`text-base leading-snug font-bold text-ink${canSave ? ' pr-10' : ''}`}>
-          {article.title}
-        </h3>
-
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
-          <span className="font-bold">{article.source}</span>
-          <span aria-label={`${article.likes} いいね`}>♥ {article.likes}</span>
-          <span>{formatPublishedAt(article.published_at)}</span>
-        </div>
-
-        {tags.length > 0 && (
-          <ul className="mt-auto flex flex-wrap gap-1.5">
+        <div className="flex items-start justify-between gap-2">
+          <ul className="flex min-w-0 flex-wrap gap-1.5">
             {tags.map((tag) => (
-              <li
-                key={tag}
-                className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-bold text-brand-700"
-              >
+              <li key={tag} className="tag-pill text-accent-ink">
                 {tag}
               </li>
             ))}
           </ul>
-        )}
+          <span
+            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${sourceBadgeClass(article.source)}`}
+          >
+            {sourceLabel(article.source)}
+          </span>
+        </div>
+
+        <h3 className="text-base leading-snug font-semibold text-ink">{article.title}</h3>
+
+        <div className="mt-auto flex items-center justify-between gap-3 text-xs text-ink-70">
+          <span>{formatPublishedAt(article.published_at)}</span>
+          <Likes count={article.likes} />
+        </div>
       </button>
       {toggle && <SaveButton saved={saved} onToggle={toggle} />}
     </li>
