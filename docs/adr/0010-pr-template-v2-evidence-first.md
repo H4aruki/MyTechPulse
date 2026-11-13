@@ -1,10 +1,10 @@
 ---
-status: accepted
+status: superseded
 ---
 
 # PRテンプレート v2 は、証拠と図を先に見せる
 
-- 状態: 採用（2026-11-13）。[PR #300](https://github.com/H4aruki/MyTechPulse/pull/300) でマージ済み
+- 状態: 置き換え（→ [0013](0013-pr-template-briefing-with-decision-section.md)）。当時は採用（2026-11-13）、[PR #300](https://github.com/H4aruki/MyTechPulse/pull/300) でマージ済み
 - 日付: 2026-11-13
 - 決定者: Haruki。AIは起案者
 - 全体の概要: [0004](0004-automerge-small-prs-by-deterministic-script.md)

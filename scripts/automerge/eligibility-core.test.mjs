@@ -27,7 +27,7 @@ const withPatch = (filename, lines, extra = {}) => ({
   patch: `@@ -1,0 +1,${lines.length} @@\n` + lines.map((l) => `+${l}`).join("\n"),
   ...extra,
 });
-const OK_BODY = "## 一行で\nx\n\n## 判断が必要なこと\nなし\n\n## 見てほしい場所\ny\n";
+const OK_BODY = "## なぜ（Why）\nx\n\n## 確認（Verification）\ny\n\n## 判断が必要なこと\nなし\n";
 const goodChecks = () => rules.requiredChecks.map((name) => ({ name, status: "completed", conclusion: "success" }));
 const base = (over = {}) => ({
   pr: {
@@ -306,11 +306,11 @@ test("本文: 判断が必要なこと", () => {
   assert.equal(ok("## 判断が必要なこと\nなし").eligible, true);
   assert.equal(ok("## 判断が必要なこと\r\n\r\nなし\r\n## 次").eligible, true);
   assert.equal(ok("## 判断が必要なこと\n<!-- 無いときは なし と書く\n複数行 -->\nなし\n").eligible, true);
-  assert.equal(ok("## 判断が必要なこと\n<!-- c -->\n\nなし\n\n## 見てほしい場所\n要確認\n").eligible, true);
+  assert.equal(ok("## 判断が必要なこと\n<!-- c -->\n\nなし\n\n## 確認（Verification）\n要確認\n").eligible, true);
   assert.deepEqual(rulesOf(ok("## 判断が必要なこと\n要確認")), ["body.decision"]);
   assert.deepEqual(rulesOf(ok("## 判断が必要なこと\nなし。ただし要確認")), ["body.decision"]);
   assert.deepEqual(rulesOf(ok("## 判断が必要なこと\n<!-- なし -->\n")), ["body.decision"]);
-  assert.deepEqual(rulesOf(ok("## 一行で\nなし")), ["body.decision"]);
+  assert.deepEqual(rulesOf(ok("## なぜ（Why）\nなし")), ["body.decision"]);
   assert.deepEqual(rulesOf(ok(null)), ["body.decision"]);
   assert.deepEqual(rulesOf(ok("## 判断が必要なこと\n## 次\nなし")), ["body.decision"]);
 });
