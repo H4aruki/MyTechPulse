@@ -82,6 +82,8 @@ AIは起動したら待たず、待ちとマージはシェルだけが行う。
 
 ## 関連リンク
 
+- #302 の後に見つかった2件（`--rules` の受け渡し、main の保護の確認）は、[PR #305](https://github.com/H4aruki/MyTechPulse/pull/305)（レビュー中）で入る。
+
 - [PR #302 マージの実行役](https://github.com/H4aruki/MyTechPulse/pull/302)
 - [docs/automerge-runner.md](../automerge-runner.md)
 - GitHub: https://docs.github.com/en/actions/concepts/security/github_token

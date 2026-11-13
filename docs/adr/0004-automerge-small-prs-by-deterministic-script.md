@@ -46,7 +46,7 @@ flowchart LR
 
 - 人がいる時間（9:00–22:00 JST のみ）と、最後の push からの待ち時間30分は、初期案で未確定（[0009](0009-automerge-safety-guards.md)）。
 - 実際のマージの開始と `AUTOMERGE_ENABLED` の有効化は、Harukiさんの OK の後（[0011](0011-automerge-rollout-phases.md)）。
-- #302 はマージ済み、#303 はレビュー中。
+- #302 はマージ済み（2026-11-13 16:39 JST、4b7a46b）、#303 もマージ済み（2026-11-13 16:51 JST、f4125a2）。
 
 ## 関連 PR
 

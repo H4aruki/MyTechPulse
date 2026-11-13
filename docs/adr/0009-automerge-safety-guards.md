@@ -89,7 +89,9 @@ status: accepted
 
 ## 関連リンク
 
+- #302 の後に見つかった2件（`--rules` の受け渡し、main の保護の確認）は、[PR #305](https://github.com/H4aruki/MyTechPulse/pull/305)（レビュー中）で入る。
+
 - [0005](0005-eligibility-decided-by-deterministic-script.md)、[0006](0006-merge-with-box-gh-and-automerge-sh.md)、[0008](0008-deploy-latest-main-without-cancelling.md)
 - [PR #301 gitleaks とローカルフック](https://github.com/H4aruki/MyTechPulse/pull/301)
-- [PR #302](https://github.com/H4aruki/MyTechPulse/pull/302)、[PR #303](https://github.com/H4aruki/MyTechPulse/pull/303)
+- [PR #302](https://github.com/H4aruki/MyTechPulse/pull/302)（マージ済み、2026-11-13 16:39 JST、4b7a46b）、[PR #303](https://github.com/H4aruki/MyTechPulse/pull/303)（マージ済み、2026-11-13 16:51 JST、f4125a2）
 - [docs/automerge-runner.md](../automerge-runner.md)

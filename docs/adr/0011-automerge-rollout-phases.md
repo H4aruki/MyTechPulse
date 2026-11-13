@@ -57,7 +57,7 @@ flowchart LR
 ## 根拠のデータ・事実
 
 - phase 0a は実施済み（2026-11-13 16:13 JST、コミット 5761519、取得失敗0）。結果は A 0 / B 6 / C 34。詳しくは [0005](0005-eligibility-decided-by-deterministic-script.md)。
-- 実装のPR: #300 テンプレート v2（マージ済み）、#301 gitleaks・githooks・決定Issueテンプレート（マージ済み）、#302 `automerge.sh`（マージ済み、2026-11-13 16:39 JST）、#303 判定スクリプト（レビュー中）、#304 このADR。
+- 実装のPR: #300 テンプレート v2（マージ済み）、#301 gitleaks・githooks・決定Issueテンプレート（マージ済み）、#302 `automerge.sh`（マージ済み、2026-11-13 16:39 JST）、#303 判定スクリプト（マージ済み、2026-11-13 16:51 JST、f4125a2）、#304 このADR。
 - ai-dev-harness は issue #1（意思決定ログ）と PR #2（雛形）。
 
 ## 結果と代償
