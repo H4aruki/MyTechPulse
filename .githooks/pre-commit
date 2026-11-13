@@ -14,6 +14,8 @@ fi
 bad=""
 while IFS= read -r f; do
   base=${f##*/}
+  # 意図して追跡している共有設定は、パスがちょうど一致するときだけ許可する
+  [ "$f" = "frontend/.env.development" ] && continue
   case "$base" in
     .env.example) ;;
     .env|.env.*|*.pem|*.key|id_rsa|credentials.json) bad+="  $f"$'\n' ;;
