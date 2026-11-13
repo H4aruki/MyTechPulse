@@ -6,7 +6,7 @@
 
 ## 1. ログはどこに出るか
 
-2026-11-13 の決定で、本番ホストのログドライバは **journald**、保持は**最低 30 日**です（[ADR 0014](../adr/0014-keep-container-logs-30-days-in-journald.md)）。ただし**まだ本番には適用していません**。`docker-compose.yml` には `logging:` を書きません（journald は systemd のある Linux ホスト専用で、開発機が動かなくなるため）。以下の「いまの本番」は、適用前の状態の説明です。
+2026-11-13 の決定で、本番ホストのログドライバは **journald**、保持は**最低 30 日**です（[ADR 0015](../adr/0015-keep-container-logs-30-days-in-journald.md)）。ただし**まだ本番には適用していません**。`docker-compose.yml` には `logging:` を書きません（journald は systemd のある Linux ホスト専用で、開発機が動かなくなるため）。以下の「いまの本番」は、適用前の状態の説明です。
 
 Docker の文書では、指定が無いときのドライバは `json-file` です。コンテナの標準出力と標準エラーを、ホスト上の JSON ファイルに貯め、`docker logs` と `docker compose logs` で見ます。このドライバは、既定ではログを回転しません（`max-size` の既定は `-1`、上限なし）。出典: [Configure logging drivers](https://docs.docker.com/engine/logging/configure/)、[JSON File logging driver](https://docs.docker.com/engine/logging/drivers/json-file/)。
 
@@ -98,7 +98,7 @@ journalctl -u docker --since "1 hour ago"
 
 ## 2. 保存期間
 
-**決定（2026-11-13、K.Haruki）: Docker のコンテナログは最低 30 日残す。** 理由、退けた案（7日・14日、json-file、logrotate、Better Stack Logs）、根拠の数字は [ADR 0014](../adr/0014-keep-container-logs-30-days-in-journald.md) にあります。
+**決定（2026-11-13、K.Haruki）: Docker のコンテナログは最低 30 日残す。** 理由、退けた案（7日・14日、json-file、logrotate、Better Stack Logs）、根拠の数字は [ADR 0015](../adr/0015-keep-container-logs-30-days-in-journald.md) にあります。
 
 いまのリポジトリには、Docker のログの回転設定がありません。Docker の既定は `json-file` で、`max-size` の既定は `-1`（上限なし）です。本番の `/etc/docker/daemon.json` で上書きされているかは未確認です。
 
@@ -266,13 +266,13 @@ Issue は、API を止めたら数分以内にオーナーへ知らせること�
 - Slack とメールの通知
 - クレジットカード不要
 - **チェック間隔は、その時点の公開ページに書いていなかったので未確認**。Issue の「数分以内」に収まるかは、間隔しだいです。**登録の前に、公式ページで再確認します。** 数値は変わるので、登録の前に、ほかの項目ももう一度見ます。
-- ログは 3GB、保持 3日。これは外形監視とは別の「ログ製品」の無料枠です。**コンテナログの 30 日保持には使いません**（3日では 30 日の要件を満たさないため。[ADR 0014](../adr/0014-keep-container-logs-30-days-in-journald.md)）。
+- ログは 3GB、保持 3日。これは外形監視とは別の「ログ製品」の無料枠です。**コンテナログの 30 日保持には使いません**（3日では 30 日の要件を満たさないため。[ADR 0015](../adr/0015-keep-container-logs-30-days-in-journald.md)）。
 
 ## 8. 決まったことと、残っていること
 
 決まったこと（2026-11-13、K.Haruki）:
 
-1. Docker のコンテナログは、journald ドライバで最低 30 日残す（2 章、[ADR 0014](../adr/0014-keep-container-logs-30-days-in-journald.md)）。
+1. Docker のコンテナログは、journald ドライバで最低 30 日残す（2 章、[ADR 0015](../adr/0015-keep-container-logs-30-days-in-journald.md)）。
 2. 外部の生存監視は、Better Stack の無料枠（7 章）。
 3. `ops/check_resources.sh` を cron で回し、毎回の測定値をファイルに記録する（6 章）。
 

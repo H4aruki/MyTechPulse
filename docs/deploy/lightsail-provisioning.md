@@ -158,7 +158,7 @@ sudo ./ops/lightsail-vm-setup.sh
 
 ### 6-2. コンテナログを journald で 30 日残す（任意。まだ本番では適用していない）
 
-決定は [ADR 0014](../adr/0014-keep-container-logs-30-days-in-journald.md)。ログの見方と理由は [logging-and-monitoring.md](logging-and-monitoring.md) の 2 章。`docker-compose.yml` には journald を書かない（journald は systemd のある Linux ホスト専用で、開発機の Docker Desktop などが動かなくなるため）。本番ホストにだけ、次を入れる。
+決定は [ADR 0015](../adr/0015-keep-container-logs-30-days-in-journald.md)。ログの見方と理由は [logging-and-monitoring.md](logging-and-monitoring.md) の 2 章。`docker-compose.yml` には journald を書かない（journald は systemd のある Linux ホスト専用で、開発機の Docker Desktop などが動かなくなるため）。本番ホストにだけ、次を入れる。
 
 1. journald の drop-in を置く。内容は [`ops/journald-retention.conf`](../../ops/journald-retention.conf)（`MaxRetentionSec=30day`、`MaxFileSec=1day`、`SystemMaxUse=1G`）。
 2. Docker の既定ドライバを journald にする。内容は [`ops/docker-daemon.journald.json`](../../ops/docker-daemon.journald.json)（`"log-driver": "journald"`）。
