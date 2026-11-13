@@ -45,3 +45,4 @@
 | [0009](0009-automerge-safety-guards.md) | 自動マージの安全装置 | accepted（時間帯の「人がいる時間」は未確定） |
 | [0010](0010-pr-template-v2-evidence-first.md) | PRテンプレート v2 は、証拠と図を先に見せる | accepted |
 | [0011](0011-automerge-rollout-phases.md) | 自動マージは段階を踏んで始める | accepted（phase 1 以降は未実施） |
+| [0012](0012-allow-go-imports-in-go-mod.md) | Goのimportは、mainのgo.modにある依存を許す | accepted |
