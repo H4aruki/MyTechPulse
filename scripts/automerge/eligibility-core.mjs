@@ -98,10 +98,21 @@ function decisionSection(body, heading) {
 }
 
 export function evaluate(input, rules) {
-  const { pr = {}, files = [], checks = [], statuses = [], compare = null, reviews = [] } = input;
+  const { pr = {}, compare = null } = input;
   const mode = input.mode ?? "open";
   const failures = [];
   const fail = (rule, detail) => failures.push({ rule, detail });
+  // 取得結果が欠けているものは 0 件とみなさず失敗にする（fail closed）
+  for (const key of ["files", "checks", "statuses", "reviews"]) {
+    if (!Array.isArray(input[key])) fail("input.missing", `取得結果「${key}」が欠けている`);
+  }
+  if (!Number.isInteger(input.unresolvedThreads) || input.unresolvedThreads < 0) {
+    fail("input.missing", "取得結果「未解決のレビュー会話の数」が欠けている");
+  }
+  const files = Array.isArray(input.files) ? input.files : [];
+  const checks = Array.isArray(input.checks) ? input.checks : [];
+  const statuses = Array.isArray(input.statuses) ? input.statuses : [];
+  const reviews = Array.isArray(input.reviews) ? input.reviews : [];
 
   const isAllowed = matcher(rules.allowedPaths);
   const isExcluded = matcher(rules.excludedPaths);
@@ -152,12 +163,13 @@ export function evaluate(input, rules) {
       fail("path.status", `\`${p}\` の変更の種類が ${f.status}（名前の変更・削除・コピーは対象外）`);
     }
     if (f.previous_filename) fail("path.renamed", `\`${p}\` は \`${f.previous_filename}\` からの名前変更`);
-    if (f.patch && /^(?:new|old|deleted)?\s*(?:file )?mode 120000/m.test(f.patch)) {
-      fail("path.symlink", `\`${p}\` がシンボリックリンク`);
+    // 種類（file / symlink / submodule）は、評価したSHAでの実体を gatherInput が付ける
+    if (f.status !== "removed") {
+      if (f.kind === "symlink") fail("path.symlink", `\`${p}\` がシンボリックリンク`);
+      else if (f.kind !== "file") fail("path.kind", `\`${p}\` の種類が確認できない（${f.kind ?? "不明"}）`);
     }
-    if (!f.patch && (f.changes ?? 0) > 0) {
-      fail("path.no-patch", `\`${p}\` の差分が読めない（バイナリか大きすぎる）`);
-    }
+    // patch が無いものは、行数に関係なく対象外（バイナリ・大きすぎる差分）
+    if (!f.patch) fail("path.no-patch", `\`${p}\` の差分が読めない（バイナリか大きすぎる）`);
   }
 
   // ---- サイズ
@@ -200,7 +212,9 @@ export function evaluate(input, rules) {
         const imp = goImportPath(l);
         if (!imp) continue;
         const first = imp.split("/")[0];
-        if (first.includes(".") && !imp.startsWith(rules.goModulePrefix)) {
+        const mods = input.baseGoModules ?? null;
+        const known = Array.isArray(mods) && mods.some((m) => imp === m || imp.startsWith(`${m}/`));
+        if (first.includes(".") && !imp.startsWith(rules.goModulePrefix) && !known) {
           fail("import.go", `\`${f.filename}\` が外部パッケージ \`${imp}\` を import`);
         }
       }
@@ -219,12 +233,20 @@ export function evaluate(input, rules) {
   }
 
   // ---- 検査
-  const byName = new Map(checks.map((c) => [c.name, c]));
+  // 同じ名前が複数ある（push と pull_request の2回など）ときは、全部が completed かつ success
   for (const name of rules.requiredChecks) {
-    const c = byName.get(name);
-    if (!c) fail("checks.required-missing", `必須の検査「${name}」が見つからない`);
-    else if (c.status !== "completed") fail("checks.running", `必須の検査「${name}」が実行中（${c.status}）`);
-    else if (c.conclusion !== "success") fail("checks.required-failed", `必須の検査「${name}」が ${c.conclusion}`);
+    const same = checks.filter((c) => c.name === name);
+    if (same.length === 0) {
+      fail("checks.required-missing", `必須の検査「${name}」が見つからない`);
+      continue;
+    }
+    const notDone = same.find((c) => c.status !== "completed");
+    if (notDone) {
+      fail("checks.running", `必須の検査「${name}」が実行中（${notDone.status}）`);
+      continue;
+    }
+    const bad = same.find((c) => c.conclusion !== "success");
+    if (bad) fail("checks.required-failed", `必須の検査「${name}」が ${bad.conclusion}`);
   }
   const badConclusions = ["failure", "cancelled", "timed_out", "action_required", "startup_failure"];
   for (const c of checks) {
@@ -261,7 +283,7 @@ export function evaluate(input, rules) {
   for (const [login, r] of latest) {
     if (r.state === "CHANGES_REQUESTED") fail("human.changes-requested", `${login} が変更を求めている`);
   }
-  if ((input.unresolvedThreads ?? 0) > 0) fail("human.threads", `未解決のレビュー会話が ${input.unresolvedThreads} 件`);
+  if (input.unresolvedThreads > 0) fail("human.threads", `未解決のレビュー会話が ${input.unresolvedThreads} 件`);
 
   // ---- 本文
   const sec = decisionSection(pr.body, rules.decisionSection);
@@ -284,7 +306,7 @@ export function renderComment(result, { headSha, nowJst, mergeStatus }) {
     `🤖 自動マージ判定（head ${String(headSha).slice(0, 7)}・${nowJst} JST）`,
     "",
     `判定: ${verdict}`,
-    `マージ: ${mergeStatus}`,
+    `マージ: ${mergeStatus ?? "未実行（判定のみ）"}`,
     "",
     "| 項目 | 結果 |",
     "|---|---|",

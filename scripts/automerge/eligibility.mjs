@@ -1,7 +1,8 @@
 // 自動マージの判定を、GitHub のデータで動かす（読むだけ）。Node 標準だけで動く。
 // PRのコードは checkout も実行もしない。取るのは `gh api` の JSON だけ。
 //
-//   node scripts/automerge/eligibility.mjs --pr N [--repo owner/repo] [--rules path] [--json] [--comment-markdown]
+//   node scripts/automerge/eligibility.mjs --pr N [--repo owner/repo] [--rules path] [--json] [--comment-markdown] [--merge-status "文字列"]
+//   node scripts/automerge/eligibility.mjs --render-comment result.json [--merge-status "文字列"]   （ネットワークを使わない）
 //   node scripts/automerge/eligibility.mjs --dry-run-merged 40 [--out file.md]
 //
 // 終了コード: 0=対象、1=対象外、2=取得失敗・引数エラー（取得できないときは対象外＝fail closed）
@@ -14,9 +15,33 @@ import { evaluate, renderComment } from "./eligibility-core.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_RULES = resolve(HERE, "../../.github/automerge-rules.json");
 
+const ghRun = (args) =>
+  execFileSync("gh", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
+
+const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+// 一時的な失敗（タイムアウト・接続エラー・5xx）だけ再試行する。404 や引数エラーは再試行しない。
+export function isTransient(e) {
+  const msg = `${e?.message ?? ""}\n${e?.stderr ?? ""}`;
+  if (/HTTP 4\d\d/.test(msg)) return false;
+  return /timeout|timed out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|connection (?:reset|refused)|TLS handshake|HTTP 5\d\d/i.test(msg);
+}
+
+// 最大3回（待ちは 2秒→5秒）。run と sleep は差し込める。
+export function execWithRetry(run, args, { sleep = sleepSync, delays = [2000, 5000] } = {}) {
+  for (let i = 0; ; i++) {
+    try {
+      return run(args);
+    } catch (e) {
+      if (i >= delays.length || !isTransient(e)) throw e;
+      sleep(delays[i]);
+    }
+  }
+}
+
 // 既定の取得関数。gh を呼んで標準出力を返す。失敗したら例外。
 export function ghExec(args) {
-  return execFileSync("gh", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
+  return execWithRetry(ghRun, args);
 }
 
 // gh の出力（JSON）を返す。paginate のときはページを平らにする。
@@ -56,6 +81,42 @@ function countUnresolved(api, repo, number) {
   throw new Error("reviewThreads のページが多すぎる");
 }
 
+// main の server/go.mod の require にあるモジュールパス
+export function parseGoMod(text) {
+  const out = [];
+  let inBlock = false;
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = raw.replace(/\/\/.*$/, "").trim();
+    if (/^require\s*\($/.test(line)) inBlock = true;
+    else if (inBlock && line === ")") inBlock = false;
+    else {
+      const m = inBlock ? /^(\S+)\s+v\S+/.exec(line) : /^require\s+(\S+)\s+v\S+/.exec(line);
+      if (m) out.push(m[1]);
+    }
+  }
+  return out;
+}
+
+function baseGoModules(api, repo) {
+  try {
+    const c = api.get(`repos/${repo}/contents/server/go.mod?ref=main`);
+    return parseGoMod(Buffer.from(c.content ?? "", c.encoding === "base64" ? "base64" : "utf8").toString("utf8"));
+  } catch {
+    return null; // 取れなければ外部 import は全部失敗（fail closed）
+  }
+}
+
+// 評価したSHAでの実体の種類（file / symlink / submodule / dir）。取れなければ null。
+function fileKind(api, repo, path, sha) {
+  try {
+    const enc = path.split("/").map(encodeURIComponent).join("/");
+    const c = api.get(`repos/${repo}/contents/${enc}?ref=${sha}`);
+    return Array.isArray(c) ? "dir" : (c?.type ?? null);
+  } catch {
+    return null;
+  }
+}
+
 function baseDeps(api, repo) {
   const c = api.get(`repos/${repo}/contents/frontend/package.json?ref=main`);
   const pkg = JSON.parse(Buffer.from(c.content ?? "", c.encoding === "base64" ? "base64" : "utf8").toString("utf8"));
@@ -67,7 +128,8 @@ export function gatherInput(api, repo, number, mode = "open") {
   const pr = api.get(`repos/${repo}/pulls/${number}`);
   const headSha = pr?.head?.sha;
   if (!headSha) throw new Error("head SHA を取得できない");
-  const files = api.get(`repos/${repo}/pulls/${number}/files?per_page=100`, { paginate: true });
+  const rawFiles = api.get(`repos/${repo}/pulls/${number}/files?per_page=100`, { paginate: true });
+  const files = rawFiles.map((f) => (f.status === "removed" ? f : { ...f, kind: fileKind(api, repo, f.filename, headSha) }));
   const checks = api.get(`repos/${repo}/commits/${headSha}/check-runs?per_page=100`, { paginate: true }).flatMap((p) => p.check_runs ?? []);
   const st = api.get(`repos/${repo}/commits/${headSha}/status`);
   const statuses = st?.statuses ?? [];
@@ -75,6 +137,7 @@ export function gatherInput(api, repo, number, mode = "open") {
   const reviews = api.get(`repos/${repo}/pulls/${number}/reviews?per_page=100`, { paginate: true });
   const unresolvedThreads = countUnresolved(api, repo, number);
   const deps = baseDeps(api, repo);
+  const goModules = baseGoModules(api, repo);
   return {
     headSha,
     input: {
@@ -87,6 +150,7 @@ export function gatherInput(api, repo, number, mode = "open") {
       reviews,
       unresolvedThreads,
       baseDeps: deps,
+      baseGoModules: goModules,
     },
   };
 }
@@ -100,11 +164,11 @@ export function summaryLine(number, result, headSha) {
   return `PR #${number} ${result.eligible ? "対象" : "対象外"}（クラス${result.class}） head=${String(headSha).slice(0, 7)} 当たったルール: ${ids}`;
 }
 
-export function runSingle({ api, repo, number, rules, json = false, commentMarkdown = false, now = new Date() }) {
+export function runSingle({ api, repo, number, rules, json = false, commentMarkdown = false, mergeStatus = null, now = new Date() }) {
   const { headSha, input } = gatherInput(api, repo, number, "open");
   const result = evaluate(input, rules);
   let text;
-  if (commentMarkdown) text = renderComment(result, { headSha, nowJst: nowJst(now), mergeStatus: null });
+  if (commentMarkdown) text = renderComment(result, { headSha, nowJst: nowJst(now).replace(/ JST$/, ""), mergeStatus });
   else if (json) text = JSON.stringify({ ...result, headSha }, null, 2) + "\n";
   else text = summaryLine(number, result, headSha) + "\n";
   return { text, code: result.eligible ? 0 : 1 };
@@ -135,7 +199,8 @@ export function dryRunMerged({ api, repo, count, rules, listMerged }) {
     byClass[r.result.class]++;
     if (r.result.eligible) eligible++;
     for (const f of new Set(r.result.failures.map((x) => x.rule))) ruleCount.set(f, (ruleCount.get(f) ?? 0) + 1);
-    if (r.result.failures.every((f) => f.rule === "body.decision")) eligibleWithoutBody++;
+    const fs = r.result.failures;
+    if (fs.length > 0 && fs.every((f) => f.rule === "body.decision")) eligibleWithoutBody++;
   }
   const out = [];
   out.push(`# 自動マージ判定のドライラン（マージ済みPR 直近 ${rows.length} 本）`, "");
@@ -176,11 +241,13 @@ function parseArgs(argv) {
     else if (a === "--rules") o.rules = val();
     else if (a === "--json") o.json = true;
     else if (a === "--comment-markdown") o.commentMarkdown = true;
+    else if (a === "--merge-status") o.mergeStatus = val();
+    else if (a === "--render-comment") o.renderComment = val();
     else if (a === "--dry-run-merged") o.dry = Number(val());
     else if (a === "--out") o.out = val();
     else throw new Error(`知らない引数: ${a}`);
   }
-  if (o.dry === undefined && !(Number.isInteger(o.pr) && o.pr > 0)) throw new Error("--pr N（正の整数）か --dry-run-merged N が必要");
+  if (o.dry === undefined && o.renderComment === undefined && !(Number.isInteger(o.pr) && o.pr > 0)) throw new Error("--pr N（正の整数）か --dry-run-merged N が必要");
   if (o.dry !== undefined && !(Number.isInteger(o.dry) && o.dry > 0)) throw new Error("--dry-run-merged は正の整数");
   return o;
 }
@@ -192,6 +259,19 @@ export function main(argv, { exec = ghExec, write = (s) => process.stdout.write(
   } catch (e) {
     err(`引数エラー: ${e.message}\n`);
     return 2;
+  }
+  if (o.renderComment !== undefined) {
+    try {
+      const j = JSON.parse(readFileSync(o.renderComment, "utf8"));
+      if (!j || !Array.isArray(j.failures) || !j.stats || typeof j.eligible !== "boolean" || !j.class || !j.headSha) {
+        throw new Error("判定結果のJSONに stats・failures・class・eligible・headSha が揃っていない");
+      }
+      write(renderComment(j, { headSha: j.headSha, nowJst: nowJst().replace(/ JST$/, ""), mergeStatus: o.mergeStatus ?? null }));
+      return 0;
+    } catch (e) {
+      err(`コメントを作れない: ${e.message}\n`);
+      return 2;
+    }
   }
   try {
     const rules = JSON.parse(readFileSync(o.rules ?? DEFAULT_RULES, "utf8"));
@@ -205,7 +285,7 @@ export function main(argv, { exec = ghExec, write = (s) => process.stdout.write(
       else write(r.markdown);
       return 0;
     }
-    const r = runSingle({ api, repo, number: o.pr, rules, json: o.json, commentMarkdown: o.commentMarkdown });
+    const r = runSingle({ api, repo, number: o.pr, rules, json: o.json, commentMarkdown: o.commentMarkdown, mergeStatus: o.mergeStatus ?? null });
     write(r.text);
     return r.code;
   } catch (e) {

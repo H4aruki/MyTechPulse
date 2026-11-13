@@ -38,12 +38,22 @@ PRのコードは checkout も実行もしません。取得に失敗したら�
 node scripts/automerge/eligibility.mjs --pr 123
 node scripts/automerge/eligibility.mjs --pr 123 --json
 node scripts/automerge/eligibility.mjs --pr 123 --comment-markdown
+# コメントの「マージ:」の行の文言を指定する（無ければ「未実行（判定のみ）」）
+node scripts/automerge/eligibility.mjs --pr 123 --comment-markdown --merge-status "保留（時間帯のため）"
+# --json の出力（stats・failures・class・eligible・headSha）から、ネットワークを使わずコメントを作る
+node scripts/automerge/eligibility.mjs --render-comment result.json --merge-status "しない"
 
 # マージ済みPRの直近40本で試算（読むだけ。コメントもラベルも付けない）
 node scripts/automerge/eligibility.mjs --dry-run-merged 40 --out dryrun.md
 ```
 
-`gh` コマンドでログイン済みであることが必要です。
+`gh` コマンドでログイン済みであることが必要です。取得がタイムアウト・接続エラー・5xx で失敗したときだけ、最大3回（2秒→5秒の待ち）まで再試行します。
+
+試験は、ファイルを指定して実行します（Node 24 では、ディレクトリ指定の `node --test scripts/automerge/` は動きません）。
+
+```bash
+node --test scripts/automerge/eligibility-core.test.mjs scripts/automerge/eligibility.test.mjs
+```
 
 dry-run の表は、PRごとのクラス・対象か・当たったルールidと、集計を出します。
 過去のPRは旧テンプレートなので、本文ルールを除いた場合の本数も併記します。

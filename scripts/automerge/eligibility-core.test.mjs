@@ -10,6 +10,7 @@ const patchOf = (adds, dels = 0) =>
 const file = (filename, additions, deletions = 0, extra = {}) => ({
   filename,
   status: "modified",
+  kind: "file",
   additions,
   deletions,
   changes: additions + deletions,
@@ -19,6 +20,7 @@ const file = (filename, additions, deletions = 0, extra = {}) => ({
 const withPatch = (filename, lines, extra = {}) => ({
   filename,
   status: "modified",
+  kind: "file",
   additions: lines.length,
   deletions: 0,
   changes: lines.length,
@@ -47,6 +49,7 @@ const base = (over = {}) => ({
   reviews: [],
   unresolvedThreads: 0,
   baseDeps: ["react", "@tanstack/react-query"],
+  baseGoModules: ["github.com/jackc/pgx/v5", "github.com/pressly/goose/v3"],
   ...over,
 });
 const rulesOf = (r) => r.failures.map((f) => f.rule);
@@ -143,10 +146,43 @@ test("パス: rename・削除・バイナリ・symlink は失敗", () => {
   assert.ok(rulesOf(r).includes("path.status") && rulesOf(r).includes("path.renamed"));
   r = evaluate(base({ files: [t, file("server/internal/feed/b.go", 0, 5, { status: "removed" })] }), rules);
   assert.ok(rulesOf(r).includes("path.status"));
-  r = evaluate(base({ files: [t, { filename: "frontend/src/logo.png", status: "added", additions: 0, deletions: 0, changes: 0 }, { filename: "frontend/src/big.ts", status: "modified", additions: 400, deletions: 0, changes: 400 }] }), rules);
-  assert.deepEqual(rulesOf(r).filter((x) => x === "path.no-patch").length, 1);
-  r = evaluate(base({ files: [t, file("frontend/src/link.ts", 1, 0, { status: "added", patch: "new file mode 120000\n@@ -0,0 +1 @@\n+target" })] }), rules);
+  r = evaluate(base({ files: [t, { filename: "frontend/src/logo.png", kind: "file", status: "added", additions: 0, deletions: 0, changes: 0 }, { filename: "frontend/src/big.ts", kind: "file", status: "modified", additions: 400, deletions: 0, changes: 400 }] }), rules);
+  assert.deepEqual(rulesOf(r).filter((x) => x === "path.no-patch").length, 2);
+  r = evaluate(base({ files: [t, file("frontend/src/link.ts", 1, 0, { status: "added", kind: "symlink" })] }), rules);
   assert.ok(rulesOf(r).includes("path.symlink"));
+  r = evaluate(base({ files: [t, file("frontend/src/unk.ts", 1, 0, { kind: undefined })] }), rules);
+  assert.ok(rulesOf(r).includes("path.kind"));
+});
+
+test("検査: 同名の check-run が複数あるときは全部 success が必要", () => {
+  const name = rules.requiredChecks[0];
+  const dup = (second) => base({ checks: [...goodChecks(), { name, ...second }] });
+  assert.equal(evaluate(dup({ status: "completed", conclusion: "success" }), rules).eligible, true);
+  assert.deepEqual(rulesOf(evaluate(dup({ status: "completed", conclusion: "failure" }), rules)), ["checks.required-failed"]);
+  assert.deepEqual(rulesOf(evaluate(dup({ status: "in_progress", conclusion: null }), rules)), ["checks.running"]);
+  // 失敗が先で成功が後でも見逃さない
+  const rev = base({ checks: [{ name, status: "completed", conclusion: "failure" }, ...goodChecks()] });
+  assert.deepEqual(rulesOf(evaluate(rev, rules)), ["checks.required-failed"]);
+});
+
+test("取得結果が欠けているときは 0 とみなさず失敗（fail closed）", () => {
+  for (const key of ["unresolvedThreads", "files", "checks", "statuses", "reviews"]) {
+    for (const v of [null, undefined]) {
+      const r = evaluate(base({ [key]: v }), rules);
+      assert.equal(r.eligible, false, `${key}=${v}`);
+      assert.ok(rulesOf(r).includes("input.missing"), `${key}=${v}`);
+    }
+  }
+});
+
+test("import(Go): main の go.mod にある依存は通り、無ければ失敗", () => {
+  const t = file("server/internal/feed/a_test.go", 3);
+  const mk = (lines, extra = {}) => evaluate(base({ files: [withPatch("server/internal/feed/a_test.go", lines), t], ...extra }), rules);
+  assert.equal(mk(['\t"github.com/jackc/pgx/v5/pgxpool"']).eligible, true);
+  assert.equal(mk(['\t"github.com/pressly/goose/v3"']).eligible, true);
+  assert.deepEqual(rulesOf(mk(['\t"github.com/jackc/pgx/v5x"'])), ["import.go"]);
+  assert.deepEqual(rulesOf(mk(['\t"github.com/evil/x"'])), ["import.go"]);
+  assert.deepEqual(rulesOf(mk(['\t"github.com/jackc/pgx/v5"'], { baseGoModules: null })), ["import.go"]);
 });
 
 test("テスト: テスト追加が無いと失敗、docsOnly は規則次第", () => {
