@@ -113,4 +113,4 @@ flowchart LR
 - 公開用の箱は、中身が変わっていないことを確かめられる印（ダイジェスト）付きで作り、その印のものだけを入れ替える
 - データベースの変更は「追加するだけ」の変更に限る。そのため、API入れ替えに失敗して前の版へ戻っても、データベースは巻き戻さずに済む
 - 入れ替えの前に、データのコピー（バックアップ）を取る
-- 手順の詳細は[go-auto-deploy.md](../deploy/go-auto-deploy.md)、サーバーの用意は[lightsail-provisioning.md](../deploy/lightsail-provisioning.md)、バックアップは[database-backup-and-restore.md](../deploy/database-backup-and-restore.md)を参照
+- 手順の詳細は[go-auto-deploy.md](../deploy/go-auto-deploy.md)、サーバーの用意は[lightsail-provisioning.md](../deploy/lightsail-provisioning.md)、別のサーバーへの引っ越しは[migrate-to-another-server.md](../deploy/migrate-to-another-server.md)、バックアップは[database-backup-and-restore.md](../deploy/database-backup-and-restore.md)を参照

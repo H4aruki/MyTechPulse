@@ -81,4 +81,4 @@ node scripts/release-manifest.mjs verify \
 | `LIGHTSAIL_SSH_KEY`、`LIGHTSAIL_HOST`、`LIGHTSAIL_USER` | 自動デプロイが、本番サーバーへ接続して入れ替える |
 | `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` | 画面（Cloudflare Pages）の公開 |
 
-リポジトリ変数 `GO_DEPLOY_ENABLED`（`true` のときだけ自動デプロイが動く）は、Secretsではなく Variables にあります。
+リポジトリ変数 `GO_DEPLOY_ENABLED`（`true` のときだけ自動デプロイが動く）は、Secretsではなく Variables にあります。接続先のサーバーを変えるときは、`LIGHTSAIL_HOST` と、workflow に固定した SSH のホスト公開鍵を一緒に変えます。手順は [migrate-to-another-server.md](migrate-to-another-server.md) です。

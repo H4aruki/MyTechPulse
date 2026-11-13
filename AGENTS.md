@@ -171,5 +171,5 @@ node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/
 - Codex固有の仕掛け: `.codex/README.md`
 - ハーネス全体: `docs/agent-harness/README.md`
 - 用語（利用者・興味度・推薦など）: `CONTEXT.md`。設計判断: `docs/adr/`
-- 本番の更新（自動デプロイ）: `docs/deploy/go-auto-deploy.md`。サーバーの構築: `docs/deploy/lightsail-provisioning.md`。バックアップと復元: `docs/deploy/database-backup-and-restore.md`。Python版へ戻す緊急手順: `docs/deploy/rollback-to-python.md`
+- 本番の更新（自動デプロイ）: `docs/deploy/go-auto-deploy.md`。サーバーの構築: `docs/deploy/lightsail-provisioning.md`。別のサーバーへの引っ越し: `docs/deploy/migrate-to-another-server.md`。バックアップと復元: `docs/deploy/database-backup-and-restore.md`。Python版へ戻す緊急手順: `docs/deploy/rollback-to-python.md`
 - 残タスク: `TASKS.md`
