@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# pre-push フック: main への push、force push を止める。
+# stdin の各行: <local_ref> <local_sha> <remote_ref> <remote_sha>
+set -u
+zero=0000000000000000000000000000000000000000
+ng=0
+
+deny() { # 理由 対処
+  printf '[pre-push] 拒否: %s\n  対処: %s\n' "$1" "$2" >&2
+  ng=1
+}
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "${remote_ref:-}" ] || continue
+
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    if [ "$local_sha" = "$zero" ]; then
+      deny "main の削除は禁止です。" "削除せず、作業ブランチだけを扱ってください。"
+    else
+      deny "main への直接 push は禁止です（${local_ref}）。" "作業ブランチ（例: feat/12-add-login）を push し、PR から取り込んでください。"
+    fi
+    continue
+  fi
+
+  # ブランチ削除は force 判定の対象外
+  [ "$local_sha" = "$zero" ] && continue
+
+  if [ "$remote_sha" != "$zero" ]; then
+    if ! git cat-file -e "${remote_sha}^{commit}" 2>/dev/null \
+      || ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+      deny "${remote_ref} への push が fast-forward ではありません（force push 相当）。" "git fetch して rebase または merge で取り込んでから、通常の push をしてください。"
+      continue
+    fi
+  fi
+done
+
+exit "$ng"

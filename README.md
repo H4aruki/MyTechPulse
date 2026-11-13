@@ -98,6 +98,8 @@ Copy-Item server\.env.example server\.env
 
 `dev.ps1` が、DB → DBの移行 → Go API（http://localhost:8001）→ 画面（http://localhost:5173）の順に起動します。画面側の設定は、リポジトリの `frontend\.env.development` が既定を持つので、作る必要はありません。手順を分けて実行する方法と、コマンドの詳細は [`AGENTS.md`](./AGENTS.md) の「開発コマンド」にあります。
 
+clone したあとに、一度だけ `./scripts/setup-hooks.sh` を実行すると、`main` への直接コミットや直接 push を手元で止める Git フックが有効になります。詳しくは [`CONTRIBUTING.md`](./CONTRIBUTING.md) を参照してください。
+
 - APIの確認画面（Swagger UI）: ローカルでは http://localhost:8001/docs 。**本番では無効**です。
 - 動かないときの確認点:
   - ログインはできるのに、記事の一覧が「ログインしていない」になる: 画面の接続先（`VITE_API_BASE_URL`）が `http://localhost:8001` になっているか確認します。`127.0.0.1` だと、画面（`localhost`）とは別のサイトとして扱われ、ログインの印（Cookie）が付きません。

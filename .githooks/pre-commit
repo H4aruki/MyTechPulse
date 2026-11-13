@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# pre-commit フック: main 直コミット禁止、危険なファイル名、gitleaks。
+set -u
+root=$(git rev-parse --show-toplevel) || exit 1
+cd "$root" || exit 1
+
+branch=$(git symbolic-ref --short -q HEAD || echo "")
+if [ "$branch" = "main" ]; then
+  echo "main ブランチへの直接コミットは禁止です。作業ブランチを作ってください（例: feat/12-add-login）。" >&2
+  exit 1
+fi
+
+# 秘密情報になりやすいファイル名
+bad=""
+while IFS= read -r f; do
+  base=${f##*/}
+  case "$base" in
+    .env.example) ;;
+    .env|.env.*|*.pem|*.key|id_rsa|credentials.json) bad+="  $f"$'\n' ;;
+  esac
+done < <(git diff --cached --name-only --diff-filter=ACMR)
+if [ -n "$bad" ]; then
+  printf '秘密情報の可能性があるファイルがステージされています:\n%s' "$bad" >&2
+  echo "git restore --staged <ファイル> で外してください。" >&2
+  exit 1
+fi
+
+# gitleaks（任意）
+if command -v gitleaks >/dev/null 2>&1; then
+  if gitleaks git --help >/dev/null 2>&1; then
+    gitleaks git --staged --redact --verbose || { echo "gitleaks が秘密情報を検出しました。" >&2; exit 1; }
+  else
+    gitleaks protect --staged --redact || { echo "gitleaks が秘密情報を検出しました。" >&2; exit 1; }
+  fi
+else
+  printf '\033[33m%s\033[0m\n' "gitleaks未導入のためローカル秘密スキャンをスキップ（CIでは検査される）。導入: https://github.com/gitleaks/gitleaks" >&2
+fi
+exit 0
