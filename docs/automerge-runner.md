@@ -46,3 +46,5 @@ main の最後に終わった CI が成功でなければ、「保留（mainが�
 ## 試験
 
 `bash scripts/automerge/automerge_test.sh` と `node --test scripts/automerge/guards.test.mjs`（CIでも動きます）。
+
+判定ルールと判定スクリプトの説明は [automerge.md](automerge.md) を参照します。
