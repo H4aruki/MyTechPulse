@@ -49,6 +49,180 @@ const PS_RANGE_OPTION = /(^|\s)-(Tail|TotalCount|First|Last)/i;
 const WORKER_LOG_MESSAGE =
   'Codex workerのログは大きいので、全文は読まないでください。失敗時は結果の末尾の数行を見て、足りなければ tail や grep など範囲を絞って読みます。';
 
+// 引用の中は1語にする。コミットメッセージ内の --no-verify を、オプションと見分けないため。
+function shellWords(segment) {
+  const words = [];
+  const s = String(segment);
+  let i = 0;
+  while (i < s.length) {
+    while (i < s.length && /\s/.test(s[i])) i += 1;
+    if (i >= s.length) break;
+    let word = '';
+    let quote = '';
+    while (i < s.length) {
+      const c = s[i];
+      if (quote) {
+        if (c === quote) {
+          quote = '';
+          i += 1;
+          continue;
+        }
+        if (c === '\\' && quote === '"' && i + 1 < s.length) {
+          word += s[i + 1];
+          i += 2;
+          continue;
+        }
+        word += c;
+        i += 1;
+        continue;
+      }
+      if (c === '"' || c === "'") {
+        quote = c;
+        i += 1;
+        continue;
+      }
+      if (/\s/.test(c)) break;
+      word += c;
+      i += 1;
+    }
+    if (word) words.push(word);
+  }
+  return words;
+}
+
+function wordIsNoVerify(word) {
+  return word === '--no-verify' || word.startsWith('--no-verify=');
+}
+
+// git のグローバルオプションを飛ばし、サブコマンドと -c の代入を取り出す。
+function parseGit(segment) {
+  const ts = shellWords(segment);
+  if (ts[0] !== 'git') return null;
+  const configAssignments = [];
+  let i = 1;
+  while (i < ts.length) {
+    const t = ts[i];
+    if (t === '--') {
+      return { sub: ts[i + 1] ?? '', args: ts.slice(i + 2), configAssignments };
+    }
+    if (t === '-c' || t === '-C') {
+      const arg = ts[i + 1];
+      if (t === '-c' && arg !== undefined) configAssignments.push(arg);
+      i += arg === undefined ? 1 : 2;
+      continue;
+    }
+    if (t.startsWith('-C') && t.length > 2) {
+      i += 1;
+      continue;
+    }
+    if (t.startsWith('-c') && t.length > 2) {
+      configAssignments.push(t.slice(2));
+      i += 1;
+      continue;
+    }
+    if (t.startsWith('--')) {
+      const body = t.slice(2);
+      const name = body.split('=')[0];
+      const hasEq = body.includes('=');
+      const takesArg =
+        name === 'git-dir' ||
+        name === 'work-tree' ||
+        name === 'namespace' ||
+        name === 'super-prefix' ||
+        name === 'config-env' ||
+        name === 'list-cmds';
+      i += !hasEq && takesArg ? 2 : 1;
+      continue;
+    }
+    if (t.startsWith('-')) {
+      i += 1;
+      continue;
+    }
+    return { sub: t, args: ts.slice(i + 1), configAssignments };
+  }
+  return { sub: '', args: [], configAssignments };
+}
+
+function setsHooksPath(assignment) {
+  return /^core\.hookspath(?:=|$)/i.test(String(assignment));
+}
+
+const CONFIG_READ = new Set(['get', 'get-all', 'get-regexp', 'get-urlmatch', 'list', 'l']);
+const CONFIG_WRITE = new Set(['add', 'replace-all', 'unset', 'unset-all']);
+const CONFIG_WITH_ARG = new Set(['file', 'f', 'blob', 'default', 'type', 'comment', 'includes']);
+
+// 値を書く・消す変更だけを止める。引数なしの参照と --get は許可する。
+function configWritesHooksPath(args) {
+  let mode = 'implicit';
+  const positionals = [];
+  for (let i = 0; i < args.length; i++) {
+    const t = args[i];
+    if (t === '--') {
+      positionals.push(...args.slice(i + 1));
+      break;
+    }
+    if (t.startsWith('--')) {
+      const body = t.slice(2);
+      const eq = body.indexOf('=');
+      const name = eq === -1 ? body : body.slice(0, eq);
+      if (CONFIG_READ.has(name) && mode !== 'write') mode = 'read';
+      if (CONFIG_WRITE.has(name)) mode = 'write';
+      if (eq === -1 && CONFIG_WITH_ARG.has(name)) i += 1;
+      continue;
+    }
+    if (t.startsWith('-') && t.length > 1) {
+      if (t.slice(1).includes('l')) mode = 'read';
+      if (t === '-f') i += 1;
+      continue;
+    }
+    positionals.push(t);
+  }
+  const idx = positionals.findIndex((p) => /^core\.hookspath$/i.test(p));
+  if (idx === -1) return false;
+  if (mode === 'read') return false;
+  if (mode === 'write') return true;
+  return positionals.length > idx + 1;
+}
+
+// git commit の短い -n は --no-verify。引数を取る文字の後ろはメッセージなので見ない。
+const COMMIT_TAKES_ARG = new Set(['C', 'c', 'F', 'm', 't']);
+const COMMIT_OPTIONAL_ARG = new Set(['u', 'S']);
+
+// -m などの引数に入った文字列は、フックを飛ばす指定ではない。
+function commitSkipsVerify(args) {
+  for (let i = 0; i < args.length; i++) {
+    const t = args[i];
+    if (t === '--') break;
+    if (wordIsNoVerify(t)) return true;
+    if (!t.startsWith('-') || t.startsWith('--')) continue;
+    const letters = t.slice(1);
+    for (let j = 0; j < letters.length; j++) {
+      const ch = letters[j];
+      if (ch === 'n') return true;
+      if (COMMIT_TAKES_ARG.has(ch)) {
+        if (j === letters.length - 1) i += 1;
+        break;
+      }
+      if (COMMIT_OPTIONAL_ARG.has(ch) && j < letters.length - 1) break;
+    }
+  }
+  return false;
+}
+
+function gitSkipsVerify(segment) {
+  const parsed = parseGit(segment);
+  if (!parsed) return false;
+  if (parsed.sub === 'commit') return commitSkipsVerify(parsed.args);
+  return shellWords(segment).some(wordIsNoVerify);
+}
+
+function gitOverridesHooksPath(segment) {
+  const parsed = parseGit(segment);
+  if (!parsed) return false;
+  if (parsed.configAssignments.some(setsHooksPath)) return true;
+  return parsed.sub === 'config' && configWritesHooksPath(parsed.args);
+}
+
 const RULES = [
   {
     id: 'worker-log-full-read',
@@ -84,6 +258,18 @@ const RULES = [
     test: (s) => /^git\s+push\b/.test(s) && /(\s|:)main(\s|$)/.test(s),
     message:
       'main への直接反映は禁止です。main へ入ると本番公開まで自動で走ります（.github/workflows/ci.yml）。作業用の枝へ送って、プルリクエスト経由で取り込んでください。',
+  },
+  {
+    id: 'skip-verify',
+    test: gitSkipsVerify,
+    message:
+      'フックを飛ばす指定（--no-verify や git commit の -n）は禁止です。秘密情報の検査などが動かなくなります。通常の git commit や git push を使ってください。git push -n は送らない確認なので、そのまま使えます。',
+  },
+  {
+    id: 'hooks-path',
+    test: gitOverridesHooksPath,
+    message:
+      'Gitフックの場所（core.hooksPath）を書き換える操作は禁止です。フックを外すと、秘密情報の検査などが飛ばされます。有効化は ./scripts/setup-hooks.sh を使い、今の値を見るだけなら git config core.hooksPath と引数なしで読んでください。',
   },
   {
     id: 'pr-merge-or-approve',

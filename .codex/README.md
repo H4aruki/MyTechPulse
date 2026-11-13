@@ -40,4 +40,5 @@ codex execpolicy check --pretty --rules .codex/rules/default.rules -- git push o
 
 - プロジェクトやフックを信頼するまでは、Codexはローカルフックを実行しません。
 - コマンド規則はサンドボックス外での実行判断に使われます。サンドボックス内を含む確認はフックと作業ルールも併用します。
+- 接頭辞規則は、`git commit -nm` のような `-n` の結合形、`git -c core.hooksPath=値`、読み取りと同じ並びになる `git config core.hooksPath 値`、`--no-verify` がサブコマンドの直後に無い形を止められません。これらは `.claude/hooks/lib/rules.mjs` が止めます。
 - MCPやWeb検索の通信は、コマンド用サンドボックスの外部通信設定とは別に管理されます。
