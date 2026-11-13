@@ -24,6 +24,7 @@ MyTechPulse は、Qiita と Zenn から利用者の興味タグに合う記事�
 
 - `.env`、`server/.env`、`frontend/.env` を読まない。項目名は `.env.example`、`server/.env.example`、`frontend/.env.example` で確認する。
 - `git push --force`、`git reset --hard`、`git clean` など、履歴や作業内容を失う操作をしない。
+- `--no-verify` と `git commit -n`（`-nm` や `-an` の結合形も含む）でフックを飛ばさない。`core.hooksPath` を書き換えない（`git -c` での指定も、`git config` に値を書くことも禁止）。読み取りの `git config core.hooksPath` と、送らない確認の `git push -n` は使ってよい。
 - `main` へ直接 push しない。
 - PR の承認とマージをしない。最終判断は人間が行う。
 - DBボリュームを削除しない。停止だけなら `docker compose down` を使う。
@@ -141,8 +142,8 @@ node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/
 2. 記事クリック時は、全タグの興味度を0.8倍（`DecayNumerator / DecayDenominator` = 8/10）に減衰し、クリックした記事のタグへ0.2（`ClickBoost` = 2000）を加えます。上限は1です。加えるのは `tag` 表にすでにあるタグだけです。クリックAPIは送られたタグ名から `tag` の行を作らず、知らないタグは無視します（[Issue #239](https://github.com/H4aruki/MyTechPulse/issues/239)）。
    - 記事を**新しく保存**したときも学習します。保存した記事のタグへ0.3（`SaveBoost` = 3000）を加えます（上限は1）。クリックと違い、ほかのタグは減衰しません。反映は保存から10秒後（`store.SaveLearnDelay`）で、次に興味度を読む・更新するとき（フィード、クリック）に行います。それまでに解除すれば反映しません。反映は1回だけで、`saved_articles.learned_at` に記録するため、再起動しても残ります。さらに、1人1記事につき一生に1回だけです。学習した記事は `saved_article_learnings` に残すので、解除して再保存しても足しません（水増しの防止）。保存済みの記事の再保存、保存の失敗では変わりません（`store.applyDueSaveLearning`、[Issue #236](https://github.com/H4aruki/MyTechPulse/issues/236)）。
 3. 記事取得は、興味度上位5タグを使います（興味度0のタグは入れない。同じ強さは正規化したタグ名の順。`interest.Top`。アンケートの興味スナップショットも同じ選び方）。QiitaとZennから並行取得し、Qiitaは直近5日、Zennは直近14日（タグで見つけた新しいものが0件なら古いものを使う）で絞ります。順位は提供元で違います。Qiitaはタグ重みの合計 × (likes + 1)、Zennはタグ重みの合計のみです。提供元ごとに上位10件を返します。Zennに likes を掛けない理由は、IssueやPRのコメントには残っていません。移行設計（`docs/superpowers/specs/2026-09-14-go-backend-migration-design.md`）には「提供元側の並び順を利用するため」とあります（実装は [PR #145](https://github.com/H4aruki/MyTechPulse/pull/145)）。
-   - 興味度が0より大きいタグが5つに満たないときは、提供元ごとに1回だけ、タグを問わない人気の記事（`provider.Client.Popular`）も取り、空いた枠の候補にします。点数0の記事どうしは、いいね数の多い順です。
-   - 上は即時検索（`ARTICLE_FETCH_ENABLED` が無効。開発・試験）の動きです。有効なとき（本番）は、外部APIを呼ばず、一括取得で貯めたDB（`articles`・`article_tags`）から同じ期間・順位付けで読みます（Zennの古い記事は30日以内）。提供元ごとに、タグで見つけた記事が10件に満たなければ、タグの数を問わず、DBの人気の記事（いいね数順に20件まで読み、重複を除いて同じ点数で並べ直す。Zennは14日以内だけ）で後ろを埋めます。DBの失敗は500で、即時検索へは切り替えません（`recommendation.Service.getFromDB`）。
+   - 興味度が0より大きいタグが5つに満たないとき、即時検索では、提供元ごとに1回だけ、タグを問わない人気の記事（`provider.Client.Popular`）も取り、空いた枠の候補にします。点数0の記事どうしは、いいね数の多い順です。即時検索には共起の表が無いので、似たタグでは埋めません。
+   - 上の人気記事の問い合わせは、即時検索（`ARTICLE_FETCH_ENABLED` が無効。開発・試験）の動きです。有効なとき（本番）は、外部APIを呼ばず、一括取得で貯めたDB（`articles`・`article_tags`）から同じ期間・順位付けで読みます（Zennの古い記事は30日以内）。提供元ごとに、興味のあるタグで見つけた記事が10件に満たないときは、うしろを埋めます。興味度が0より大きいタグが5つに満たないときは、まず似たタグの記事を足し、それでも足りなければ人気の記事で埋めます。似たタグは、興味のあるタグと同じ記事に一緒に付いているタグです。共起は `article_tags` をフィード1回につき1回のSQLで数え、回数の下限は `recommendation` の `minCooccurrence`（いまは3。分布を測った値ではなく、1〜2回の偶然を外す仮の下限）です。興味度が0より大きいタグは似たタグにしません。選ぶ数は、5から興味のあるタグの数を引いた数までです。興味のあるタグが5つあるときは、似たタグは使わず、人気の記事だけで埋めます（いいね数順に20件まで読み、重複を除く。Zennは14日以内だけ）。並びは、興味のあるタグの記事、似たタグの記事、人気の記事の順で、点数では混ぜません。DBの失敗は500で、即時検索へは切り替えません（`recommendation.Service.getFromDB`。[Issue #241](https://github.com/H4aruki/MyTechPulse/issues/241)）。
 4. タグの比較は、前後の空白を除いて小文字にそろえて行います（`interest.NormalizeTag`）。大文字小文字だけが違うタグが、DBに複数あってはいけません。
 5. 外部提供元の片方だけが失敗したときは、成功した側の記事を返し、本文の `warnings` に知らせます。両方失敗したときだけエラーです。
 
@@ -170,5 +171,5 @@ node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/
 - Codex固有の仕掛け: `.codex/README.md`
 - ハーネス全体: `docs/agent-harness/README.md`
 - 用語（利用者・興味度・推薦など）: `CONTEXT.md`。設計判断: `docs/adr/`
-- 本番の更新（自動デプロイ）: `docs/deploy/go-auto-deploy.md`。サーバーの構築: `docs/deploy/lightsail-provisioning.md`。バックアップと復元: `docs/deploy/database-backup-and-restore.md`。Python版へ戻す緊急手順: `docs/deploy/rollback-to-python.md`
+- 本番の更新（自動デプロイ）: `docs/deploy/go-auto-deploy.md`。サーバーの構築: `docs/deploy/lightsail-provisioning.md`。別のサーバーへの引っ越し: `docs/deploy/migrate-to-another-server.md`。バックアップと復元: `docs/deploy/database-backup-and-restore.md`。Python版へ戻す緊急手順: `docs/deploy/rollback-to-python.md`
 - 残タスク: `TASKS.md`

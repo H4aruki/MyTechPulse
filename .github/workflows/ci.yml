@@ -106,8 +106,9 @@ jobs:
         run: node --test ".claude/hooks/**/*.test.mjs" ".codex/hooks/**/*.test.mjs" "scripts/agent-harness/**/*.test.mjs"
 
   # 秘密情報（鍵・トークン）の混入を、gitleaks で検査する。
+  # あわせて、手元の pre-commit と同じ危険なファイル名を、PR / push の変更に対して拒否する。
   # 必須ではなく、公開の工程（go-release の needs）にも入れていない。
-  # 誤検出の許可は .gitleaks.toml に、パスとルールを絞って書く
+  # 誤検出の許可は .gitleaks.toml に、パスとルールを絞って書く。
   secret-scan:
     name: 秘密情報の検査
     runs-on: ubuntu-latest
@@ -118,6 +119,49 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+
+      - name: 危険なファイル名の判定を確かめる
+        run: bash scripts/check-risky-filenames.test.sh
+
+      - name: 変更に含まれる危険なファイル名を拒否する
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            range="${PR_BASE_SHA}...${PR_HEAD_SHA}"
+          elif [ -n "${PUSH_BEFORE:-}" ] && [ "$PUSH_BEFORE" != "$zero" ]; then
+            range="${PUSH_BEFORE}...${PUSH_AFTER}"
+          elif git rev-parse --verify --quiet origin/main >/dev/null; then
+            range="origin/main...HEAD"
+          else
+            range=""
+          fi
+          if [ -n "$range" ]; then
+            echo "検査範囲: $range"
+            files=$(git diff --name-only --diff-filter=ACMR "$range")
+          else
+            echo "検査範囲: 今のコミット（HEAD）"
+            files=$(git diff-tree --no-commit-id --name-only --diff-filter=ACMR -r HEAD)
+          fi
+          set +e
+          bad=$(printf '%s\n' "$files" | bash scripts/check-risky-filenames.sh)
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            if [ -n "$bad" ]; then
+              printf '秘密情報の可能性があるファイルが変更に含まれています:\n%s' "$bad" >&2
+              echo "手元の pre-commit を --no-verify で飛ばしても、ここで失敗します。" >&2
+            else
+              echo "危険なファイル名の検査を実行できませんでした。" >&2
+            fi
+            exit 1
+          fi
       # gitleaks-action は organization のリポジトリで GITLEAKS_LICENSE を要求するため使わず、
       # 公式 CLI をバージョン固定して直接実行する。
       - name: gitleaks CLI を導入（バージョン固定・チェックサム検証）

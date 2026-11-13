@@ -10,20 +10,16 @@ if [ "$branch" = "main" ]; then
   exit 1
 fi
 
-# 秘密情報になりやすいファイル名
-bad=""
-while IFS= read -r f; do
-  base=${f##*/}
-  # 意図して追跡している共有設定は、パスがちょうど一致するときだけ許可する
-  [ "$f" = "frontend/.env.development" ] && continue
-  case "$base" in
-    .env.example) ;;
-    .env|.env.*|*.pem|*.key|id_rsa|credentials.json) bad+="  $f"$'\n' ;;
-  esac
-done < <(git diff --cached --name-only --diff-filter=ACMR)
-if [ -n "$bad" ]; then
-  printf '秘密情報の可能性があるファイルがステージされています:\n%s' "$bad" >&2
-  echo "git restore --staged <ファイル> で外してください。" >&2
+# 秘密情報になりやすいファイル名。判定は CI と同じスクリプト。
+bad=$(bash "$root/scripts/check-risky-filenames.sh" < <(git diff --cached --name-only --diff-filter=ACMR))
+status=$?
+if [ "$status" -ne 0 ]; then
+  if [ -n "$bad" ]; then
+    printf '秘密情報の可能性があるファイルがステージされています:\n%s' "$bad" >&2
+    echo "git restore --staged <ファイル> で外してください。" >&2
+  else
+    echo "危険なファイル名の検査を実行できませんでした。" >&2
+  fi
   exit 1
 fi
 
