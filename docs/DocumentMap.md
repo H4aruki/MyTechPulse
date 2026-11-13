@@ -12,6 +12,7 @@
 docs/
 ├── DocumentMap.md                        … このファイル
 ├── RequirementsSpecification.md          … 要件定義書
+├── pr-template.md                        … PRテンプレートの使い方と、図・証拠の規則
 ├── superpowers/specs/                    … 変更前にレビューする詳細設計
 │   ├── 2026-09-10-user-feedback-design.md
 │   │                                       … 利用者フィードバック機能の設計
@@ -81,6 +82,10 @@ Go移行Issue #118〜#129の実装計画への入口。依存順、設計書の�
 ### adr/
 
 後から変更しにくく、採用理由をコードだけでは判断しづらい設計判断を短く記録する。現在はGoモジュラーモノリス、サーバー側認証セッション、画面とAPI・DBの置き場（Cloudflare PagesとLightsail 1台）の、採用理由を収録している。
+
+### pr-template.md
+
+PRテンプレート（`.github/pull_request_template.md`）の使い方。人が最初に見る順番、図と画像の規則、各節の書き方、証拠の規則、自動マージとの関係、根拠の表をまとめている。
 
 ### RequirementsSpecification.md
 
