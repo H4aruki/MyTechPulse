@@ -8,6 +8,7 @@ import (
 
 	"github.com/H4aruki/MyTechPulse/server/internal/article"
 	"github.com/H4aruki/MyTechPulse/server/internal/articlefetch"
+	"github.com/H4aruki/MyTechPulse/server/internal/interest"
 	"github.com/H4aruki/MyTechPulse/server/internal/store"
 )
 
@@ -137,5 +138,65 @@ func TestFeedArticlesListPopularOrdersByLikesWithinWindow(t *testing.T) {
 	got, err = feed.ListPopular(ctx, article.SourceZenn, since, 2)
 	if err != nil || !reflect.DeepEqual(feedURLs(got), want[:2]) {
 		t.Fatalf("got = %v, err = %v", feedURLs(got), err)
+	}
+}
+
+func TestFeedArticlesListCooccurringTagsCountsSharedArticles(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	fetch := store.NewArticleFetch(pool)
+	feed := store.NewFeedArticles(pool)
+	goTag := newTag(t, pool, "Go")
+	rustTag := newTag(t, pool, "Rust")
+	dockerTag := newTag(t, pool, "Docker")
+	kotlinTag := newTag(t, pool, "Kotlin")
+	now := time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)
+
+	recs := []articlefetch.Record{
+		record(article.SourceQiita, "q1", "https://qiita.com/u/items/q1", now, goTag, rustTag),
+		record(article.SourceQiita, "q2", "https://qiita.com/u/items/q2", now.Add(-time.Hour), goTag, rustTag),
+		// 公開から100日たっている。問い合わせは日時で絞らないので、表に残っていれば数に入る
+		record(article.SourceZenn, "z1", "https://zenn.dev/u/articles/z1", now.Add(-100*24*time.Hour), goTag, rustTag),
+		record(article.SourceQiita, "d1", "https://qiita.com/u/items/d1", now, goTag, dockerTag),
+		record(article.SourceQiita, "d2", "https://qiita.com/u/items/d2", now, goTag, dockerTag),
+		record(article.SourceQiita, "triple", "https://qiita.com/u/items/triple", now, goTag, rustTag, dockerTag),
+		record(article.SourceQiita, "k1", "https://qiita.com/u/items/k1", now, goTag, kotlinTag),
+		record(article.SourceQiita, "only-go", "https://qiita.com/u/items/only-go", now, goTag),
+		record(article.SourceQiita, "only-kotlin", "https://qiita.com/u/items/only-kotlin", now, kotlinTag),
+	}
+	if res, err := fetch.SaveArticles(ctx, recs); err != nil || res.Saved != len(recs) {
+		t.Fatalf("res = %+v, err = %v", res, err)
+	}
+
+	// 空白と大文字小文字を無視する。下限はここでは掛けない（回数の小さいタグも返す）
+	got, err := feed.ListCooccurringTags(ctx, []string{"  GO "}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[0].Tag != "Rust" || got[0].Count != 4 || got[1].Tag != "Docker" || got[1].Count != 3 || got[2].Tag != "Kotlin" || got[2].Count != 1 {
+		t.Fatalf("counts = %+v", got)
+	}
+	for _, item := range got {
+		if interest.NormalizeTag(item.Tag) == "go" {
+			t.Fatalf("種のタグ自身が返った: %+v", got)
+		}
+	}
+
+	// 興味度があるタグは除く。Go と Rust の両方を種にしても、Docker は記事1件につき1回
+	got, err = feed.ListCooccurringTags(ctx, []string{"go", "rust"}, []string{" Rust ", "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Tag != "Docker" || got[0].Count != 3 || got[1].Tag != "Kotlin" || got[1].Count != 1 {
+		t.Fatalf("excluded = %+v", got)
+	}
+
+	got, err = feed.ListCooccurringTags(ctx, []string{" "}, nil)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("blank = %+v, err = %v", got, err)
+	}
+	got, err = feed.ListCooccurringTags(ctx, []string{"nosuch"}, nil)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("unknown = %+v, err = %v", got, err)
 	}
 }

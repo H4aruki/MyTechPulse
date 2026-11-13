@@ -47,3 +47,4 @@
 | [0011](0011-automerge-rollout-phases.md) | 自動マージは段階を踏んで始める | accepted（phase 1 以降は未実施） |
 | [0012](0012-allow-go-imports-in-go-mod.md) | Goのimportは、mainのgo.modにある依存を許す | accepted |
 | [0013](0013-pr-template-briefing-with-decision-section.md) | PRテンプレートを短いブリーフィング形式にし、判断欄を残す | accepted |
+| [0014](0014-fill-empty-feed-slots-with-cooccurring-tags.md) | おすすめの空き枠を、共起するタグの記事で埋める | proposed |
