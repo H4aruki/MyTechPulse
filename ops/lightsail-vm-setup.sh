@@ -176,6 +176,28 @@ if [ "$(timedatectl show -p Timezone --value)" != "$TIMEZONE" ]; then
 fi
 
 # ---- 7. 結果確認と次の手順 ----
+# ---- 6. コンテナログの保持（任意。LOG_RETENTION=1 のときだけ） ----
+# 決定: docs/adr/0014-keep-container-logs-30-days-in-journald.md（Docker のログは journald に 30 日）。
+# 注意: この手順は、まだ本番では走らせていない。既定は何もしない（既存のサーバーで再実行しても変わらない）。
+# やること: journald の drop-in を置き、journald を再読み込みし、daemon.json の見本を置く（既存があれば上書きしない）。
+# やらないこと: Docker の再起動と、コンテナの作り直し。ログドライバは作り直したコンテナから効く
+# （既存のコンテナは新しい設定を自動では使わない。Docker の文書）。手順は docs/deploy/lightsail-provisioning.md の 6-2。
+if [ "${LOG_RETENTION:-0}" = "1" ]; then
+    log "journald の保持設定（30日）を入れる"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    install -m 0755 -d /etc/systemd/journald.conf.d
+    install -m 0644 "$SCRIPT_DIR/journald-retention.conf" /etc/systemd/journald.conf.d/90-mytechpulse-retention.conf
+    systemctl restart systemd-journald
+    if [ -e /etc/docker/daemon.json ]; then
+        warn "/etc/docker/daemon.json が既にあるため上書きしない。\"log-driver\": \"journald\" を自分で足すこと（見本: ops/docker-daemon.journald.json）"
+    else
+        install -m 0644 "$SCRIPT_DIR/docker-daemon.journald.json" /etc/docker/daemon.json
+        log "/etc/docker/daemon.json を置いた。Docker を再起動し、コンテナを作り直すまでは効かない"
+    fi
+else
+    log "コンテナログの保持設定はスキップ（入れるときは LOG_RETENTION=1。docs/deploy/lightsail-provisioning.md の 6-2）"
+fi
+
 log "セットアップ完了。状態を確認する"
 docker --version
 docker compose version

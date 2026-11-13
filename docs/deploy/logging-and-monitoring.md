@@ -1,12 +1,12 @@
 # ログの見方と、本番の監視
 
-[Issue #187](https://github.com/H4aruki/MyTechPulse/issues/187) のうち、リポジトリの中で決められることをまとめた資料です。外部の監視サービスへの登録、課金、本番サーバーへの接続はしていません。分からなかったことは「未確認」と書いてあります。
+[Issue #187](https://github.com/H4aruki/MyTechPulse/issues/187) のうち、リポジトリの中で決められることをまとめた資料です。外部の監視サービスへの登録、課金、本番サーバーへの接続、本番への設定の適用はしていません。分からなかったことは「未確認」と書いてあります。
 
 関連: 自動デプロイの失敗時の見方は [go-auto-deploy.md](go-auto-deploy.md)。サーバーの作り方は [lightsail-provisioning.md](lightsail-provisioning.md)。バックアップは [database-backup-and-restore.md](database-backup-and-restore.md)。
 
 ## 1. ログはどこに出るか
 
-コンテナのログの出し方は、`docker-compose.yml` も `ops/lightsail-vm-setup.sh` も指定していません。`logging:` の項目も、`/etc/docker/daemon.json` を書く処理も、リポジトリにはありません。
+2026-11-13 の決定で、本番ホストのログドライバは **journald**、保持は**最低 30 日**です（[ADR 0014](../adr/0014-keep-container-logs-30-days-in-journald.md)）。ただし**まだ本番には適用していません**。`docker-compose.yml` には `logging:` を書きません（journald は systemd のある Linux ホスト専用で、開発機が動かなくなるため）。以下の「いまの本番」は、適用前の状態の説明です。
 
 Docker の文書では、指定が無いときのドライバは `json-file` です。コンテナの標準出力と標準エラーを、ホスト上の JSON ファイルに貯め、`docker logs` と `docker compose logs` で見ます。このドライバは、既定ではログを回転しません（`max-size` の既定は `-1`、上限なし）。出典: [Configure logging drivers](https://docs.docker.com/engine/logging/configure/)、[JSON File logging driver](https://docs.docker.com/engine/logging/drivers/json-file/)。
 
@@ -28,7 +28,14 @@ docker compose --env-file "$HOME/mytechpulse-production.env" -p mytechpulse \
 
 `api-go` は profile `go-preview`、`caddy` は profile `prod` です。`db` に profile はありません。profile を付けないと、compose がそのサービスを知らないことがあります。
 
-`journalctl` で見るのは、ホストの ssh、fail2ban、Docker デーモン自身です。コンテナの中の API のログは、ドライバが `json-file` のままなら `journalctl` には出ません。
+いま（適用前）、`journalctl` で見るのは、ホストの ssh、fail2ban、Docker デーモン自身です。コンテナの中の API のログは、ドライバが `json-file` のままなら `journalctl` には出ません。
+
+journald ドライバに切り替えたあとの見方は、Docker の文書（[journald logging driver](https://docs.docker.com/engine/logging/drivers/journald/)、2026-11-13 に確認）に次のとおり書いてあります。
+- ログは `journalctl`、journal API、**`docker logs` コマンド**のどれでも取り出せます。つまり、この資料の `docker logs` と `docker compose logs` は、切り替え後も使えます。
+- `journalctl` では、コンテナで絞れます。例: `sudo journalctl CONTAINER_NAME=<コンテナ名>`（`-b` で直近の起動以降、`-o json` で JSON）。メタデータとして `CONTAINER_ID`、`CONTAINER_NAME`、`IMAGE_NAME` などが付きます。`CONTAINER_NAME` は、起動時の名前です（`docker rename` は反映されません）。
+- 既定ドライバは `daemon.json` に `"log-driver": "journald"` を書き、Docker を再起動して切り替えます。新しく作るコンテナから効き、既存のコンテナは新しい設定を自動では使いません（[Configure logging drivers](https://docs.docker.com/engine/logging/configure/)）。
+
+文書に書いていない次の点は**未確認**です。本番で適用したあとに確かめます。`docker compose logs` が journald でも同じように使えるか（compose は `docker logs` と同じ読み出しを使うはずですが、文書で確認していません）。切り替え後の `docker logs --since 72h` の速さ。`docker logs` の出力と、`journalctl` の出力の細かい違い。
 
 | 対象 | 出る場所 | 見るコマンド |
 | --- | --- | --- |
@@ -87,27 +94,34 @@ journalctl -u fail2ban --since "1 hour ago"
 journalctl -u docker --since "1 hour ago"
 ```
 
-`journalctl -u docker` は、Docker デーモン自身の記録です。API の JSON はここにはありません（ドライバが既定の `json-file` のとき）。
+`journalctl -u docker` は、Docker デーモン自身の記録です。API の JSON はここにはありません（ドライバが `json-file` のとき）。journald ドライバでは、コンテナのログは `CONTAINER_NAME=` などで絞って見ます（上）。
 
 ## 2. 保存期間
 
-リポジトリの中には、Docker のログの回転設定はありません。上に書いたとおり、Docker の既定は上限なしです。本番の `/etc/docker/daemon.json` で上書きされているかは未確認です。
+**決定（2026-11-13、K.Haruki）: Docker のコンテナログは最低 30 日残す。** 理由、退けた案（7日・14日、json-file、logrotate、Better Stack Logs）、根拠の数字は [ADR 0014](../adr/0014-keep-container-logs-30-days-in-journald.md) にあります。
 
-案（まだ入れていません）: 長く動かす `db`、`api-go`、`caddy` の compose に、次を書く。
+いまのリポジトリには、Docker のログの回転設定がありません。Docker の既定は `json-file` で、`max-size` の既定は `-1`（上限なし）です。本番の `/etc/docker/daemon.json` で上書きされているかは未確認です。
 
-```yaml
-logging:
-  driver: json-file
-  options:
-    max-size: "10m"
-    max-file: "5"
-```
+決めた方法（**まだ本番には適用していません**）:
 
-1サービスあたり約 50MB、3つで約 150MB です。手順書のディスクは 40GB なので、ログだけでディスクを埋める量にはなりません。`docker logs` の見方はそのままです。公式は、回転が最初から付く `local` ドライバも勧めています。この案は、いまの見方（`json-file` と `docker logs`）を変えない方です。どちらにするかは、下の「オーナーが決めること」です。
+- Docker のログドライバは journald。本番ホストの `/etc/docker/daemon.json` に `"log-driver": "journald"`。見本は [`ops/docker-daemon.journald.json`](../../ops/docker-daemon.journald.json)。
+- ホストの journald に、次の3つを設定する。drop-in は [`ops/journald-retention.conf`](../../ops/journald-retention.conf)、置き場所は `/etc/systemd/journald.conf.d/` です。
 
-この設定は、コンテナを作り直したあとから効きます。すでに動いているコンテナには後から付きません（Docker の文書）。`db` と `caddy` は、自動デプロイのたびに作り直されるとは限りません。入れるときは、作り直すタイミングも決めます。
+| 設定 | 値 | 意味 |
+| --- | --- | --- |
+| `MaxRetentionSec` | `30day` | 30日を過ぎたログを消す。保持の本体 |
+| `MaxFileSec` | `1day` | journald はファイル単位で消すので、1ファイルを1日分にして、消える単位を1日にする |
+| `SystemMaxUse` | `1G` | 安全弁。通常の30日分は数十 MB 程度の見積もり（実測ではない）なので、普段は日数が先に効く。エラーが回り続けたときだけ、日数より前にサイズで消える |
 
-ホストの `/etc/docker/daemon.json` に同じ上限を書く方法もあります。全コンテナに揃いますが、リポジトリの外なので、サーバーを手順書から作り直すと残りません。compose に書くと、次のリリースのファイルと一緒に渡ります。
+`docker-compose.yml` には書きません。journald は systemd のある Linux ホスト専用で、ローカル開発の Docker Desktop などが動かなくなるためです。入れる手順は [lightsail-provisioning.md](lightsail-provisioning.md) の 6-2、スクリプトは `ops/lightsail-vm-setup.sh`（`LOG_RETENTION=1` のときだけ。まだ本番では走らせていません）です。
+
+適用に必要な作業:
+
+1. drop-in を置き、ホストの journald を再読み込み（`systemctl restart systemd-journald`）。
+2. `daemon.json` を置き、Docker を再起動（全コンテナが止まる時間が出る）。
+3. `db`、`api-go`、`caddy` を作り直す。Docker の文書では、既存のコンテナは新しいログ設定を自動では使いません。`db` と `caddy` は、自動デプロイのたびに作り直されるとは限りません。作り直すまでは、古い `json-file` のままです。
+
+journald がログをディスクに残す設定か（`/var/log/journal` があるか。無いと再起動で消える可能性）は、Ubuntu 24.04 の既定を確認していないので**未確認**です。適用後に `ls -d /var/log/journal` と `journalctl --disk-usage` で確かめます。
 
 ## 3. パスワード、トークン、設定値がログに出ないことの確かめ方
 
@@ -197,8 +211,24 @@ GitHub の文書では、Actions のメールや画面内の通知は、利用�
 ```bash
 ops/check_resources.sh
 ops/check_resources.sh --disk-percent 80 --mem-available-mb 100 --swap-used-mb 200
-# 環境変数: CHECK_DISK_PERCENT, CHECK_MEM_AVAILABLE_MB, CHECK_SWAP_USED_MB
+ops/check_resources.sh --record-file /path/to/resource-record.log
+# 環境変数: CHECK_DISK_PERCENT, CHECK_MEM_AVAILABLE_MB, CHECK_SWAP_USED_MB, CHECK_RECORD_FILE
 ```
+
+### 測定値の記録
+
+2026-11-13 の決定で、`check_resources.sh` を cron で回し、毎回の測定値をファイルに残します。サーバー増強の判断や、ログ量・ディスクの増え方を後から見るためです。
+
+`CHECK_RECORD_FILE`（または `--record-file`）でパスを渡したときだけ、測れた回に1行を追記します。しきい値の内側でも外側でも記録します。パスを渡さなければ、いままでどおり記録しません。標準出力の「平常時は何も出さない」は変わりません。
+
+```text
+2026-11-13T21:40:00+09:00 disk_used_pct=21 mem_available_mb=412 swap_used_mb=3 swap_total_mb=2048
+```
+
+- 日時は日本時間（`+09:00`）。スワップが無い機械（合計 0）は `swap_used_mb=none`。
+- 測れなかった回（`df` や `free` の失敗）は、記録しません（終了コード 2）。
+- 追記に失敗したとき（親ディレクトリが無い、書けない）は、標準エラーに `警告: 測定値を記録ファイルへ追記できませんでした: <パス>` を1行出します。終了コードは測定の結果のままです（警告があれば 1、無ければ 0）。
+- 記録ファイルは自動では回転しません。1行は約 110 バイト、15分間隔で1日 96 行（約 10KB）です。1年でも約 4MB の見積もりです（実測ではない）。
 
 見るのは `/` だけです。手順書のディスクは 1台です。別のマウントがあるかは未確認です。スワップが無い機械は、スワップの項目を通ります。本番は 2GB のスワップを作る手順があるので、作り忘れは別の確認（`free -h`）です。
 
@@ -206,39 +236,53 @@ ops/check_resources.sh --disk-percent 80 --mem-available-mb 100 --swap-used-mb 2
 
 ### cron に入れる例（本番には入れていない）
 
-成功のときは何も出さないので、cron が出力をメールする設定なら、超えたときだけメールの材料になります。サーバーがメールを送れるかは未確認です。送れない環境では、1行は届きません。ファイルに残す例も下にあります。ファイルを見に行かないと、気づきにはなりません。
+成功のときは何も出さないので、cron が出力をメールする設定なら、超えたときだけメールの材料になります。サーバーがメールを送れるかは未確認です。送れない環境では、1行は届きません。測定値の記録と、警告の1行を残す例も下にあります。ファイルを見に行かないと、気づきにはなりません。
 
 超えているあいだは、実行のたびに1行出ます。15分は、ディスク（ゆっくり埋まる）とメモリ（短時間で苦しくなる）の間を取った間隔です。メールがうるさいときは、間隔を広げます。
 
 置く場所は、入れ替えのたびに変わるリリース directory には向きません。`~/MyTechPulse` は `git pull` をしない運用なので、そこへは自動では入りません。配布物（ops の tar）には、このファイルを含む commit が `main` に入ったあとから含まれます。安定したパスへコピーするかは、オーナーが決めます。
 
 ```bash
-# 例。この行は資料だけで、本番の crontab には入れていない。
-*/15 * * * * /path/to/check_resources.sh >> /path/to/resource-check.log 2>&1
+# 例。この行は資料だけで、本番の crontab には入れていない（登録はオーナーが行う）。
+# 測定値は resource-record.log に毎回1行追記。警告の1行（と記録の失敗）は resource-check.log へ。
+*/15 * * * * CHECK_RECORD_FILE=/path/to/resource-record.log /path/to/check_resources.sh >> /path/to/resource-check.log 2>&1
 ```
 
 このスクリプトは消しません。古いイメージの削除は、Issue #187 のコメントのとおり、対象と影響を示して許可を得てからにします。
 
-## 7. 外部の生存監視の候補
+## 7. 外部の生存監視（Better Stack の無料枠）
 
-登録はしていません。Issue は、API を止めたら数分以内にオーナーへ知らせることを完了条件にしています。自分でサーバーに監視を常駐させる案は、1GB の負担になるため、Issue 本文が後回しにしています。
+**決定（2026-11-13、K.Haruki）: 外部の生存監視は Better Stack の無料枠を使う。UptimeRobot は使わない。** 登録・課金はこの PR ではしていません。**登録はオーナーが行います。**
 
-外から見るなら、`https://api.mytechpulse.net/health/ready` が HTTP 200 であることです。この URL は、公開後の確認として `.github/workflows/ci.yml` に書いてあります。`/health/ready` は DB への ping が失敗すると 503 です。原因の接続情報は応答に入れません（`server/internal/health/handler.go`）。`/health/live` はプロセスが生きていることだけで、DB は見ません。DB が止まったときも知りたいなら、`ready` を見ます。
+Issue は、API を止めたら数分以内にオーナーへ知らせることを完了条件にしています。自分でサーバーに監視を常駐させる案は、1GB の負担になるため、Issue 本文が後回しにしています。
 
-2026-11-13 に公開ページを見た時点の、無料で使える候補は UptimeRobot です。
+見る URL の案は `https://api.mytechpulse.net/health/ready` が HTTP 200 であることです。この URL は、公開後の確認として `.github/workflows/ci.yml` に書いてあります。`/health/ready` は DB への ping が失敗すると 503 です。原因の接続情報は応答に入れません（`server/internal/health/handler.go`）。`/health/live` はプロセスが生きていることだけで、DB は見ません。DB が止まったときも知りたいなら、`ready` を見ます。
 
-- 料金ページ: <https://uptimerobot.com/pricing/>
-- 無料枠の説明（2026-09-28 付）: <https://help.uptimerobot.com/en/articles/11604710-who-should-use-uptimerobot-s-free-plan>
-- その時点の無料枠: 月額 0、クレジットカード不要、監視 50、間隔 5分、HTTP の監視ができる
+2026-11-13 に、Better Stack の公開の料金ページで確認した無料枠の内容:
 
-5分間隔は、止めてから気づくまで最大でおおよそ5分に、通知の遅れが足されます。Issue の「数分以内」に収まるかは、オーナーの判断です。短い間隔は有料枠です。数値は変わるので、登録の前にもう一度公式ページを見ます。
+- 個人プロジェクト向け
+- 監視（モニター）とハートビートが合わせて 10
+- ステータスページ 1
+- Slack とメールの通知
+- クレジットカード不要
+- **チェック間隔は、その時点の公開ページに書いていなかったので未確認**。Issue の「数分以内」に収まるかは、間隔しだいです。**登録の前に、公式ページで再確認します。** 数値は変わるので、登録の前に、ほかの項目ももう一度見ます。
+- ログは 3GB、保持 3日。これは外形監視とは別の「ログ製品」の無料枠です。**コンテナログの 30 日保持には使いません**（3日では 30 日の要件を満たさないため。[ADR 0014](../adr/0014-keep-container-logs-30-days-in-journald.md)）。
 
-同じ種類の外形監視は他にもあります。この資料で間隔と件数まで確認したのは、上の1つだけです。ほかを選ぶときは、公式の料金ページで、無料か、間隔、クレジットカードの要否を確認します。
+## 8. 決まったことと、残っていること
 
-## 8. オーナーが決めること
+決まったこと（2026-11-13、K.Haruki）:
 
-1. 外部の生存監視を使うか。使うなら、サービス、通知先のメール、無料の5分間隔でよいか、見る URL を `/health/ready` にするか。登録と課金はオーナーが行う。
-2. Docker のログ回転を入れるか。入れるなら、上の compose の案か、ホストの `daemon.json` か。入れたあとは、対象のコンテナを作り直さないと効かない。
-3. `ops/check_resources.sh` を cron に入れるか。入れるなら、安定したパスと、メールが届くか（届かないなら、ログファイルを誰が見るか）。
-4. `provider_request` の行を出すために、起動時の Qiita / Zenn クライアントを `Observed` で包むか。いまのログでは、提供元ごとの失敗は定期取得の `qiita_failed` / `zenn_failed` で数える。
-5. 本番の `docker info` の Logging Driver と、バックアップの cron が実際にあるか。この資料では未確認。
+1. Docker のコンテナログは、journald ドライバで最低 30 日残す（2 章、[ADR 0014](../adr/0014-keep-container-logs-30-days-in-journald.md)）。
+2. 外部の生存監視は、Better Stack の無料枠（7 章）。
+3. `ops/check_resources.sh` を cron で回し、毎回の測定値をファイルに記録する（6 章）。
+
+本番での作業として残っていること（この PR では、どれもしていません）:
+
+- journald の drop-in と `daemon.json` の適用、journald の再読み込み、Docker の再起動、対象コンテナの作り直し。
+- `check_resources.sh` の安定したパスへの配置と、本番の crontab への登録。サーバーがメールを送れるか、記録ファイルを誰が見るかも決める。
+- Better Stack の登録（オーナー）と、チェック間隔の再確認。登録するまで、Issue #187 の「止まったら数分で通知」は満たしません。
+- 本番の `docker info` の Logging Driver と、バックアップの cron が実際にあるか。この資料では未確認。
+
+まだ決めていないこと:
+
+- `provider_request` の行を出すために、起動時の Qiita / Zenn クライアントを `Observed` で包むか。いまのログでは、提供元ごとの失敗は定期取得の `qiita_failed` / `zenn_failed` で数える。

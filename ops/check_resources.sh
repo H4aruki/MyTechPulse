@@ -6,11 +6,19 @@
 # 使い方:
 #   ops/check_resources.sh
 #   ops/check_resources.sh --disk-percent 80 --mem-available-mb 100 --swap-used-mb 200
+#   ops/check_resources.sh --record-file /path/to/resource-record.log
 #
 # 環境変数（同じ項目を引数で渡したときは、引数が優先）:
 #   CHECK_DISK_PERCENT       既定 80。ルート（/）の使用率がこの値以上なら警告
 #   CHECK_MEM_AVAILABLE_MB   既定 100。空きメモリ（free の available）がこの値未満なら警告
 #   CHECK_SWAP_USED_MB       既定 200。スワップ使用量がこの値以上なら警告。合計が 0 のときは見ない
+#   CHECK_RECORD_FILE        測定値を1行ずつ追記するファイル。未指定（空も同じ）なら記録しない
+#
+# 記録（CHECK_RECORD_FILE または --record-file を渡したときだけ）:
+#   測れたときは、しきい値の内側でも外側でも毎回1行を追記する。標準出力は変えない（平常時は何も出さない）。
+#   形式: 日時(JST) disk_used_pct=N mem_available_mb=N swap_used_mb=N|none swap_total_mb=N
+#   スワップが無い機械（合計 0）は swap_used_mb=none。
+#   追記に失敗したら標準エラーに理由を1行出す。終了コードは測定の結果のまま変えない。
 #
 # 理由としきい値の説明、cron に入れる例は docs/deploy/logging-and-monitoring.md。
 # このスクリプトは測って終了するだけです。本番の crontab へは入れません。
@@ -19,9 +27,10 @@ set -euo pipefail
 disk_percent="${CHECK_DISK_PERCENT:-80}"
 mem_available_mb="${CHECK_MEM_AVAILABLE_MB:-100}"
 swap_used_mb="${CHECK_SWAP_USED_MB:-200}"
+record_file="${CHECK_RECORD_FILE:-}"
 
 usage() {
-  echo "使い方: check_resources.sh [--disk-percent N] [--mem-available-mb N] [--swap-used-mb N]" >&2
+  echo "使い方: check_resources.sh [--disk-percent N] [--mem-available-mb N] [--swap-used-mb N] [--record-file PATH]" >&2
   exit 2
 }
 
@@ -40,6 +49,11 @@ while [ "$#" -gt 0 ]; do
     --swap-used-mb)
       [ "$#" -ge 2 ] || usage
       swap_used_mb="$2"
+      shift 2
+      ;;
+    --record-file)
+      [ "$#" -ge 2 ] || usage
+      record_file="$2"
       shift 2
       ;;
     *)
@@ -114,6 +128,19 @@ fi
 if ! is_uint "$swap_total" || ! is_uint "$swap_used"; then
   echo "エラー: free のスワップの行を読み取れませんでした" >&2
   exit 2
+fi
+
+# 記録は、測れたあと、しきい値の判定より前に行う。失敗しても終了コードは変えない
+if [ -n "$record_file" ]; then
+  if [ "$(as_dec "$swap_total")" -gt 0 ]; then
+    swap_field="$(as_dec "$swap_used")"
+  else
+    swap_field="none"
+  fi
+  record_line="$(TZ=Asia/Tokyo date +%Y-%m-%dT%H:%M:%S%:z) disk_used_pct=$(as_dec "$used_pct") mem_available_mb=$(as_dec "$mem_avail") swap_used_mb=${swap_field} swap_total_mb=$(as_dec "$swap_total")"
+  if ! printf '%s\n' "$record_line" >>"$record_file" 2>/dev/null; then
+    echo "警告: 測定値を記録ファイルへ追記できませんでした: $record_file" >&2
+  fi
 fi
 
 warnings=()

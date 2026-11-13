@@ -55,7 +55,7 @@ reset_case() {
   rm -f "$work/df.args" "$work/free.args" "$work/stderr"
   unset FAKE_DF_RC FAKE_FREE_RC
   export FAKE_DF_RC=0 FAKE_FREE_RC=0
-  unset CHECK_DISK_PERCENT CHECK_MEM_AVAILABLE_MB CHECK_SWAP_USED_MB
+  unset CHECK_DISK_PERCENT CHECK_MEM_AVAILABLE_MB CHECK_SWAP_USED_MB CHECK_RECORD_FILE
 }
 
 run_check() {
@@ -203,5 +203,82 @@ EOF
 run_check
 assert_error "available 列が無い" "available"
 echo "ok: available 列が無い"
+
+# --- 記録 ---
+rec_re='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\+09:00 '
+
+# 記録ファイルを渡さなければ、記録しない
+reset_case
+write_df 10
+write_free 500 2048 5
+rm -f "$work/rec.log"
+run_check
+assert_ok "記録なし"
+[ ! -e "$work/rec.log" ] || fail "記録先を渡していないのにファイルができた"
+echo "ok: 記録なしは何も書かない"
+
+# 引数で渡す。平常時は標準出力に何も出さず、1行を追記する
+reset_case
+write_df 10
+write_free 500 2048 5
+rm -f "$work/rec.log"
+run_check --record-file "$work/rec.log"
+assert_ok "記録あり（引数）"
+[ "$(wc -l <"$work/rec.log" | tr -d ' ')" -eq 1 ] || fail "記録が1行でない: $(cat "$work/rec.log")"
+grep -Eq "${rec_re}disk_used_pct=10 mem_available_mb=500 swap_used_mb=5 swap_total_mb=2048\$" "$work/rec.log" || fail "記録の形が違う: $(cat "$work/rec.log")"
+echo "ok: 引数で記録"
+
+# 環境変数で渡す。2回目は追記（上書きしない）
+reset_case
+write_df 20
+write_free 300 2048 7
+CHECK_RECORD_FILE="$work/rec.log" run_check
+assert_ok "記録あり（環境変数）"
+[ "$(wc -l <"$work/rec.log" | tr -d ' ')" -eq 2 ] || fail "追記になっていない: $(cat "$work/rec.log")"
+tail -1 "$work/rec.log" | grep -Eq "disk_used_pct=20 mem_available_mb=300 swap_used_mb=7" || fail "2行目が違う: $(tail -1 "$work/rec.log")"
+head -1 "$work/rec.log" | grep -q "disk_used_pct=10 " || fail "1行目が消えた"
+echo "ok: 環境変数で追記"
+
+# 警告のときも記録し、警告の出力と終了コードは変わらない
+reset_case
+write_df 85
+write_free 500 2048 0
+run_check --record-file "$work/rec.log"
+assert_warn "警告: ディスク使用率 85%（しきい値 80%以上）"
+tail -1 "$work/rec.log" | grep -q "disk_used_pct=85 " || fail "警告のときに記録されていない"
+echo "ok: 警告のときも記録"
+
+# スワップが無い機械は none
+reset_case
+write_df 10
+write_free 500 0 0
+rm -f "$work/rec.log"
+run_check --record-file "$work/rec.log"
+assert_ok "スワップなしの記録"
+grep -q "swap_used_mb=none swap_total_mb=0" "$work/rec.log" || fail "スワップなしの印が無い: $(cat "$work/rec.log")"
+echo "ok: スワップなしは none"
+
+# パス不正（親ディレクトリが無い）。終了コードは測定のまま、標準エラーに理由
+reset_case
+write_df 10
+write_free 500 2048 0
+run_check --record-file "$work/nodir/rec.log"
+[ "$code" -eq 0 ] || fail "記録失敗で終了コードが変わった: $code"
+[ -z "$stdout" ] || fail "記録失敗で標準出力が出た: $stdout"
+printf '%s\n' "$stderr" | grep -q "追記できませんでした" || fail "標準エラーに理由が無い: $stderr"
+reset_case
+write_df 90
+write_free 500 2048 0
+run_check --record-file "$work/nodir/rec.log"
+[ "$code" -eq 1 ] || fail "警告のとき、記録失敗で終了コードが変わった: $code"
+echo "ok: 記録の失敗は終了コードを変えない"
+
+# 値を取らない --record-file は使い方エラー
+reset_case
+write_df 10
+write_free 500 2048 0
+run_check --record-file
+assert_error "--record-file の値なし" "使い方"
+echo "ok: --record-file の値なし"
 
 echo "OK: check_resources の試験にすべて成功しました"
