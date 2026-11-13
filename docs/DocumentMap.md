@@ -47,6 +47,7 @@ docs/
 │           ├── SignUp.md                 … G-02 会員登録画面
 │           ├── Login.md                  … G-03 ログイン画面
 │           └── ArticleList.md            … G-04 記事一覧画面
+├── automerge.md                          … 小さい修正PRの自動マージ判定の説明
 └── deploy/                               … 公開・運用の手順書
     ├── lightsail-provisioning.md         … サーバーを一から作り直す手順（初回のGo版の起動まで）
     ├── go-auto-deploy.md                 … 通常の更新（自動デプロイ）の流れ・止め方・失敗時の見方
@@ -135,6 +136,10 @@ APIに共通する決まりごと。データの形式や送り方、結果をHT
 - `ci-and-release.md`: CIの検査の一覧（必須かどうか）と、配布成果物（Go版のDockerイメージ、画面、運用ファイル、manifest）の作り方・照合の仕方、必要な秘密の名前。
 - `database-backup-and-restore.md`: データベースを安全にバックアップし、別のDBへ復元して中身を確かめる手順。
 - `rollback-to-python.md`: Go版に重大な問題が出たときに、サーバーに残してある手段でPython版へ戻す緊急手順。切り戻し先を削除するときに、この資料も削除する。
+
+### automerge.md
+
+小さい修正PRを自動マージの対象にするかの判定の説明。ルールファイル（`.github/automerge-rules.json`）の各キー、クラスA/B/C、使い方、毎週の見直し。
 
 ## リポジトリの外にある資料
 
