@@ -90,9 +90,11 @@ Lightsail コンソール → Networking → **Create static IP** → 作成し�
 
 80/443 は、**IPv4 と IPv6 の両方**のファイアウォールで「Restrict to IP address」を使い、Cloudflareの範囲だけを許可する（22 は下記のとおり変えない）。範囲は `ops/caddy/cloudflare-ips.caddy` にあり、Caddy も同じ範囲以外には 403 を返す（#74）。証明書の取得（HTTP-01）は、Cloudflareのプロキシ（オレンジの雲）を通っても成功する。
 
+すでに動いている本番へ同じ制限を入れる手順、AWS CLI でルールをまとめて置き換えるとき（リクエストから 22番を落とすと SSH が閉じる）、外からの確認、固定 IP を付け替えるかの判断は [origin-lockdown.md](origin-lockdown.md)。作り直すときも、80/443 の範囲の入れ方と確認はそちらに合わせる。
+
 範囲の更新: Cloudflareが範囲を変えると、毎週の点検（`.github/workflows/cloudflare-ips.yml`）が失敗する。`node scripts/update-cloudflare-ips.mjs` を実行して差分をPRにし、マージ後にLightsailのルールも新しい範囲へ直す。
 
-戻し方: 該当のCaddyfileのコミットをrevertして反映し、Lightsailの80/443を元の「Any IP address」に戻す。
+戻し方: 該当のCaddyfileのコミットをrevertして反映し、Lightsailの80/443を元の「Any IP address」に戻す。戻すときも 22番は残す。詳細は [origin-lockdown.md](origin-lockdown.md) の「戻し方」。
 
 SSH は「Restrict to IP address」で自分の IP に絞れるが、**固定回線でないなら絞らない**（IP が変わると自分が締め出される）。SSH の防御は、手順 6 のスクリプトが行う鍵認証の強制と fail2ban で担保する。
 
@@ -259,10 +261,10 @@ docker stats --no-stream   # コンテナごとの実使用量
 ## 11. 完了チェックリスト
 
 - [ ] 静的 IP が割り当てられ、再起動しても IP が変わらない
-- [ ] SSH でログインでき、パスワード認証が拒否される（`ssh -o PreferredAuthentications=password ubuntu@<IP>` が失敗する）
+- [ ] SSH でログインでき、パスワード認証が拒否される（`ssh -o PreferredAuthentications=password "ubuntu@<IP>"` が失敗する）
 - [ ] `free -h` がスワップ 2 GB を返し、`sudo reboot` の後も残っている
 - [ ] 再ログイン後、`docker run --rm hello-world` が **sudo なしで**成功する
-- [ ] ローカル PC から `nc -vz <IP> 22` / `80` / `443` が到達する（80/443 は、待ち受けが起動する前なら `Connection refused`。これは**到達している**証拠。ファイアウォールが閉じていると、タイムアウトになる。この違いで切り分ける）
+- [ ] ローカル PC から `nc -vz -w 5 "<静的IP>" 22` は到達する。80 と 443 は Cloudflare の範囲へ絞ったあと、自分の PC からはタイムアウトする（届く、またはすぐ `Connection refused` になるときは、まだ全世界へ開いている）。窓口経由の確認は [origin-lockdown.md](origin-lockdown.md)
 - [ ] `sudo fail2ban-client status sshd` が jail の稼働を返す
 - [ ] `timedatectl` が JST を返す
 - [ ] `~/mytechpulse-production.env` の権限が `600` で、必要な6項目がある

@@ -52,6 +52,7 @@ docs/
 ├── automerge.md                          … 小さい修正PRの自動マージ判定の説明
 └── deploy/                               … 公開・運用の手順書
     ├── lightsail-provisioning.md         … サーバーを一から作り直す手順（初回のGo版の起動まで）
+    ├── origin-lockdown.md                … 80/443 を Cloudflare からだけにし、オリジンへの直接アクセスを塞ぐ
     ├── go-auto-deploy.md                 … 通常の更新（自動デプロイ）の流れ・止め方・失敗時の見方
     ├── ci-and-release.md                 … CIの検査と、配布成果物（イメージ・画面・運用ファイル）
     ├── database-backup-and-restore.md    … DBのバックアップと復元の手順
@@ -137,7 +138,8 @@ APIに共通する決まりごと。データの形式や送り方、結果をHT
 
 公開・運用の手順書。目的ごとに分かれている。
 
-- `lightsail-provisioning.md`: 本番のサーバー（AWS Lightsail）を一から作り直す手順書。インスタンスの作成、初期設定、本番の設定ファイル（項目の一覧）、最初のGo版を手で起動する手順、日次バックアップ、完了チェックリストを記載している。通常の更新は `go-auto-deploy.md` が行う。
+- `lightsail-provisioning.md`: 本番のサーバー（AWS Lightsail）を一から作り直す手順書。インスタンスの作成、初期設定、本番の設定ファイル（項目の一覧）、最初のGo版を手で起動する手順、日次バックアップ、完了チェックリストを記載している。通常の更新は `go-auto-deploy.md` が行う。動いている本番の 80/443 を Cloudflare だけにする手順は `origin-lockdown.md`。
+- `origin-lockdown.md`: 動いている本番で、80番と443番を Cloudflare の範囲だけに通し、オリジンへの直接アクセスを塞ぐ手順。SSH（22番）は閉じない。外からの確認コマンド、固定 IP を付け替えるかの判断材料、作業後に Issue へ残す記録のひな形。
 - `go-auto-deploy.md`: 通常の更新の仕組み。`main` に取り込まれた変更が、検査成功後に自動で本番へ入る流れ、止め方、有効にする手順、失敗したときの見方。
 - `ci-and-release.md`: CIの検査の一覧（必須かどうか）と、配布成果物（Go版のDockerイメージ、画面、運用ファイル、manifest）の作り方・照合の仕方、必要な秘密の名前。
 - `database-backup-and-restore.md`: データベースを安全にバックアップし、別のDBへ復元して中身を確かめる手順。
