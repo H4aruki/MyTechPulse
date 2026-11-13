@@ -45,4 +45,27 @@ describe('PrivacyPage', () => {
 
     expect(screen.getByText(/退会（アカウント削除）の機能は、まだ提供していません/)).toBeInTheDocument()
   })
+
+  test('アンケートは2年を過ぎると削除し、アカウント削除でも消えると書く', () => {
+    renderPage()
+
+    expect(
+      screen.getByText(/まだ終えていない表示は、表示した日時から2年を過ぎると削除します/),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/アカウントを削除したときも、これらの記録は一緒に消えます/),
+    ).toBeInTheDocument()
+    const untilRequested = screen.getByText(/削除を求められるまで保存します/)
+    expect(untilRequested.textContent).not.toContain('アンケート')
+    expect(untilRequested.textContent).toContain('興味度')
+    expect(untilRequested.textContent).toContain('保存した記事')
+    expect(untilRequested.textContent).toContain('登録したパスキー')
+  })
+
+  test('パスキーの確認用の乱数は5分、バックアップは7日より長く残ることがあると書く', () => {
+    renderPage()
+
+    expect(screen.getAllByText(/有効期間は5分です/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/7日より長く残ることがあります/)).toBeInTheDocument()
+  })
 })
