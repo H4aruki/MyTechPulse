@@ -11,6 +11,9 @@ const menuLink =
 const menuLinkCurrent = 'ring-focus rounded-sm text-sm font-semibold text-ink'
 const headerButton =
   'ring-focus min-h-11 shrink-0 px-3 py-2 text-sm whitespace-nowrap sm:px-5 sm:py-2.5'
+// 文字の大きさや間隔はそのまま。押せる高さだけ、ログインやログアウトと同じ 44px にする。
+// a は標準では行の高さしか持たないので、inline-flex にして min-h-11 を効かせる。
+const appMenuHit = 'inline-flex min-h-11 items-center'
 
 function Logo({ authenticated }: { authenticated: boolean }) {
   const className = 'ring-focus flex items-center gap-2.5 rounded-sm'
@@ -40,7 +43,7 @@ function AppLink({ to, current, children }: { to: string; current: boolean; chil
     <Link
       to={to}
       aria-current={current ? 'page' : undefined}
-      className={current ? menuLinkCurrent : menuLink}
+      className={`${appMenuHit} ${current ? menuLinkCurrent : menuLink}`}
     >
       {children}
     </Link>
