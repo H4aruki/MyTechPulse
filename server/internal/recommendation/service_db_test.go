@@ -702,16 +702,18 @@ func TestServiceGetFromDBReturnsCooccurrenceError(t *testing.T) {
 	}
 }
 
-// failNthTagged は、n回目のタグ検索だけ失敗させる。
+// failNthTagged は、n回目のタグ検索だけ失敗させる。失敗した呼び出しの引数は failed に残す。
 type failNthTagged struct {
 	memoryArticles
-	n, at int
-	fail  error
+	n, at  int
+	fail   error
+	failed taggedCall
 }
 
 func (f *failNthTagged) ListTagged(ctx context.Context, source string, tags []string, since time.Time, limit int) ([]article.Article, error) {
 	f.n++
 	if f.n == f.at {
+		f.failed = taggedCall{source, append([]string(nil), tags...), since, limit}
 		return nil, f.fail
 	}
 	return f.memoryArticles.ListTagged(ctx, source, tags, since, limit)
@@ -720,6 +722,7 @@ func (f *failNthTagged) ListTagged(ctx context.Context, source string, tags []st
 func TestServiceGetFromDBReturnsSimilarTaggedError(t *testing.T) {
 	old := dbNow.Add(-10 * 24 * time.Hour)
 	dbErr := errors.New("db down")
+	// 興味のあるタグの検索が Qiita、Zenn の順で2回あり、その次の3回目が Qiita の似たタグの検索。
 	repo := &failNthTagged{at: 3, fail: dbErr}
 	repo.items = []article.Article{
 		testArticle(article.SourceQiita, "https://qiita.com/old/a", []string{"Go", "Rust"}, 1, old),
@@ -730,5 +733,26 @@ func TestServiceGetFromDBReturnsSimilarTaggedError(t *testing.T) {
 	s.Articles = repo
 	if _, err := s.Get(context.Background(), 1); !errors.Is(err, dbErr) {
 		t.Fatalf("err = %v", err)
+	}
+	// 共起を1回数えたあとで落ちている。失敗した検索は、興味のある Go ではなく、共起で選んだ Rust。
+	if len(repo.cooccurCalls) != 1 {
+		t.Fatalf("cooccur calls = %+v", repo.cooccurCalls)
+	}
+	if !slices.Equal(repo.cooccurCalls[0].seeds, []string{"go"}) || !slices.Equal(repo.cooccurCalls[0].exclude, []string{"go"}) {
+		t.Fatalf("cooccur = %+v", repo.cooccurCalls[0])
+	}
+	if repo.n != 3 || repo.failed.source != article.SourceQiita || !slices.Equal(repo.failed.tags, []string{"Rust"}) || repo.failed.limit != dbTaggedLimit || !repo.failed.since.Equal(dbNow.Add(-qiitaWindow)) {
+		t.Fatalf("failed call = %+v n = %d", repo.failed, repo.n)
+	}
+	if len(repo.taggedCalls) != 2 {
+		t.Fatalf("tagged calls = %+v", repo.taggedCalls)
+	}
+	for _, call := range repo.taggedCalls {
+		if !slices.Equal(call.tags, []string{"Go"}) {
+			t.Fatalf("interest call = %+v", call)
+		}
+	}
+	if len(repo.popularCalls) != 0 {
+		t.Fatalf("popular calls = %+v", repo.popularCalls)
 	}
 }
