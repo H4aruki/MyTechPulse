@@ -3,6 +3,8 @@ package savedarticle_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,6 +12,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
 	"github.com/H4aruki/MyTechPulse/server/internal/app"
 	"github.com/H4aruki/MyTechPulse/server/internal/auth"
@@ -45,8 +50,10 @@ type fakeRepo struct {
 	saveUsers, unsaveUsers, listUsers []int64
 	saveResult                        bool
 	saveErr                           error
+	unsaveErr                         error
 	listItems                         []savedarticle.Article
 	listTotal                         int
+	listErr                           error
 	limit, offset                     int
 }
 
@@ -56,12 +63,12 @@ func (r *fakeRepo) Save(_ context.Context, userID, _ int64) (bool, error) {
 }
 func (r *fakeRepo) Unsave(_ context.Context, userID, _ int64) error {
 	r.unsaveUsers = append(r.unsaveUsers, userID)
-	return nil
+	return r.unsaveErr
 }
 func (r *fakeRepo) List(_ context.Context, userID int64, limit, offset int) ([]savedarticle.Article, int, error) {
 	r.listUsers = append(r.listUsers, userID)
 	r.limit, r.offset = limit, offset
-	return r.listItems, r.listTotal, nil
+	return r.listItems, r.listTotal, r.listErr
 }
 
 func newHandler() (http.Handler, *fakeRepo) {
@@ -128,11 +135,16 @@ func TestSaveIsIdempotentAndUnsaveReturns204(t *testing.T) {
 }
 
 func TestInvalidArticleID(t *testing.T) {
-	h, _ := newHandler()
-	for _, id := range []string{"0", "abc"} {
-		if got := do(h, http.MethodPut, "/api/v1/saved-articles/"+id, "token-a"); got.Code != http.StatusUnprocessableEntity {
-			t.Fatalf("PUT %s = %d", id, got.Code)
+	h, repo := newHandler()
+	for _, id := range []string{"0", "-1", "abc", "9223372036854775808"} {
+		for _, m := range []string{http.MethodPut, http.MethodDelete} {
+			if got := do(h, m, "/api/v1/saved-articles/"+id, "token-a"); got.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("%s %s = %d %s", m, id, got.Code, got.Body.String())
+			}
 		}
+	}
+	if len(repo.saveUsers)+len(repo.unsaveUsers) != 0 {
+		t.Fatal("invalid article id reached the store")
 	}
 }
 
@@ -215,6 +227,86 @@ func TestWriteRateLimitIsPerUserAndShared(t *testing.T) {
 	// 一覧は書き込みの枠に数えない
 	if got := do(h, http.MethodGet, "/api/v1/saved-articles", "token-a"); got.Code != http.StatusOK {
 		t.Fatalf("list after limit = %d", got.Code)
+	}
+}
+
+func TestStoreErrorsStayInsideAndMapToHTTPStatus(t *testing.T) {
+	t.Run("session user is gone", func(t *testing.T) {
+		h, repo := newHandler()
+		repo.saveErr = fmt.Errorf("missing user: %w", savedarticle.ErrUserNotFound)
+		got := do(h, http.MethodPut, "/api/v1/saved-articles/5", "token-a")
+		if got.Code != http.StatusUnauthorized || !problemCode(got, "unauthenticated") || strings.Contains(got.Body.String(), "missing user") {
+			t.Fatalf("status = %d %s", got.Code, got.Body.String())
+		}
+		if !strings.Contains(got.Body.String(), "ログインが必要です") {
+			t.Fatalf("detail = %s", got.Body.String())
+		}
+		if len(repo.saveUsers) != 1 || repo.saveUsers[0] != 9 {
+			t.Fatalf("users = %v", repo.saveUsers)
+		}
+	})
+	t.Run("save store failure", func(t *testing.T) {
+		h, repo := newHandler()
+		repo.saveErr = errors.New("store: 記事を保存できません")
+		assertInternal(t, do(h, http.MethodPut, "/api/v1/saved-articles/5", "token-a"), "store: 記事を保存できません")
+		if len(repo.saveUsers) != 1 || repo.saveUsers[0] != 9 {
+			t.Fatalf("users = %v", repo.saveUsers)
+		}
+	})
+	t.Run("unsave store failure", func(t *testing.T) {
+		h, repo := newHandler()
+		repo.unsaveErr = errors.New("store: 保存を解除できません")
+		assertInternal(t, do(h, http.MethodDelete, "/api/v1/saved-articles/5", "token-b"), "store: 保存を解除できません")
+		if len(repo.unsaveUsers) != 1 || repo.unsaveUsers[0] != 10 {
+			t.Fatalf("users = %v", repo.unsaveUsers)
+		}
+	})
+	t.Run("list store failure", func(t *testing.T) {
+		repo := &fakeRepo{
+			listErr:   errors.New("store: 保存した記事を取得できません"),
+			listItems: []savedarticle.Article{{ID: 1, Title: "secret"}},
+			listTotal: 4,
+		}
+		items, total, err := (&savedarticle.Service{Repo: repo}).List(context.Background(), 9, 20, 0)
+		if err == nil || items != nil || total != 0 {
+			t.Fatalf("items=%v total=%d err=%v", items, total, err)
+		}
+		h, repo := newHandler()
+		repo.listErr = errors.New("store: 保存した記事を取得できません")
+		assertInternal(t, do(h, http.MethodGet, "/api/v1/saved-articles", "token-a"), "store: 保存した記事を取得できません")
+	})
+}
+
+func assertInternal(t *testing.T, got *httptest.ResponseRecorder, leaked string) {
+	t.Helper()
+	if got.Code != http.StatusInternalServerError || !problemCode(got, "internal_error") || strings.Contains(got.Body.String(), leaked) {
+		t.Fatalf("status = %d %s", got.Code, got.Body.String())
+	}
+	if !strings.Contains(got.Header().Get("Content-Type"), "application/problem+json") {
+		t.Fatalf("content-type = %s", got.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(got.Body.String(), "サーバー内部でエラーが発生しました") {
+		t.Fatalf("detail = %s", got.Body.String())
+	}
+}
+
+func problemCode(got *httptest.ResponseRecorder, code string) bool {
+	return strings.Contains(got.Body.String(), `"code":"`+code+`"`)
+}
+
+// 認証方式の欄が空でも、登録したCookie名で cookieAuth を足す。
+// Components ごと空にするとスキーマ登録も消えるため、ここは SecuritySchemes だけ空にする。
+func TestRegisterAddsCookieAuthWhenSecuritySchemesAreMissing(t *testing.T) {
+	cfg := huma.DefaultConfig("MyTechPulse API", "1.0.0")
+	api := humago.New(http.NewServeMux(), cfg)
+	api.OpenAPI().Components.SecuritySchemes = nil
+	savedarticle.Handler{Service: &savedarticle.Service{Repo: &fakeRepo{}}, CookieName: "__Host-mtp_session"}.Register(api)
+	scheme := api.OpenAPI().Components.SecuritySchemes["cookieAuth"]
+	if scheme == nil || scheme.Type != "apiKey" || scheme.In != "cookie" || scheme.Name != "__Host-mtp_session" {
+		t.Fatalf("cookieAuth = %+v", scheme)
+	}
+	if api.OpenAPI().Paths["/api/v1/saved-articles/{article_id}"] == nil || api.OpenAPI().Paths["/api/v1/saved-articles"] == nil {
+		t.Fatal("saved article paths were not registered")
 	}
 }
 
