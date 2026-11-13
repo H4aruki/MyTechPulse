@@ -107,14 +107,25 @@ function baseGoModules(api, repo) {
 }
 
 // 評価したSHAでの実体の種類（file / symlink / submodule / dir）。取れなければ null。
-function fileKind(api, repo, path, sha) {
-  try {
-    const enc = path.split("/").map(encodeURIComponent).join("/");
-    const c = api.get(`repos/${repo}/contents/${enc}?ref=${sha}`);
-    return Array.isArray(c) ? "dir" : (c?.type ?? null);
-  } catch {
-    return null;
+// ファイル自体を取ると、symlink の先が普通のファイルのとき中身が type: file で返る。
+// そのため親ディレクトリの一覧で、該当エントリの type を見る。同じ親は1回だけ取る。
+function fileKind(api, repo, path, sha, cache) {
+  const i = path.lastIndexOf("/");
+  const dir = i < 0 ? "" : path.slice(0, i);
+  const name = path.slice(i + 1);
+  if (!cache.has(dir)) {
+    let list = null;
+    try {
+      const enc = dir.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+      const c = api.get(`repos/${repo}/contents${enc ? "/" + enc : ""}?ref=${sha}`);
+      list = Array.isArray(c) ? c : null;
+    } catch {
+      list = null;
+    }
+    cache.set(dir, list);
   }
+  const hit = cache.get(dir)?.find((e) => e?.name === name);
+  return hit?.type ?? null;
 }
 
 function baseDeps(api, repo) {
@@ -129,7 +140,8 @@ export function gatherInput(api, repo, number, mode = "open") {
   const headSha = pr?.head?.sha;
   if (!headSha) throw new Error("head SHA を取得できない");
   const rawFiles = api.get(`repos/${repo}/pulls/${number}/files?per_page=100`, { paginate: true });
-  const files = rawFiles.map((f) => (f.status === "removed" ? f : { ...f, kind: fileKind(api, repo, f.filename, headSha) }));
+  const dirCache = new Map();
+  const files = rawFiles.map((f) => (f.status === "removed" ? f : { ...f, kind: fileKind(api, repo, f.filename, headSha, dirCache) }));
   const checks = api.get(`repos/${repo}/commits/${headSha}/check-runs?per_page=100`, { paginate: true }).flatMap((p) => p.check_runs ?? []);
   const st = api.get(`repos/${repo}/commits/${headSha}/status`);
   const statuses = st?.statuses ?? [];

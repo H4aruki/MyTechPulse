@@ -29,7 +29,7 @@ function fakeExec({ fail = null, prs = [1] } = {}) {
     if (p.includes("/reviews")) return JSON.stringify([[]]);
     if (p.includes("/contents/server/go.mod")) return JSON.stringify({ encoding: "base64", content: Buffer.from("module x\n\nrequire (\n\tgithub.com/jackc/pgx/v5 v5.7.1\n\tgithub.com/a/b v1.0.0 // indirect\n)\n").toString("base64") });
     if (p.includes("/contents/frontend/package.json")) return JSON.stringify({ encoding: "base64", content: pkg });
-    if (p.includes("/contents/")) return JSON.stringify({ type: "file" });
+    if (p.includes("/contents/")) return JSON.stringify([{ name: "x.go", type: "file" }, { name: "x_test.go", type: "file" }]);
     throw new Error("想定外: " + key);
   };
 }
@@ -128,14 +128,26 @@ test("--comment-markdown は --merge-status を渡せ、無ければ既定の文
   assert.match(run(["--pr", "1", "--comment-markdown"], fakeExec()).out, /マージ: 未実行（判定のみ）/);
 });
 
-test("symlink は評価したSHAの種類で弾く（patch の文字列では見ない）", () => {
+test("symlink は親ディレクトリの一覧の type で弾く（先が普通のファイルでも）", () => {
   const exec = fakeExec();
-  const link = (args) => (args[1]?.includes("/contents/server/internal/x/x.go") ? JSON.stringify({ type: "symlink" }) : exec(args));
-  const r = run(["--pr", "1", "--json"], link);
+  const dirOf = (type) => (args) =>
+    /\/contents\/server\/internal\/x\?ref=/.test(args[1] ?? "") ? JSON.stringify([{ name: "x.go", type }, { name: "x_test.go", type: "file" }]) : exec(args);
+  const r = run(["--pr", "1", "--json"], dirOf("symlink"));
   assert.equal(r.code, 1);
   assert.ok(JSON.parse(r.out).failures.some((f) => f.rule === "path.symlink"));
-  const unknown = (args) => (args[1]?.includes("/contents/server/internal/x/x.go") ? (() => { throw new Error("404") })() : exec(args));
+  // ファイル単体の取得は「先の中身 type: file」を返す（GitHub の仕様）。それでも見逃さない。
+  const trap = (args) => (/\/contents\/server\/internal\/x\/x\.go\?/.test(args[1] ?? "") ? JSON.stringify({ type: "file" }) : dirOf("symlink")(args));
+  assert.equal(run(["--pr", "1"], trap).code, 1);
+  // 一覧が取れない・エントリが無いときは失敗（fail closed）
+  const unknown = (args) => (/\/contents\/server\/internal\/x\?ref=/.test(args[1] ?? "") ? (() => { throw new Error("404") })() : exec(args));
   assert.equal(run(["--pr", "1"], unknown).code, 1);
+  const missing = (args) => (/\/contents\/server\/internal\/x\?ref=/.test(args[1] ?? "") ? JSON.stringify([{ name: "other.go", type: "file" }]) : exec(args));
+  assert.equal(run(["--pr", "1"], missing).code, 1);
+  // 同じ親ディレクトリは1回だけ取る
+  let n = 0;
+  const count = (args) => { if (/\/contents\/server\/internal\/x\?ref=/.test(args[1] ?? "")) n++; return exec(args); };
+  run(["--pr", "1"], count);
+  assert.equal(n, 1);
 });
 
 test("go.mod が取れなければ外部 import は通らない（fail closed）／parseGoMod", () => {
