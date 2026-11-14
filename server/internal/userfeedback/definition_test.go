@@ -101,6 +101,18 @@ func TestValidateFollowup(t *testing.T) {
 	}
 }
 
+func TestValidateOverallRejectsFormWithNoRootQuestion(t *testing.T) {
+	f := validForm()
+	id := int64(11)
+	f.Questions[0].DisplayIfQuestionID = &id
+	if got := f.Root(); got != (userfeedback.Question{}) {
+		t.Fatalf("総合評価が無いときの Root = %+v", got)
+	}
+	if _, err := userfeedback.ValidateOverall(f, 10, 3); !errors.Is(err, userfeedback.ErrInvalidInput) {
+		t.Fatalf("総合評価が無いフォームは受け付けない: %v", err)
+	}
+}
+
 func TestNextEligibleAt(t *testing.T) {
 	shown := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	if got := userfeedback.NextEligibleAt(shown, 60); !got.Equal(time.Date(2026, 11, 30, 12, 0, 0, 0, time.UTC)) {
