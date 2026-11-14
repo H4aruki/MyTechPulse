@@ -12,14 +12,13 @@ dist/
 
 # ===== 仮想環境 =====
 venv/
-backend/venv/
 .venv/
 env/
 
 # ===== シークレット / 環境変数 =====
-# .env は絶対にコミットしない（.env.example は共有するため除外しない）
+# .env は絶対にコミットしない（.env.example は共有するため除外しない）。
+# ディレクトリを付けていないので、どの階層の .env も対象になる。
 .env
-backend/.env
 *.env
 !.env.example
 !*.env.example
