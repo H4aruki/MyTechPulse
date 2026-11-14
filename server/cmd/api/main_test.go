@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -50,6 +51,89 @@ func TestServeUntilCanceledShutsDownGracefully(t *testing.T) {
 	if resp, err := client.Get("http://" + addr + "/"); err == nil {
 		resp.Body.Close()
 		t.Fatal("new connection accepted after shutdown")
+	}
+}
+
+func TestServeUntilCanceledReturnsNilWhenServerAlreadyClosed(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{}
+	if err := server.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := serveUntilCanceled(context.Background(), server, ln, time.Second); err != nil {
+		t.Fatalf("すでに閉じたサーバーはエラーにせず戻る: %v", err)
+	}
+}
+
+func TestServeUntilCanceledReturnsShutdownTimeout(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	server := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			close(started)
+			<-release
+			w.WriteHeader(http.StatusNoContent)
+		}),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- serveUntilCanceled(ctx, server, ln, 200*time.Millisecond) }()
+
+	reqCtx, reqCancel := context.WithCancel(context.Background())
+	defer reqCancel()
+	reqDone := make(chan struct{})
+	go func() {
+		defer close(reqDone)
+		url := "http://" + ln.Addr().String() + "/"
+		for reqCtx.Err() == nil {
+			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
+			if err != nil {
+				return
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err == nil {
+				resp.Body.Close()
+				return
+			}
+			select {
+			case <-reqCtx.Done():
+				return
+			case <-started:
+				return
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ハンドラーが呼ばれない")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("処理中の接続が残ると停止は期限切れになる: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("serveUntilCanceled が返らない")
+	}
+	close(release)
+	reqCancel()
+	select {
+	case <-reqDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("リクエストが終わらない")
 	}
 }
 
