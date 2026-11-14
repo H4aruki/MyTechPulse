@@ -19,18 +19,30 @@ import (
 	"github.com/H4aruki/MyTechPulse/server/internal/userfeedback"
 )
 
+const specPath = "openapi/openapi.json"
+
 type noopChecker struct{}
 
 func (noopChecker) Ping(context.Context) error { return nil }
 
 func main() {
-	if err := run("openapi/openapi.json"); err != nil {
-		fmt.Fprintln(os.Stderr, "openapi:", err)
-		os.Exit(1)
-	}
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
-func run(path string) error {
+// run は仕様を openapi/openapi.json へ書き、終了コードを返す。
+// 引数と標準出力は使わない。出力先を引数で変えると、いまのコマンドの動きが変わるため。
+func run(args []string, stdout, stderr io.Writer) int {
+	_ = args
+	_ = stdout
+	if err := writeSpec(specPath); err != nil {
+		fmt.Fprintln(stderr, "openapi:", err)
+		return 1
+	}
+	return 0
+}
+
+// writeSpec は OpenAPI 仕様を path へ書く。親ディレクトリが無ければ作る。
+func writeSpec(path string) error {
 	// 仕様の生成だけなので、認証Serviceの依存は空でよい(経路は呼ばれない)。
 	_, spec := app.New(config.Config{Environment: "local", SwaggerEnabled: true, CookieName: "mtp_session"}, app.Dependencies{
 		Logger:         slog.New(slog.NewJSONHandler(io.Discard, nil)),
