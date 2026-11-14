@@ -94,7 +94,7 @@ func (a *Auth) FindByID(ctx context.Context, id int64) (auth.User, error) {
 // タグは tag 表にあるものだけを使い、新しく作らない。知らないタグが1つでもあれば auth.ErrUnknownFavoriteTag で、何も作らない(#262)。
 // どこかで失敗した場合は何も残さない。同名の利用者は auth.ErrUsernameTaken。
 func (a *Auth) CreateWithInterestsAndSession(ctx context.Context, username, passwordHash string, role auth.Role,
-	favoriteTags []string, tokenHash [32]byte, expiresAt time.Time) (auth.User, error) {
+	favoriteTags []string, tokenHash [32]byte, expiresAt time.Time, termsVersion string) (auth.User, error) {
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		return auth.User{}, errors.New("store: トランザクションを開始できません")
@@ -132,6 +132,10 @@ func (a *Auth) CreateWithInterestsAndSession(ctx context.Context, username, pass
 		if err := q.CreateInitialRecommendation(ctx, dbgen.CreateInitialRecommendationParams{UserID: created.UserID, TagID: tagID, MatchInt: int32(interest.InitialSelected)}); err != nil {
 			return auth.User{}, errors.New("store: 初期の興味度を作成できません")
 		}
+	}
+
+	if err := q.CreateUserTermsAgreement(ctx, dbgen.CreateUserTermsAgreementParams{UserID: created.UserID, TermsVersion: termsVersion}); err != nil {
+		return auth.User{}, errors.New("store: 規約への同意を記録できません")
 	}
 
 	if err := q.CreateSession(ctx, dbgen.CreateSessionParams{

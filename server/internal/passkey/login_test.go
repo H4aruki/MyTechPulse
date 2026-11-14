@@ -70,7 +70,7 @@ func (m *loginUsers) FindByID(_ context.Context, id int64) (auth.User, error) {
 	return auth.User{}, auth.ErrNotFound
 }
 
-func (m *loginUsers) CreateWithInterestsAndSession(context.Context, string, string, auth.Role, []string, [32]byte, time.Time) (auth.User, error) {
+func (m *loginUsers) CreateWithInterestsAndSession(context.Context, string, string, auth.Role, []string, [32]byte, time.Time, string) (auth.User, error) {
 	return auth.User{}, errors.New("not used")
 }
 

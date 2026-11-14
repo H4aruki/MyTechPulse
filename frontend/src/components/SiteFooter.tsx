@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 /**
  * 旧実装で4ファイルに重複していたフッターを共通化したもの。内容は既存を踏襲。
  */
@@ -44,6 +46,17 @@ export function SiteFooter() {
           </ul>
         </div>
       </div>
+      <nav
+        aria-label="規約とポリシー"
+        className="mx-auto flex max-w-6xl justify-center gap-4 border-t border-slate-700 px-4 py-3 text-xs sm:text-sm"
+      >
+        <Link to="/terms" className="transition hover:text-white">
+          利用規約
+        </Link>
+        <Link to="/privacy" className="transition hover:text-white">
+          プライバシーポリシー
+        </Link>
+      </nav>
     </footer>
   )
 }

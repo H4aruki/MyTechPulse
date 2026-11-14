@@ -48,6 +48,7 @@ type fakeStore struct {
 	nextID       int64
 	createdTags  [][]string
 	createdRoles []Role
+	createdTerms []string
 	cleanupErr   error
 	cleanupCalls []time.Time
 	unknownTag   bool
@@ -75,7 +76,7 @@ func (f *fakeStore) FindByID(_ context.Context, id int64) (User, error) {
 }
 
 func (f *fakeStore) CreateWithInterestsAndSession(_ context.Context, name, hash string, role Role,
-	tags []string, token [32]byte, exp time.Time) (User, error) {
+	tags []string, token [32]byte, exp time.Time, termsVersion string) (User, error) {
 	// 本物のstoreと同じく、知らないタグの確認を利用者名の重複より先に行う
 	if f.unknownTag {
 		return User{}, ErrUnknownFavoriteTag
@@ -89,6 +90,7 @@ func (f *fakeStore) CreateWithInterestsAndSession(_ context.Context, name, hash 
 	f.sessions[token] = Session{User: u, ExpiresAt: exp}
 	f.createdTags = append(f.createdTags, tags)
 	f.createdRoles = append(f.createdRoles, role)
+	f.createdTerms = append(f.createdTerms, termsVersion)
 	return u, nil
 }
 
@@ -152,7 +154,7 @@ func newHarness() *harness {
 }
 
 func validSignup() SignupInput {
-	return SignupInput{Username: "alice", Password: "pass-word-long-ok", FavoriteTags: []string{"Go"}}
+	return SignupInput{Username: "alice", Password: "pass-word-long-ok", FavoriteTags: []string{"Go"}, AgreedTermsVersion: CurrentTermsVersion}
 }
 
 func TestServiceSignupValidation(t *testing.T) {
@@ -212,7 +214,7 @@ func TestServiceSignupValidation(t *testing.T) {
 
 func TestServiceSignupNormalizesAndCreatesMember(t *testing.T) {
 	h := newHarness()
-	in := SignupInput{Username: "  alice  ", Password: "pass-word-long-ok", FavoriteTags: []string{" Go ", "go", "GO", "Rust", "rust "}}
+	in := SignupInput{Username: "  alice  ", Password: "pass-word-long-ok", FavoriteTags: []string{" Go ", "go", "GO", "Rust", "rust "}, AgreedTermsVersion: CurrentTermsVersion}
 	user, plain, exp, err := h.svc.Signup(context.Background(), in)
 	if err != nil {
 		t.Fatal(err)

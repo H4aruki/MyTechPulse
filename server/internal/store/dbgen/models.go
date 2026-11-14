@@ -173,3 +173,9 @@ type User struct {
 	Password string
 	Role     string
 }
+
+type UserTermsAgreement struct {
+	UserID       int32
+	TermsVersion string
+	AgreedAt     pgtype.Timestamptz
+}

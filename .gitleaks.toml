@@ -32,6 +32,10 @@ id = "generic-api-key"
     paths = ['''(^|/)server/internal/auth/policy_limiter_test\.go$''']
 
     [[rules.allowlists]]
+    description = "利用規約の同意試験のダミー signup body と password（本物の鍵ではない）"
+    paths = ['''(^|/)server/internal/auth/terms_test\.go$''']
+
+    [[rules.allowlists]]
     description = "パスキー試験のダミー loginPassword など（本物の鍵ではない）"
     paths = ['''(^|/)server/internal/passkey/login_test\.go$''']
 

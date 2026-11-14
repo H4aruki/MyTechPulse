@@ -126,7 +126,7 @@ func TestAuthEndToEndWithRealDependencies(t *testing.T) {
 	}
 
 	// 新規登録 → 初期の興味度が保存され、すぐログイン状態になる
-	signup := send(http.MethodPost, "/api/v1/auth/signup", `{"username":"new-user","password":"new-password","favorite_tags":["Go","go","Rust"]}`, nil)
+	signup := send(http.MethodPost, "/api/v1/auth/signup", `{"username":"new-user","password":"new-password","favorite_tags":["Go","go","Rust"],"agreed_terms_version":"2026-10-draft"}`, nil)
 	if signup.Code != http.StatusCreated {
 		t.Fatalf("signup = %d: %s", signup.Code, signup.Body.String())
 	}
@@ -135,7 +135,7 @@ func TestAuthEndToEndWithRealDependencies(t *testing.T) {
 		WHERE u.user_name = 'new-user' AND r.match_int = 10000`).Scan(&n); err != nil || n != 2 {
 		t.Fatalf("initial interests = %d, %v", n, err)
 	}
-	if dup := send(http.MethodPost, "/api/v1/auth/signup", `{"username":"new-user","password":"new-password","favorite_tags":["go"]}`, nil); dup.Code != http.StatusConflict {
+	if dup := send(http.MethodPost, "/api/v1/auth/signup", `{"username":"new-user","password":"new-password","favorite_tags":["go"],"agreed_terms_version":"2026-10-draft"}`, nil); dup.Code != http.StatusConflict {
 		t.Fatalf("duplicate signup = %d", dup.Code)
 	}
 	// 保存されたパスワードはbcryptハッシュで、平文ではない
