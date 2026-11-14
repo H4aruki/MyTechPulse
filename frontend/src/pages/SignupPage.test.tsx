@@ -50,7 +50,9 @@ function clickRegister() {
   fireEvent.click(screen.getByRole('button', { name: /^登録する/ }))
 }
 
-describe('SignupPage', () => {
+// CPUが混むと jsdom の描画が既定の5秒を超えることがある（Issue #322）。
+// この describe だけ15秒にする。全ファイルの既定は変えない。
+describe('SignupPage', { timeout: 15_000 }, () => {
   beforeEach(() => {
     vi.mocked(signup).mockReset()
   })
