@@ -81,7 +81,7 @@ flowchart LR
 | Qiita API | 興味タグに合う技術記事の取得 | `QIITA_ACCESS_TOKEN`を使って認証付きで取得する |
 | Zenn API | 興味タグに合う技術記事の取得 | 認証トークンは不要。公式仕様が無いため、応答の形の変化を検出する |
 
-バックエンドは利用者の興味タグの重み上位5件をもとに、Qiita・Zennへ同時に問い合わせを行い、Qiitaは直近5日、Zennは直近14日の記事に絞ったうえで点数の高い順に並べ替えて返す。興味の強さが0より大きいタグが5つに満たないときは、提供元ごとに1回だけ人気の記事も問い合わせ、空いた枠を埋める。詳細は[API詳細（おすすめ記事の取得）](API/Details/News.md)と[外部サービスへの問い合わせ](API/ApiExternal.md)を参照。
+バックエンドは利用者の興味タグの重み上位5件をもとに、Qiita・Zennへ同時に問い合わせを行い、Qiitaは直近5日、Zennは直近14日の記事に絞ったうえで点数の高い順に並べ替えて返す。即時検索で、興味の強さが0より大きいタグが5つに満たないときは、提供元ごとに1回だけ人気の記事も問い合わせ、空いた枠を埋める。本番（一括取得が有効）では外部へ問い合わせず、データベースの記事から読む。興味のあるタグが5つに満たず記事が10件に足りないときは、同じ記事によく一緒に付いているタグの記事で空きを埋め、それでも足りなければ人気の記事で埋める。詳細は[API詳細（おすすめ記事の取得）](API/Details/News.md)と[外部サービスへの問い合わせ](API/ApiExternal.md)を参照。
 
 ## 4. 本番デプロイ構成
 
@@ -113,4 +113,4 @@ flowchart LR
 - 公開用の箱は、中身が変わっていないことを確かめられる印（ダイジェスト）付きで作り、その印のものだけを入れ替える
 - データベースの変更は「追加するだけ」の変更に限る。そのため、API入れ替えに失敗して前の版へ戻っても、データベースは巻き戻さずに済む
 - 入れ替えの前に、データのコピー（バックアップ）を取る
-- 手順の詳細は[go-auto-deploy.md](../deploy/go-auto-deploy.md)、サーバーの用意は[lightsail-provisioning.md](../deploy/lightsail-provisioning.md)、バックアップは[database-backup-and-restore.md](../deploy/database-backup-and-restore.md)を参照
+- 手順の詳細は[go-auto-deploy.md](../deploy/go-auto-deploy.md)、サーバーの用意は[lightsail-provisioning.md](../deploy/lightsail-provisioning.md)、別のサーバーへの引っ越しは[migrate-to-another-server.md](../deploy/migrate-to-another-server.md)、バックアップは[database-backup-and-restore.md](../deploy/database-backup-and-restore.md)を参照

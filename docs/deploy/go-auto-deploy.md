@@ -55,6 +55,8 @@ APIの入れ替えが成功したときだけ行います（画面が新しいAP
    - `~/MyTechPulse/ops/backup_db.sh`、`verify_backup.sh`（バックアップ用。**#128 で旧運用ファイルを整理するときに、置き場所を見直す**）
 4. 最初の自動デプロイは、小さな変更（例: 画面の文言）で試す。
 
+接続先のサーバーを変えるときは、`LIGHTSAIL_HOST` だけでは足りません。workflow に固定した SSH のホスト公開鍵も変えます。手順は [migrate-to-another-server.md](migrate-to-another-server.md) です。
+
 ## 4. うまくいかなかったとき
 
 ログの置き場所、ディスクとメモリのしきい値、失敗に気づく経路は [logging-and-monitoring.md](logging-and-monitoring.md)。

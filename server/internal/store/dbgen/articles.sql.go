@@ -119,6 +119,67 @@ func (q *Queries) InsertFetchRun(ctx context.Context, arg InsertFetchRunParams) 
 	return id, err
 }
 
+const listCooccurringTags = `-- name: ListCooccurringTags :many
+WITH seeds AS (
+    SELECT t."tag_ID"
+    FROM tag t
+    WHERE lower(btrim(t.tag_name)) = ANY($1::text[])
+),
+excluded AS (
+    SELECT t."tag_ID"
+    FROM tag t
+    WHERE lower(btrim(t.tag_name)) = ANY($2::text[])
+)
+SELECT t.tag_name,
+       COUNT(DISTINCT other.article_id) AS article_count
+FROM seeds s
+JOIN article_tags seed_at ON seed_at."tag_ID" = s."tag_ID"
+JOIN article_tags other
+  ON other.article_id = seed_at.article_id
+ AND other."tag_ID" <> seed_at."tag_ID"
+JOIN tag t ON t."tag_ID" = other."tag_ID"
+WHERE NOT EXISTS (SELECT 1 FROM excluded e WHERE e."tag_ID" = other."tag_ID")
+GROUP BY t."tag_ID", t.tag_name
+ORDER BY article_count DESC, lower(btrim(t.tag_name)), t."tag_ID"
+`
+
+type ListCooccurringTagsParams struct {
+	SeedTags    []string
+	ExcludeTags []string
+}
+
+type ListCooccurringTagsRow struct {
+	TagName      string
+	ArticleCount int64
+}
+
+// 興味のあるタグ（seed_tags）が付いた記事に、一緒に付いている別のタグを数える（Issue #241）。
+// 1回の集計で、記事の数が多い順に返す。回数の下限はSQLでは掛けず、呼び出し側（recommendation.selectSimilarTags）が掛ける。
+// 数えるのは article_tags に残っている記事だけ。保持期間を過ぎた未保存の記事は定期取得が消している。
+// 利用者が保存して保持期間を過ぎた記事は表に残るので、その分も数に入る。表示期間（Qiita 5日、Zenn 14日）では絞らない。
+// exclude_tags は、興味度が0より大きいタグ。似たタグにはしない。種のタグ自身もここに含めて渡す。
+// タグ名は前後の空白を除いた小文字で比べる。記事が数千件の規模では、種のタグは ("tag_ID", published_at) の索引、
+// 同じ記事の他のタグは主キー (article_id, "tag_ID") で引ける。新しい索引は足していない。
+func (q *Queries) ListCooccurringTags(ctx context.Context, arg ListCooccurringTagsParams) ([]ListCooccurringTagsRow, error) {
+	rows, err := q.db.Query(ctx, listCooccurringTags, arg.SeedTags, arg.ExcludeTags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCooccurringTagsRow{}
+	for rows.Next() {
+		var i ListCooccurringTagsRow
+		if err := rows.Scan(&i.TagName, &i.ArticleCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnabledFetchTags = `-- name: ListEnabledFetchTags :many
 SELECT f."tag_ID", t.tag_name, f.zenn_topic
 FROM fetch_tags f

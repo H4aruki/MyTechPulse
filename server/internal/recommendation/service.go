@@ -30,6 +30,10 @@ type ArticleRepository interface {
 	ListTagged(ctx context.Context, source string, tags []string, since time.Time, limit int) ([]article.Article, error)
 	// ListPopular は、タグを問わず since 以降の記事を、いいね数の多い順に最大 limit 件返す。
 	ListPopular(ctx context.Context, source string, since time.Time, limit int) ([]article.Article, error)
+	// ListCooccurringTags は、seedTags のどれかが付いた記事に一緒に付いている別のタグを、記事の数とともに返す。
+	// excludeTags（興味度が0より大きいタグ）は結果に入れない。タグ名は interest.NormalizeTag と同じ比べ方。
+	// 表に残っている記事だけを数える。フィード1回につき、この集計は1回だけ呼ぶ。
+	ListCooccurringTags(ctx context.Context, seedTags, excludeTags []string) ([]TagCooccurrence, error)
 }
 
 type Service struct {
@@ -71,8 +75,10 @@ const (
 // Get retrieves the top five interest tags concurrently, then filters, merges, scores, and limits each feed.
 // 即時検索(Articles が無いとき)では、興味度が0より大きいタグが5つに満たないときだけ、提供元ごとに1回、
 // タグを問わない人気の記事も取り、タグで見つけた記事と混ぜて候補にする(#240)。5つあるときは人気の記事を取らない。
-// DBから読むとき(Articles があるとき)は、タグの数を問わず、提供元ごとにタグで見つけた記事が10件に満たなければ、
-// 空いた枠だけを人気の記事で埋める(getFromDB)。
+// 即時検索には共起の表が無いので、似たタグでは埋めない。
+// DBから読むとき(Articles があるとき)は、外部APIを呼ばない。興味のあるタグが5つ未満で、記事が10件に満たないとき、
+// 先に似たタグ(共起)の記事で空きを埋め、それでも足りない分を人気の記事で埋める(#241)。
+// 興味のあるタグが5つあるときは、人気の記事だけで埋める(getFromDB)。
 func (s Service) Get(ctx context.Context, userID int64) (Result, error) {
 	weights, err := s.Interests.List(ctx, userID)
 	if err != nil {
@@ -191,9 +197,12 @@ func (s Service) Get(ctx context.Context, userID int64) (Result, error) {
 }
 
 // getFromDB は、定期一括取得で貯めた記事から候補を読む。外部APIは呼ばず、即時検索へも切り替えない。
-// 期間・古い記事での埋め合わせ・順位付けは、即時検索と同じ。人気の記事の扱いだけが違い、
-// 提供元ごとに、タグで見つけた記事が10件に満たないときは、タグの数を問わず、空いた枠を人気の記事で埋める。
-// タグで見つけた記事を必ず先に並べ、人気の記事はその後ろに足す。10件そろった提供元では人気の記事を読まない。
+// 期間・古い記事での埋め合わせ・順位付けは、即時検索と同じ。空きの埋め方だけが違い、
+// 提供元ごとに、興味のあるタグで見つけた記事が10件に満たないときはうしろを埋める。
+// 興味のあるタグが5つ未満のときは、先に似たタグの記事を足し、それでも足りなければ人気の記事を足す。
+// 5つあるときは人気の記事だけで埋める。並びは、興味のあるタグの記事、似たタグの記事、人気の記事の順。点数では混ぜない。
+// 共起の集計は、空きがあるときだけ、フィード1回につき1回。似たタグの記事は、空きのある提供元だけ、既存のタグ検索で読む。
+// 10件そろった提供元では、似たタグも人気の記事も読まない。
 // DBには取得の時点の記事が残っているため、取得が失敗しても、残っている記事を出す。
 func (s Service) getFromDB(ctx context.Context, weights []interest.Weight, ordered []interest.Weight, now time.Time) (Result, error) {
 	tags := make([]string, 0, len(ordered))
@@ -220,24 +229,109 @@ func (s Service) getFromDB(ctx context.Context, weights []interest.Weight, order
 			}
 		}
 	}
-	// 古い記事での埋め合わせは、タグで見つけた記事が14日以内に1件も無いときだけ(人気の記事の有無は問わない)
+	// 古い記事での埋め合わせは、タグで見つけた記事が14日以内に1件も無いときだけ(似たタグや人気の記事の有無は問わない)
 	if len(zennFresh) == 0 {
 		zennFresh = zennOld
 	}
-	qiita, err := s.fillWithPopular(ctx, weights, rankLimit(weights, dedupe(qiitaRaw), 10), article.SourceQiita, qiitaSince)
+	qiitaRanked := rankLimit(weights, dedupe(qiitaRaw), 10)
+	zennRanked := rankLimit(weights, dedupe(zennFresh), 10)
+	similar, err := s.similarTags(ctx, weights, ordered, len(qiitaRanked) < 10 || len(zennRanked) < 10)
 	if err != nil {
 		return Result{}, err
 	}
-	// 人気の記事は14日以内だけで、古い記事での埋め合わせに使わない
-	zenn, err := s.fillWithPopular(ctx, weights, rankLimit(weights, dedupe(zennFresh), 10), article.SourceZenn, zennSince)
+	qiita, err := s.fillGaps(ctx, weights, qiitaRanked, similar, article.SourceQiita, qiitaSince)
+	if err != nil {
+		return Result{}, err
+	}
+	// 似たタグの記事も人気の記事も14日以内だけ。古い記事での埋め合わせには使わない
+	zenn, err := s.fillGaps(ctx, weights, zennRanked, similar, article.SourceZenn, zennSince)
 	if err != nil {
 		return Result{}, err
 	}
 	return Result{QiitaArticles: qiita, ZennArticles: zenn, Warnings: []Warning{}}, nil
 }
 
-// fillWithPopular は、ranked が10件に満たないとき、source の since 以降の人気の記事で空いた枠を埋める。
-// ranked にある記事(URLが同じもの)は除き、残りを ScoreArticles と同じ順に並べて ranked の後ろに足す。
+// similarTags は、空いているタグ枠（5から、興味度が0より大きい上位タグの数を引いた数）だけ、似たタグを返す。
+// 種は、記事を探すのに使ったタグ。除くのは、興味度が0より大きいタグ全部（上位5に入らなかったものも含む）。
+// 興味度が0のタグと、行の無いタグは候補に残る。共起の集計は1回だけ。
+func (s Service) similarTags(ctx context.Context, weights, ordered []interest.Weight, need bool) ([]string, error) {
+	slots := interest.TopTagLimit - len(ordered)
+	if !need || slots <= 0 {
+		return nil, nil
+	}
+	seeds := normalizedKeys(ordered, false)
+	if len(seeds) == 0 {
+		return nil, nil
+	}
+	exclude := positiveTagKeys(weights)
+	counts, err := s.Articles.ListCooccurringTags(ctx, seeds, exclude)
+	if err != nil {
+		return nil, err
+	}
+	return selectSimilarTags(counts, exclude, slots), nil
+}
+
+// positiveTagKeys は、興味度が0より大きいタグを、正規化した名前で返す。
+func positiveTagKeys(weights []interest.Weight) []string {
+	return normalizedKeys(weights, true)
+}
+
+func normalizedKeys(weights []interest.Weight, positiveOnly bool) []string {
+	out := make([]string, 0, len(weights))
+	seen := make(map[string]struct{}, len(weights))
+	for _, weight := range weights {
+		if positiveOnly && weight.Value <= 0 {
+			continue
+		}
+		key := interest.NormalizeTag(weight.Tag)
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, key)
+	}
+	return out
+}
+
+// fillGaps は、ranked が10件に満たないとき、似たタグの記事を先に足し、それでも足りない分を人気の記事で埋める。
+// 似たタグが無いときは、人気の記事だけを足す。すでに ranked にある記事(URLが同じもの)は、どちらからも除く。
+// 並びは崩さない。似たタグの記事を、人気の記事と点数で混ぜない（どちらも点数0だと、いいね数の多い人気の記事が前に出るため）。
+// 似たタグの記事は、興味のあるタグの検索と同じ上限まで読む。重なりを除いても空き（最大9件）が残るようにするため。
+func (s Service) fillGaps(ctx context.Context, weights []interest.Weight, ranked []article.Article, similar []string, source string, since time.Time) ([]article.Article, error) {
+	if len(ranked) >= 10 {
+		return ranked, nil
+	}
+	if len(similar) > 0 {
+		items, err := s.Articles.ListTagged(ctx, source, similar, since, dbTaggedLimit)
+		if err != nil {
+			return nil, err
+		}
+		extra := omitURLs(validArticlesSince(items, since), ranked)
+		ranked = append(ranked, rankLimit(weights, dedupe(extra), 10-len(ranked))...)
+	}
+	return s.fillWithPopular(ctx, weights, ranked, source, since)
+}
+
+func omitURLs(items, chosen []article.Article) []article.Article {
+	seen := make(map[string]bool, len(chosen))
+	for _, item := range chosen {
+		seen[item.URL] = true
+	}
+	out := make([]article.Article, 0, len(items))
+	for _, item := range items {
+		if !seen[item.URL] {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+// fillWithPopular は、ranked が10件に満たないとき、source の since 以降の人気の記事で残りの枠を埋める。
+// 似たタグの記事を足したあとに呼ぶ(fillGaps)。ranked にある記事(URLが同じもの)は除き、
+// 残りを ScoreArticles と同じ順に並べて ranked の後ろに足す。
 // 除くのは多くても ranked の9件なので、dbPopularLimit(20)件読めば、空いた枠を埋めるのに足りる。
 func (s Service) fillWithPopular(ctx context.Context, weights []interest.Weight, ranked []article.Article, source string, since time.Time) ([]article.Article, error) {
 	if len(ranked) >= 10 {
