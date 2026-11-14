@@ -168,4 +168,125 @@ describe('FeedbackDialog', () => {
     fireEvent.keyDown(dialog, { key: 'Tab' })
     expect(document.activeElement).toBe(focusables[0])
   })
+
+  test('先頭で Shift+Tab を押すと、末尾の評価へ移る', () => {
+    renderDialog()
+    const dialog = screen.getByRole('dialog')
+    const close = screen.getByRole('button', { name: '閉じる' })
+    const last = screen.getByRole('button', { name: /5\s*とても満足/ })
+    close.focus()
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(last)
+    expect(dismissFeedback).not.toHaveBeenCalled()
+  })
+
+  test('端以外で Tab や Shift+Tab を押しても、端へ飛ばず閉じない', () => {
+    const { onClose } = renderDialog()
+    const dialog = screen.getByRole('dialog')
+    const middle = screen.getByRole('button', { name: /3\s*ふつう/ })
+    middle.focus()
+    fireEvent.keyDown(dialog, { key: 'Tab' })
+    expect(document.activeElement).toBe(middle)
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(middle)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  test('Tab と Escape 以外のキーでは閉じない', () => {
+    const { onClose } = renderDialog()
+    const dialog = screen.getByRole('dialog')
+    const close = screen.getByRole('button', { name: '閉じる' })
+    close.focus()
+    fireEvent.keyDown(dialog, { key: 'Enter' })
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(close)
+  })
+
+  test('質問が無いときは評価を出さず、閉じることはできる', () => {
+    const { onClose } = renderDialog(
+      presentation({
+        form: { title: 'おすすめ記事についてのアンケート', version: 1, questions: null },
+      }),
+    )
+    expect(screen.getByRole('dialog', { name: 'おすすめ記事についてのアンケート' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /満足/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '閉じる' }))
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  test('点数の上限が無い追加質問は、低い評価のあとにも出さない', async () => {
+    vi.mocked(submitFeedbackOverall).mockResolvedValue({
+      submission_id: SUBMISSION,
+      status: 'partial',
+      followup_required: true,
+    })
+    renderDialog(
+      presentation({
+        form: {
+          title: 'おすすめ記事についてのアンケート',
+          version: 1,
+          questions: [
+            { id: 10, key: 'overall', text: '今日のおすすめ記事は役に立ちましたか？', sort_order: 1, required: true },
+            {
+              id: 11,
+              key: 'interest_match',
+              text: '興味に合っていましたか？',
+              sort_order: 2,
+              required: true,
+              display_if_question_id: 10,
+              display_if_score_max: 2,
+            },
+            {
+              id: 14,
+              key: 'no_max',
+              text: '上限のない質問',
+              sort_order: 5,
+              required: true,
+              display_if_question_id: 10,
+            },
+          ],
+        },
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: /1\s*とても不満/ }))
+    expect(await screen.findByText('興味に合っていましたか？')).toBeInTheDocument()
+    expect(screen.queryByText('上限のない質問')).not.toBeInTheDocument()
+  })
+
+  test('失敗が Error でないときは、決まった文で知らせる', async () => {
+    vi.mocked(submitFeedbackOverall).mockRejectedValueOnce('落ちた')
+    renderDialog()
+    fireEvent.click(screen.getByRole('button', { name: /2\s*不満/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('送信に失敗しました。もう一度お試しください。')
+    expect(screen.queryByText('興味に合っていましたか？')).not.toBeInTheDocument()
+  })
+
+  test('閉じた記録が認証切れ以外で失敗しても、画面は閉じたままログインへは戻さない', async () => {
+    vi.mocked(dismissFeedback).mockRejectedValue(new ApiError({ status: 500 }))
+    const { onClose, onUnauthorized } = renderDialog()
+    fireEvent.click(screen.getByRole('button', { name: '閉じる' }))
+    expect(onClose).toHaveBeenCalled()
+    await waitFor(() => expect(dismissFeedback).toHaveBeenCalledWith(PROMPT))
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
+
+  test('送信中にもう一度選んでも評価は1回だけで、Escape を押しても閉じない', async () => {
+    let finish: (v: { submission_id: string; status: 'completed'; followup_required: boolean }) => void = () => {}
+    vi.mocked(submitFeedbackOverall).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    const { onClose } = renderDialog()
+    const score = screen.getByRole('button', { name: /4\s*満足/ })
+    fireEvent.click(score)
+    await waitFor(() => expect(score).toBeDisabled())
+    fireEvent.click(score)
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(submitFeedbackOverall).toHaveBeenCalledTimes(1)
+    expect(dismissFeedback).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    finish({ submission_id: SUBMISSION, status: 'completed', followup_required: false })
+    expect(await screen.findByText('ご回答ありがとうございました。')).toBeInTheDocument()
+  })
 })

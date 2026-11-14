@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { ApiError } from '@/api/client'
+import { ApiError, UnauthorizedError } from '@/api/client'
 import {
   beginPasskeyRegistration,
   deletePasskey,
@@ -267,7 +267,11 @@ describe('PasskeySettings', () => {
     renderSettings()
 
     await screen.findByText('p1')
-    expect(screen.getByRole('button', { name: 'パスキーを追加' })).toBeDisabled()
+    const add = screen.getByRole('button', { name: 'パスキーを追加' })
+    expect(add).toBeDisabled()
+    expect(screen.getByText('上限に達しています。不要なものを削除してください。')).toBeInTheDocument()
+    fireEvent.click(add)
+    expect(beginPasskeyRegistration).not.toHaveBeenCalled()
   })
 
   test('名前の変更', async () => {
@@ -300,6 +304,153 @@ describe('PasskeySettings', () => {
     await waitFor(() => expect(deletePasskey).toHaveBeenCalled())
     expect(vi.mocked(deletePasskey).mock.calls[0][0]).toBe(3)
     expect(await screen.findByText('パスキーを削除しました。')).toBeInTheDocument()
+    confirm.mockRestore()
+  })
+
+  test('名前を空のまま保存しようとすると、変更を送らず入力を求める', async () => {
+    stubSupported()
+    vi.mocked(fetchPasskeys).mockResolvedValue({ passkeys: [item(7, 'old')] })
+    renderSettings()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'oldの名前を変更' }))
+    fireEvent.change(screen.getByLabelText('新しい名前'), { target: { value: '   ' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('名前を入力してください。')
+    expect(renamePasskey).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('新しい名前')).toBeInTheDocument()
+  })
+
+  test('名前の変更をキャンセルすると、元の名前のままにする', async () => {
+    stubSupported()
+    vi.mocked(fetchPasskeys).mockResolvedValue({ passkeys: [item(7, 'old')] })
+    renderSettings()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'oldの名前を変更' }))
+    fireEvent.change(screen.getByLabelText('新しい名前'), { target: { value: 'new' } })
+    fireEvent.click(screen.getByRole('button', { name: 'キャンセル' }))
+
+    expect(screen.queryByLabelText('新しい名前')).not.toBeInTheDocument()
+    expect(screen.getByText('old')).toBeInTheDocument()
+    expect(renamePasskey).not.toHaveBeenCalled()
+  })
+
+  test('一覧の取得に失敗すると、その旨を出す', async () => {
+    stubSupported()
+    vi.mocked(fetchPasskeys).mockRejectedValue(new ApiError({ status: 500 }))
+    renderSettings()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('パスキーの一覧を取得できませんでした。')
+    expect(screen.queryByText('登録されたパスキーはまだありません。')).not.toBeInTheDocument()
+  })
+
+  test('一覧の取得が認証切れなら、ログインへ戻し、取得失敗の文は出さない', async () => {
+    stubSupported()
+    vi.mocked(fetchPasskeys).mockRejectedValue(new UnauthorizedError())
+    const onUnauthorized = vi.fn()
+    renderSettings(onUnauthorized)
+
+    await waitFor(() => expect(onUnauthorized).toHaveBeenCalled())
+    expect(screen.queryByText('パスキーの一覧を取得できませんでした。')).not.toBeInTheDocument()
+  })
+
+  test('追加の開始が認証切れなら、ログインへ戻す', async () => {
+    stubSupported()
+    vi.mocked(beginPasskeyRegistration).mockRejectedValue(new UnauthorizedError())
+    const onUnauthorized = vi.fn()
+    renderSettings(onUnauthorized)
+    await screen.findByText('登録されたパスキーはまだありません。')
+
+    fireEvent.click(screen.getByRole('button', { name: 'パスキーを追加' }))
+
+    await waitFor(() => expect(onUnauthorized).toHaveBeenCalled())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(finishPasskeyRegistration).not.toHaveBeenCalled()
+  })
+
+  test('追加の失敗が Error でないときは、決まった文で知らせる', async () => {
+    stubSupported()
+    vi.mocked(beginPasskeyRegistration).mockRejectedValue('落ちた')
+    renderSettings()
+    await screen.findByText('登録されたパスキーはまだありません。')
+
+    fireEvent.click(screen.getByRole('button', { name: 'パスキーを追加' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '失敗しました。時間をおいてもう一度お試しください。',
+    )
+  })
+
+  test('名前を空のまま追加すると、名前なしで登録を終える', async () => {
+    const credential = {
+      id: 'Y3JlZA',
+      rawId: new Uint8Array([1]).buffer,
+      type: 'public-key',
+      response: {
+        clientDataJSON: new Uint8Array([2]).buffer,
+        attestationObject: new Uint8Array([3]).buffer,
+      },
+      getClientExtensionResults: () => ({}),
+    }
+    stubSupported(vi.fn().mockResolvedValue(credential))
+    vi.mocked(beginPasskeyRegistration).mockResolvedValue({
+      challengeToken: 'reg-token-1',
+      publicKey: { challenge: 'AQID', user: { id: 'BAUG', name: 'a', displayName: 'a' } },
+    })
+    vi.mocked(finishPasskeyRegistration).mockResolvedValue(item(1, 'パスキー'))
+    renderSettings()
+    await screen.findByText('登録されたパスキーはまだありません。')
+
+    fireEvent.click(screen.getByRole('button', { name: 'パスキーを追加' }))
+
+    await waitFor(() => expect(finishPasskeyRegistration).toHaveBeenCalled())
+    expect(vi.mocked(finishPasskeyRegistration).mock.calls[0][0].name).toBeUndefined()
+    expect(await screen.findByText('パスキーを追加しました。')).toBeInTheDocument()
+  })
+
+  test('追加しているあいだにもう一度送っても、登録を二重に始めない', async () => {
+    stubSupported()
+    let release: (value: { challengeToken: string; publicKey: Record<string, unknown> }) => void = () => {}
+    vi.mocked(beginPasskeyRegistration).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve
+        }),
+    )
+    renderSettings()
+    await screen.findByText('登録されたパスキーはまだありません。')
+
+    fireEvent.click(screen.getByRole('button', { name: 'パスキーを追加' }))
+    const busy = await screen.findByRole('button', { name: '追加しています…' })
+    expect(busy).toBeDisabled()
+    fireEvent.click(busy)
+    const form = busy.closest('form')
+    if (form) fireEvent.submit(form)
+    expect(beginPasskeyRegistration).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      release({
+        challengeToken: 'reg-token-1',
+        publicKey: { challenge: 'AQID', user: { id: 'BAUG', name: 'a', displayName: 'a' } },
+      })
+    })
+    // 端末の応答が無いので、ここでは登録を終えず、取り消しとして終わる
+    expect(await screen.findByRole('alert')).toHaveTextContent('取り消されたか')
+    expect(beginPasskeyRegistration).toHaveBeenCalledTimes(1)
+  })
+
+  test('削除に失敗すると知らせ、一覧を読み直す', async () => {
+    stubSupported()
+    vi.mocked(fetchPasskeys).mockResolvedValue({ passkeys: [item(3, 'key')] })
+    vi.mocked(deletePasskey).mockRejectedValue(new ApiError({ status: 500, detail: '削除できませんでした。' }))
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderSettings()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'keyを削除' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('削除できませんでした。')
+    await waitFor(() => expect(fetchPasskeys).toHaveBeenCalledTimes(2))
+    expect(screen.getByText('key')).toBeInTheDocument()
     confirm.mockRestore()
   })
 })
