@@ -277,6 +277,9 @@ jobs:
       - name: 古いバックアップの削除（prune_backups.sh）
         run: bash ops/tests/test_prune_backups.sh
 
+      - name: ディスクとメモリのしきい値（check_resources.sh）
+        run: bash ops/tests/test_check_resources.sh
+
       - name: DB運用スクリプトの安全の静的検査（test_database_safety.sh）
         run: bash ops/tests/test_database_safety.sh
 

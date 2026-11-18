@@ -155,8 +155,32 @@ sudo ./ops/lightsail-vm-setup.sh
 3. SSH の硬化（パスワード認証・root ログインを無効化）
 4. fail2ban の sshd jail を有効化
 5. タイムゾーンを `Asia/Tokyo` に設定（日次バックアップを意図した時刻で動かすため）
+6. （任意。`LOG_RETENTION=1` のときだけ。まだ本番では走らせていない）journald の保持設定。下の 6-2
 
 実行後、docker グループの反映のために、**一度 SSH を切って再ログインする**。
+
+### 6-2. コンテナログを journald で 30 日残す（任意。まだ本番では適用していない）
+
+決定は [ADR 0015](../adr/0015-keep-container-logs-30-days-in-journald.md)。ログの見方と理由は [logging-and-monitoring.md](logging-and-monitoring.md) の 2 章。`docker-compose.yml` には journald を書かない（journald は systemd のある Linux ホスト専用で、開発機の Docker Desktop などが動かなくなるため）。本番ホストにだけ、次を入れる。
+
+1. journald の drop-in を置く。内容は [`ops/journald-retention.conf`](../../ops/journald-retention.conf)（`MaxRetentionSec=30day`、`MaxFileSec=1day`、`SystemMaxUse=1G`）。
+2. Docker の既定ドライバを journald にする。内容は [`ops/docker-daemon.journald.json`](../../ops/docker-daemon.journald.json)（`"log-driver": "journald"`）。
+
+セットアップスクリプトで入れる場合は `sudo LOG_RETENTION=1 ./ops/lightsail-vm-setup.sh`。この手順は**まだ本番では走らせていない**。既定（`LOG_RETENTION` なし）は何もしないので、既存のサーバーで再実行しても変わらない。スクリプトは、drop-in の設置と journald の再読み込み、`daemon.json` の設置（既にあれば上書きせず警告）までで、**Docker の再起動とコンテナの作り直しはしない**。
+
+手で入れる場合と、スクリプトのあとに必要な作業:
+
+```bash
+sudo install -m 0755 -d /etc/systemd/journald.conf.d
+sudo install -m 0644 ops/journald-retention.conf /etc/systemd/journald.conf.d/90-mytechpulse-retention.conf
+sudo systemctl restart systemd-journald      # journald の再読み込み
+# /etc/docker/daemon.json が無ければ見本を置く。あれば "log-driver": "journald" を足す
+sudo install -m 0644 ops/docker-daemon.journald.json /etc/docker/daemon.json
+sudo systemctl restart docker                # 全コンテナが止まる時間が出る。入れ替えの時間帯を選ぶ
+# そのあと、db・api-go・caddy をそれぞれ作り直す（Docker の文書: 既存コンテナは新しい設定を自動では使わない）
+```
+
+確認（適用したあとにサーバーで）: `docker info --format '{{.LoggingDriver}}'` が `journald`、`journalctl --disk-usage`、`ls -d /var/log/journal`（journald がディスクに残す設定か。無いと再起動で消える可能性。Ubuntu 24.04 の既定は未確認）。
 
 ## 7. 設定ファイルと置き場所を用意する
 
@@ -248,7 +272,7 @@ docker stats --no-stream   # コンテナごとの実使用量
 
 `ops/backup_db.sh` は、バックアップを1つ作って、中身を確認する。**毎日自動で動かすには、cron への登録が要る**（スクリプトの冒頭に、登録の例がある）。
 
-- 取得と検証に成功した後、**7日を超えた古い世代が自動で削除される**。残したいバックアップには、同じ名前に `.keep` を付けた空のファイルを置く（[database-backup-and-restore.md](database-backup-and-restore.md)）。ディスクの空きは、ときどき確認する（`df -h`）。
+- 取得と検証に成功した後、**7日を超えた古い世代が自動で削除される**。残したいバックアップには、同じ名前に `.keep` を付けた空のファイルを置く（[database-backup-and-restore.md](database-backup-and-restore.md)）。ディスクの空きは、ときどき確認する（`df -h`）。しきい値で警告するスクリプトと、ログの見方は [logging-and-monitoring.md](logging-and-monitoring.md)。
 - この動きは、サーバーの `~/MyTechPulse` にある `backup_db.sh` と `prune_backups.sh` が、新しい版であることが前提。
   - **作り直した直後の新しいサーバー**は、手順 6 で複製したばかりなので、すでに新しい。
   - **Python版から切り替えた、いまの本番サーバー**の `~/MyTechPulse` は、切り戻し用の旧運用ファイル（Python版のcomposeなど）を兼ねている。そのため、**`git pull` をしてはいけない**（`main` で削除済みのファイルが消え、切り戻せなくなる）。この2つのスクリプトだけを、GitHubの `main` から取り込み直す（2026-10-08 に実施済み）。切り戻し用の旧運用ファイルを整理するとき（#128）に、置き場所ごと見直す。
