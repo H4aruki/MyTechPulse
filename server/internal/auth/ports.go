@@ -28,10 +28,10 @@ type UserRepository interface {
 	FindByUsername(ctx context.Context, username string) (UserWithPassword, error)
 	// FindByID は利用者IDで探す。無ければ ErrNotFound を返す。
 	FindByID(ctx context.Context, id int64) (User, error)
-	// CreateWithInterestsAndSession は利用者・初期興味度・セッションを同一トランザクションで作る。
+	// CreateWithInterestsAndSession は利用者・初期興味度・セッション・規約への同意の記録（termsVersion）を同一トランザクションで作る。
 	// 同名の利用者がいれば ErrUsernameTaken、サーバーのタグ一覧に無いタグがあれば ErrUnknownFavoriteTag を返し、何も残さない。
 	CreateWithInterestsAndSession(ctx context.Context, username, passwordHash string, role Role,
-		favoriteTags []string, tokenHash [32]byte, expiresAt time.Time) (User, error)
+		favoriteTags []string, tokenHash [32]byte, expiresAt time.Time, termsVersion string) (User, error)
 }
 
 // SessionRepository はセッションの永続化。

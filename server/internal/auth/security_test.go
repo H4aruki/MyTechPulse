@@ -29,7 +29,7 @@ func newBcryptHarness(t *testing.T) *harness {
 func TestSignupStoresIrreversiblePasswordHash(t *testing.T) {
 	h := newBcryptHarness(t)
 	const password = "synthetic-plain-pass"
-	in := SignupInput{Username: "alice", Password: password, FavoriteTags: []string{"go"}}
+	in := SignupInput{Username: "alice", Password: password, FavoriteTags: []string{"go"}, AgreedTermsVersion: CurrentTermsVersion}
 	if _, _, _, err := h.svc.Signup(context.Background(), in); err != nil {
 		t.Fatal(err)
 	}

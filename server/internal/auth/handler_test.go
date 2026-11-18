@@ -61,7 +61,7 @@ func onlyCookie(t *testing.T, rec *httptest.ResponseRecorder) *http.Cookie {
 }
 
 const (
-	signupBody = `{"username":"synthetic-user","password":"synthetic-pass-12","favorite_tags":["go","react"]}`
+	signupBody = `{"username":"synthetic-user","password":"synthetic-pass-12","favorite_tags":["go","react"],"agreed_terms_version":"2026-10-draft"}`
 	loginBody  = `{"username":"synthetic-user","password":"synthetic-pass-12"}`
 )
 

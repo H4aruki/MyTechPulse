@@ -25,7 +25,7 @@ const (
 func feedbackUser(t *testing.T, pool *pgxpool.Pool, name string, token byte) int64 {
 	t.Helper()
 	ensureTags(t, pool, "Go")
-	user, err := store.NewAuth(pool).CreateWithInterestsAndSession(context.Background(), name, "hash", auth.RoleMember, []string{"Go"}, hashOf(token), fixedNow.Add(time.Hour))
+	user, err := store.NewAuth(pool).CreateWithInterestsAndSession(context.Background(), name, "hash", auth.RoleMember, []string{"Go"}, hashOf(token), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 	if err != nil {
 		t.Fatal(err)
 	}

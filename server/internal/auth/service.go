@@ -90,6 +90,14 @@ func normalizeTags(tags []string) ([]string, *FieldError) {
 	return out, nil
 }
 
+// validateTermsVersion は、同意した版が現行の版と一致するか確かめる(欠落・空・古い版は不一致)。
+func validateTermsVersion(version string) *FieldError {
+	if version != CurrentTermsVersion {
+		return &FieldError{Field: "agreed_terms_version", Message: "利用規約とプライバシーポリシーへの同意が必要です。画面を再読み込みして、もう一度お試しください"}
+	}
+	return nil
+}
+
 func invalid(fields ...*FieldError) error {
 	var list []FieldError
 	for _, f := range fields {
@@ -108,7 +116,7 @@ func (s Service) Signup(ctx context.Context, in SignupInput) (User, string, time
 	username, userErr := validateNewUsername(in.Username)
 	passErr := validateNewPassword(in.Password, username)
 	tags, tagErr := normalizeTags(in.FavoriteTags)
-	if err := invalid(userErr, passErr, tagErr); err != nil {
+	if err := invalid(userErr, passErr, tagErr, validateTermsVersion(in.AgreedTermsVersion)); err != nil {
 		return User{}, "", time.Time{}, err
 	}
 	hash, err := s.Passwords.Hash(in.Password)
@@ -120,7 +128,7 @@ func (s Service) Signup(ctx context.Context, in SignupInput) (User, string, time
 		return User{}, "", time.Time{}, errors.New("auth: セッションを作成できません")
 	}
 	expires := s.Clock.Now().Add(s.SessionTTL)
-	user, err := s.Users.CreateWithInterestsAndSession(ctx, username, hash, RoleMember, tags, tokenHash, expires)
+	user, err := s.Users.CreateWithInterestsAndSession(ctx, username, hash, RoleMember, tags, tokenHash, expires, in.AgreedTermsVersion)
 	if errors.Is(err, ErrUnknownFavoriteTag) {
 		return User{}, "", time.Time{}, invalid(&FieldError{Field: "favorite_tags", Message: "選べないタグが含まれています"})
 	}

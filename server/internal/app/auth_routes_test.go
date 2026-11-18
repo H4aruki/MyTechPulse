@@ -41,7 +41,7 @@ func (m *memStore) FindByID(_ context.Context, id int64) (auth.User, error) {
 }
 
 func (m *memStore) CreateWithInterestsAndSession(_ context.Context, name, hash string, role auth.Role,
-	tags []string, token [32]byte, exp time.Time) (auth.User, error) {
+	tags []string, token [32]byte, exp time.Time, _ string) (auth.User, error) {
 	for _, tag := range tags {
 		if tag == unknownTag {
 			return auth.User{}, auth.ErrUnknownFavoriteTag
@@ -128,14 +128,14 @@ func post(h http.Handler, path, body string, headers map[string]string, cookies 
 
 var csrfHeaders = map[string]string{"Origin": webOrigin, "X-MTP-CSRF": "1"}
 
-const signupJSON = `{"username":"synthetic-user","password":"synthetic-pass-12","favorite_tags":["go"]}`
+const signupJSON = `{"username":"synthetic-user","password":"synthetic-pass-12","favorite_tags":["go"],"agreed_terms_version":"2026-10-draft"}`
 
 // unknownTag は memStore が「tag 表に無いタグ」として断る名前。
 const unknownTag = "unknown-tag"
 
 func TestAuthRoutesSignupWithUnknownTagIs422(t *testing.T) {
 	h := newAuthHandler()
-	body := `{"username":"synthetic-user","password":"synthetic-pass-12","favorite_tags":["go","` + unknownTag + `"]}`
+	body := `{"username":"synthetic-user","password":"synthetic-pass-12","favorite_tags":["go","` + unknownTag + `"],"agreed_terms_version":"2026-10-draft"}`
 	rec := post(h, "/api/v1/auth/signup", body, csrfHeaders)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("signup = %d: %s", rec.Code, rec.Body.String())

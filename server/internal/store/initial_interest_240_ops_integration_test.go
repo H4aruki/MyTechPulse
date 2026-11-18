@@ -45,7 +45,7 @@ func oldSignup(t *testing.T, pool *pgxpool.Pool, name string, token byte, select
 	t.Helper()
 	ctx := context.Background()
 	ensureTags(t, pool, selected...)
-	user, err := store.NewAuth(pool).CreateWithInterestsAndSession(ctx, name, "hash", auth.RoleMember, selected, hashOf(token), fixedNow.Add(time.Hour))
+	user, err := store.NewAuth(pool).CreateWithInterestsAndSession(ctx, name, "hash", auth.RoleMember, selected, hashOf(token), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func oldSignup(t *testing.T, pool *pgxpool.Pool, name string, token byte, select
 func legacySignup(t *testing.T, pool *pgxpool.Pool, name string, token byte, selected []string) int64 {
 	t.Helper()
 	ensureTags(t, pool, selected...)
-	user, err := store.NewAuth(pool).CreateWithInterestsAndSession(context.Background(), name, "hash", auth.RoleMember, selected, hashOf(token), fixedNow.Add(time.Hour))
+	user, err := store.NewAuth(pool).CreateWithInterestsAndSession(context.Background(), name, "hash", auth.RoleMember, selected, hashOf(token), fixedNow.Add(time.Hour), auth.CurrentTermsVersion)
 	if err != nil {
 		t.Fatal(err)
 	}

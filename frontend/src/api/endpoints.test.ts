@@ -34,11 +34,16 @@ describe('endpoints', () => {
 
   test('signupはfavorite_tagsを含めてPOSTする', async () => {
     const { signup } = await loadEndpoints()
-    await signup({ username: 'u', password: 'p', favorite_tags: ['go'] })
+    await signup({
+      username: 'u',
+      password: 'p',
+      favorite_tags: ['go'],
+      agreed_terms_version: 'v1',
+    })
     expect(lastCall()).toEqual({
       url: `${BASE}/api/v1/auth/signup`,
       method: 'POST',
-      body: '{"username":"u","password":"p","favorite_tags":["go"]}',
+      body: '{"username":"u","password":"p","favorite_tags":["go"],"agreed_terms_version":"v1"}',
     })
   })
 
